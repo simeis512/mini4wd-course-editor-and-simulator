@@ -22,6 +22,7 @@ export class OrbitView {
   private layout: Layout | null = null;
   private active = false;
   private downAt: { x: number; y: number } | null = null;
+  private arStatus: HTMLElement;
 
   constructor(
     private container: HTMLElement,
@@ -29,6 +30,8 @@ export class OrbitView {
   ) {
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(window.devicePixelRatio);
+    // Clear to transparent so the camera feed shows through in AR.
+    renderer.setClearColor(0x000000, 0);
     renderer.xr.enabled = true;
     container.appendChild(renderer.domElement);
     this.renderer = renderer;
@@ -48,19 +51,35 @@ export class OrbitView {
     this.camera.position.set(2, 2.5, -2);
     this.controls = new OrbitControls(this.camera, renderer.domElement);
 
-    const arButton = ARButton.createButton(renderer);
+    // Our own DOM overlay for AR: an exit button and a status line, so
+    // problems on the phone are visible instead of a silent black screen.
+    const overlay = document.getElementById('ar-overlay')!;
+    this.arStatus = document.getElementById('ar-status')!;
+    const arButton = ARButton.createButton(renderer, {
+      optionalFeatures: ['dom-overlay'],
+      domOverlay: { root: overlay },
+    });
     arButton.classList.add('ar-button');
     container.appendChild(arButton);
+    document.getElementById('ar-exit')!.addEventListener('click', () => void renderer.xr.getSession()?.end());
     renderer.xr.addEventListener('sessionstart', () => {
+      document.documentElement.classList.add('xr-presenting');
+      overlay.hidden = false;
+      this.arStatus.textContent = 'AR表示中：コースは足元の少し前に置いています';
       this.scene.background = null;
       this.grid.visible = false;
-      // Put the course on the floor a little in front of the viewer.
-      this.root.position.set(0, -0.8, -1.2);
+      this.controls.enabled = false;
+      this.placeForAr();
     });
     renderer.xr.addEventListener('sessionend', () => {
+      document.documentElement.classList.remove('xr-presenting');
+      overlay.hidden = true;
       this.scene.background = BACKGROUND;
       this.grid.visible = true;
+      this.controls.enabled = true;
       this.root.position.set(0, 0, 0);
+      // Keep the loop matching the current view now the session is over.
+      this.setActive(this.active);
     });
 
     const el = renderer.domElement;
@@ -75,7 +94,19 @@ export class OrbitView {
   setActive(active: boolean): void {
     this.active = active;
     this.resize();
-    this.renderer.setAnimationLoop(active ? () => this.render() : null);
+    // Never stop the loop while an AR session is running.
+    const run = active || this.renderer.xr.isPresenting;
+    this.renderer.setAnimationLoop(run ? () => this.render() : null);
+  }
+
+  /** Centre the course on the floor about 1.5 m in front of where AR started. */
+  private placeForAr(): void {
+    this.root.position.set(0, 0, 0);
+    this.root.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(this.root);
+    const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
+    // The 'local' space starts at the phone, so the floor is roughly 1.2 m below.
+    this.root.position.set(-centre.x, -1.2, -1.5 - centre.z);
   }
 
   setData(layout: Layout, selection: Selection): void {
@@ -126,8 +157,13 @@ export class OrbitView {
   }
 
   private render(): void {
-    this.controls.update();
-    this.renderer.render(this.scene, this.camera);
+    try {
+      if (!this.renderer.xr.isPresenting) this.controls.update();
+      this.renderer.render(this.scene, this.camera);
+    } catch (e) {
+      this.arStatus.textContent = `描画エラー: ${(e as Error).message}`;
+      throw e;
+    }
   }
 
   private pick(e: PointerEvent): void {

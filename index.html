@@ -46,6 +46,11 @@
       #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #000c; padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 10; }
       #toast.show { opacity: 1; }
       [hidden] { display: none !important; }
+      /* While AR runs, nothing opaque may sit over the camera feed. */
+      html.xr-presenting, html.xr-presenting body { background: transparent; }
+      #ar-overlay { position: fixed; inset: 0; pointer-events: none; }
+      #ar-overlay button { pointer-events: auto; position: absolute; top: 16px; right: 16px; }
+      #ar-status { position: absolute; left: 12px; right: 12px; bottom: 16px; padding: 6px 10px; border-radius: 8px; background: #000a; font-size: 13px; }
       @media (max-width: 720px) {
         body { grid-template-columns: 1fr; grid-template-rows: auto 1fr minmax(0, 38vh); grid-template-areas: 'bar' 'stage' 'panel'; }
         #panel { border-left: 0; border-top: 1px solid var(--line); }
@@ -94,6 +99,10 @@
       <div id="info"></div>
     </aside>
     <div id="toast"></div>
+    <div id="ar-overlay" hidden>
+      <button id="ar-exit">AR終了</button>
+      <div id="ar-status"></div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
