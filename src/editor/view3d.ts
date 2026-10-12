@@ -6,6 +6,14 @@ import { buildCourseMeshes, MM } from '../course/mesh';
 import type { PickHandlers, Selection } from './selection';
 
 const BACKGROUND = new THREE.Color(0x1b1d22);
+
+// Three uses a WebXR Layers projection layer whenever the browser offers one.
+// On Android Chrome that path left the AR camera feed black, so hide it and
+// let three fall back to the long-supported XRWebGLLayer, which composites
+// with alpha over the camera image.
+if (typeof XRWebGLBinding !== 'undefined' && 'createProjectionLayer' in XRWebGLBinding.prototype) {
+  delete (XRWebGLBinding.prototype as Partial<XRWebGLBinding>).createProjectionLayer;
+}
 const TAP_SLOP = 6;
 
 /** 3D orbit view of the course, with AR (WebXR) for viewing only. */
@@ -65,7 +73,9 @@ export class OrbitView {
     renderer.xr.addEventListener('sessionstart', () => {
       document.documentElement.classList.add('xr-presenting');
       overlay.hidden = false;
-      this.arStatus.textContent = 'AR表示中：コースは足元の少し前に置いています';
+      const session = renderer.xr.getSession();
+      const layer = session?.renderState.layers?.length ? 'projection' : 'webgl';
+      this.arStatus.textContent = `AR表示中：コースは足元の少し前に置いています（${session?.environmentBlendMode ?? '?'} / ${layer}）`;
       this.scene.background = null;
       this.grid.visible = false;
       this.controls.enabled = false;
