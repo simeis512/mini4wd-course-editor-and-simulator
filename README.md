@@ -19,7 +19,10 @@ npm test           # テスト
 npm run build      # 型チェック + ビルド
 ```
 
-WebXR の AR は HTTPS（または localhost）でのみ動作する。スマホ実機で確認するときは HTTPS で配信する必要がある。
+WebXR の AR は HTTPS（または localhost）でのみ動作するため、開発サーバーは自己署名証明書の HTTPS で起動する。
+スマホからは `npm run dev` の表示する Network の URL（`https://192.168.x.x:5173/` など、**https** で始まるもの）を開く。
+初回は「この接続ではプライバシーが保護されません」などの警告が出るので、「詳細設定」→「アクセスする」で進む。
+AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari は WebXR の AR に対応していない。
 
 ## 使い方（コースエディタ）
 
