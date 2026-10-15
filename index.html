@@ -5,14 +5,105 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ミニ四駆コース作成シミュレーター</title>
     <style>
-      html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d22; }
-      #app { width: 100%; height: 100%; }
-      #hud { position: fixed; top: 8px; left: 8px; color: #eee; font: 12px/1.4 system-ui, sans-serif; pointer-events: none; }
+      :root {
+        --bg: #1b1d22;
+        --panel: #24272e;
+        --line: #353943;
+        --text: #e8e9ec;
+        --muted: #9aa0ab;
+        --accent: #3fd0ff;
+        --warn: #ff9a2e;
+        --ok: #39c26b;
+        color-scheme: dark;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, sans-serif; }
+      body { display: grid; grid-template-rows: auto 1fr; grid-template-columns: 1fr 300px; grid-template-areas: 'bar bar' 'stage panel'; overflow: hidden; }
+      #toolbar { grid-area: bar; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+      #toolbar h1 { font-size: 15px; margin: 0 8px 0 0; white-space: nowrap; }
+      #toolbar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+      button, select { font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; min-height: 34px; cursor: pointer; }
+      button:hover:not(:disabled) { background: #3a3f4a; }
+      button:disabled { opacity: 0.4; cursor: default; }
+      button[aria-pressed='true'] { background: #1f5f75; border-color: var(--accent); }
+      #stage { grid-area: stage; position: relative; min-height: 0; }
+      #view2d, #view3d { position: absolute; inset: 0; width: 100%; height: 100%; }
+      #view2d { touch-action: none; display: block; }
+      #view3d canvas { display: block; touch-action: none; }
+      #view3d .ar-button { position: absolute !important; bottom: 12px !important; }
+      #fit { position: absolute; right: 10px; bottom: 10px; }
+      #panel { grid-area: panel; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); padding: 10px 12px; }
+      #panel h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 6px; }
+      #panel h2:first-child { margin-top: 0; }
+      #palette { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+      #palette button { text-align: left; }
+      #palette small, .muted { color: var(--muted); }
+      .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+      .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+      ul { margin: 4px 0; padding-left: 18px; }
+      .ok { color: var(--ok); }
+      .warn { color: var(--warn); }
+      #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #000c; padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 10; }
+      #toast.show { opacity: 1; }
+      [hidden] { display: none !important; }
+      /* While AR runs, nothing opaque may sit over the camera feed. */
+      html.xr-presenting, html.xr-presenting body { background: transparent; color-scheme: normal; }
+      #ar-overlay { color-scheme: normal; color: #fff; }
+      #ar-overlay { position: fixed; inset: 0; pointer-events: none; }
+      #ar-overlay button { pointer-events: auto; position: absolute; top: 16px; right: 16px; }
+      #ar-status { position: absolute; left: 12px; right: 12px; bottom: 16px; padding: 6px 10px; border-radius: 8px; background: #000a; font-size: 13px; }
+      @media (max-width: 720px) {
+        body { grid-template-columns: 1fr; grid-template-rows: auto 1fr minmax(0, 38vh); grid-template-areas: 'bar' 'stage' 'panel'; }
+        #panel { border-left: 0; border-top: 1px solid var(--line); }
+        #toolbar h1 { display: none; }
+      }
     </style>
   </head>
   <body>
-    <div id="app"></div>
-    <div id="hud"></div>
+    <header id="toolbar">
+      <h1>ミニ四駆コースエディタ</h1>
+      <button id="mode-2d" aria-pressed="true">2D</button>
+      <button id="mode-3d" aria-pressed="false">3D</button>
+      <span class="sep"></span>
+      <button id="undo" title="元に戻す (Ctrl+Z)">元に戻す</button>
+      <button id="redo" title="やり直し (Ctrl+Y)">やり直し</button>
+      <span class="sep"></span>
+      <button id="new">新規</button>
+      <button id="copy-url">URLをコピー</button>
+      <button id="export">書き出し</button>
+      <button id="import">読み込み</button>
+      <input id="import-file" type="file" accept=".json,application/json" hidden />
+    </header>
+    <main id="stage">
+      <canvas id="view2d"></canvas>
+      <div id="view3d" hidden></div>
+      <button id="fit">全体を表示</button>
+    </main>
+    <aside id="panel">
+      <h2>パーツ</h2>
+      <div id="palette"></div>
+      <p id="palette-hint" class="hint"></p>
+      <section id="selection-panel" hidden>
+        <h2>選択中のピース</h2>
+        <div id="selection-name"></div>
+        <div id="selection-note" class="hint"></div>
+        <div class="row">
+          <label for="variant">色</label>
+          <select id="variant"></select>
+        </div>
+        <div class="row">
+          <button id="flip" title="反転 (F)">反転</button>
+          <button id="delete" title="削除 (Delete)">削除</button>
+        </div>
+      </section>
+      <h2>コース</h2>
+      <div id="info"></div>
+    </aside>
+    <div id="toast"></div>
+    <div id="ar-overlay" hidden>
+      <button id="ar-exit">AR終了</button>
+      <div id="ar-status"></div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
