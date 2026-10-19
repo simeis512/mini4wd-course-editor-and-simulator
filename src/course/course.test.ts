@@ -141,3 +141,28 @@ describe('banks', () => {
     expect(pos(end).y).toBeCloseTo(pos(start).y, 6);
   });
 });
+
+describe('slopes', () => {
+  const up = (m: Matrix4) => new Vector3(0, 1, 0).transformDirection(m);
+  const pos = (m: Matrix4) => new Vector3().setFromMatrixPosition(m);
+  const levelAngle = (m: Matrix4) => up(m).angleTo(new Vector3(0, 1, 0));
+
+  it("climbs 110 mm over a straight's length and ends level", () => {
+    const layout = layoutCourse(chain(['straight', 'slope', 'straight']));
+    const from = layout.pieces[1].ports[0];
+    const to = layout.pieces[1].ports[1];
+    expect(pos(to).y - pos(from).y).toBeCloseTo(110, 6);
+    expect(pos(to).z - pos(from).z).toBeCloseTo(540, 6);
+    expect(levelAngle(to)).toBeLessThan(1e-9);
+    expect(layout.problems).toEqual([]);
+  });
+
+  it('makes a hill from two slopes face to face', () => {
+    const c = flipPiece(chain(['straight', 'slope', 'slope', 'straight']), 2);
+    const layout = layoutCourse(c);
+    const end = layout.pieces[3].ports[1];
+    expect(pos(end).y).toBeCloseTo(0, 6);
+    expect(pos(end).z).toBeCloseTo(540 * 4, 6);
+    expect(levelAngle(end)).toBeLessThan(1e-9);
+  });
+});

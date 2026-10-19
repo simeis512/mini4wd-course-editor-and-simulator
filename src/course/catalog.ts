@@ -119,6 +119,17 @@ const CURVE_RADIUS = 540;
 const CURVE_ANGLE = 45;
 /** Short ramp; roughly a third of a straight judging by product photos (inferred). */
 const BANK_APPROACH_LENGTH = 180;
+/** Height the slope climbs (official). */
+const SLOPE_DROP = 110;
+/** Floor length of the slope: the same as a straight (per the user; unmeasured). */
+const SLOPE_RUN = STRAIGHT_LENGTH;
+/**
+ * Provisional S shape: a concave arc into the climb and a convex arc back to
+ * level, meeting halfway up. Two equal arcs that each rise half the drop over
+ * half the run turn through 2·atan(rise / run).
+ */
+const SLOPE_PITCH = (2 * Math.atan(SLOPE_DROP / SLOPE_RUN) * 180) / Math.PI;
+const SLOPE_ARC_LENGTH = ((SLOPE_RUN / 2) * ((SLOPE_PITCH * Math.PI) / 180)) / Math.sin((SLOPE_PITCH * Math.PI) / 180);
 
 export const PARTS: readonly PartDef[] = [
   {
@@ -175,6 +186,23 @@ export const PARTS: readonly PartDef[] = [
     confidence: 'inferred',
     note: '長さと坂の曲がり方は未計測のため仮形状（長さ180、0°→20°へ一定に上る）',
   },
+  {
+    // Slope section: level at both ends, climbing 110 mm in an S between them
+    // (spec 3.4). Going down is the same part turned round; the official
+    // photo puts two face to face to make a hill.
+    id: 'slope',
+    name: 'スロープ',
+    segments: [
+      { length: SLOPE_ARC_LENGTH, pitch: SLOPE_PITCH },
+      { length: SLOPE_ARC_LENGTH, pitch: -SLOPE_PITCH },
+    ],
+    ports: twoEnded(),
+    lanes: ALL_LANES,
+    variants: [PALETTE.red, PALETTE.orange],
+    defaultVariant: 0,
+    confidence: 'inferred',
+    note: `落差110のみ確定。曲がり方は未計測のため仮形状（床の長さ540、最大${SLOPE_PITCH.toFixed(1)}°のS字）`,
+  },
 ];
 
 const PART_BY_ID = new Map(PARTS.map((p) => [p.id, p]));
@@ -194,7 +222,7 @@ export function hasPart(id: string): boolean {
  * reuse or renumber an entry, or old URLs will open the wrong parts.
  */
 export const CATALOG_VERSION = 1;
-export const PART_CODES: readonly string[] = ['straight', 'curve45', 'wave', 'bank-approach-20'];
+export const PART_CODES: readonly string[] = ['straight', 'curve45', 'wave', 'bank-approach-20', 'slope'];
 
 export function variantOf(part: PartDef, index: number | undefined): Variant {
   return part.variants[index ?? part.defaultVariant] ?? part.variants[part.defaultVariant];
