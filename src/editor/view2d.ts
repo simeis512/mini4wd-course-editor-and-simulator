@@ -19,6 +19,8 @@ interface Outline {
 const TAP_SLOP = 6;
 /** Screen radius for hitting a port, px. */
 const PORT_HIT = 22;
+/** Screen radius for hitting a joint, px: small so pieces stay easy to pick. */
+const JOINT_HIT = 12;
 
 /**
  * Top-down 2D editor view drawn on a canvas. Pointer Events only, so mouse,
@@ -161,20 +163,50 @@ export class TopView {
 
     const sel = this.selection;
     if (sel?.kind === 'piece') {
+      // The pieces joined to the selection move with it: outline them too.
+      const group = layout.group[sel.index];
       for (const o of this.outlines) {
-        if (o.piece !== sel.index) continue;
+        if (layout.group[o.piece] !== group) continue;
         path(o.polygon, true);
-        ctx.strokeStyle = '#3fd0ff';
-        ctx.lineWidth = 3;
+        const own = o.piece === sel.index;
+        ctx.strokeStyle = own ? '#3fd0ff' : 'rgba(63,208,255,0.75)';
+        ctx.lineWidth = own ? 3 : 1.5;
+        ctx.setLineDash(own ? [] : [6, 4]);
         ctx.stroke();
+        ctx.setLineDash([]);
       }
     }
 
-    for (const c of layout.closures) this.drawPort(c.a, '#39c26b', 0.6);
+    for (const j of layout.joints) {
+      const selected = sel?.kind === 'joint' && sameJoint(sel, j);
+      this.drawJoint(j.a, selected ? '#3fd0ff' : '#39c26b', selected ? 1.6 : 1);
+    }
+    const split = new Set(layout.split.map(portKey));
     for (const ref of layout.open) {
       const selected = sel?.kind === 'port' && portKey(sel.ref) === portKey(ref);
-      this.drawPort(ref, selected ? '#3fd0ff' : '#ff9a2e', selected ? 1.3 : 1);
+      this.drawPort(ref, selected ? '#3fd0ff' : split.has(portKey(ref)) ? '#ff5a5a' : '#ff9a2e', selected ? 1.3 : 1);
     }
+  }
+
+  /** A short bar across the middle of a joint. */
+  private drawJoint(ref: PortRef, color: string, size: number): void {
+    const frame = this.layout!.pieces[ref.piece].ports[ref.port];
+    const half = halfWidth(this.layout!.pieces[ref.piece].part.ports[ref.port].lanes.length);
+    const p = new Vector3();
+    const [ax, ay] = this.toScreen(...xz(pointOnFrame(frame, -half * 0.6, 0, p)));
+    const [bx, by] = this.toScreen(...xz(pointOnFrame(frame, half * 0.6, 0, p)));
+    const [cx, cy] = this.toScreen(...xz(pointOnFrame(frame, 0, 0, p)));
+    const { ctx } = this;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 3 * size;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4 * size, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   private drawGrid(w: number, h: number): void {
@@ -244,6 +276,13 @@ export class TopView {
       if (d < PORT_HIT && (!best || d < best.d)) best = { ref, d };
     }
     if (best) return { kind: 'port', ref: best.ref };
+    let joint: { a: PortRef; b: PortRef; d: number } | null = null;
+    for (const j of layout.joints) {
+      const [px, py] = this.toScreen(...xz(pointOnFrame(layout.pieces[j.a.piece].ports[j.a.port], 0, 0, p)));
+      const d = Math.hypot(px - sx, py - sy);
+      if (d < JOINT_HIT && (!joint || d < joint.d)) joint = { a: j.a, b: j.b, d };
+    }
+    if (joint) return { kind: 'joint', a: joint.a, b: joint.b };
     const piece = this.pieceAt(sx, sy);
     return piece === null ? null : { kind: 'piece', index: piece };
   }
@@ -345,6 +384,11 @@ export class TopView {
     const [a, b] = [...this.pointers.values()];
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   }
+}
+
+function sameJoint(x: { a: PortRef; b: PortRef }, y: { a: PortRef; b: PortRef }): boolean {
+  const [xa, xb, ya, yb] = [x.a, x.b, y.a, y.b].map(portKey);
+  return (xa === ya && xb === yb) || (xa === yb && xb === ya);
 }
 
 function xz(v: Vector3): [number, number] {

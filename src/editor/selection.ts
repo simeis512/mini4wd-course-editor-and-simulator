@@ -1,6 +1,11 @@
 import type { PortRef } from '../course/course';
 
-export type Selection = { kind: 'port'; ref: PortRef } | { kind: 'piece'; index: number } | null;
+export type Selection =
+  | { kind: 'port'; ref: PortRef }
+  | { kind: 'piece'; index: number }
+  /** A joint between two ports. */
+  | { kind: 'joint'; a: PortRef; b: PortRef }
+  | null;
 
 export interface PickHandlers {
   /** A tap landed on an open port, a piece, or nothing. */

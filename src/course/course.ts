@@ -19,6 +19,11 @@ export interface Course {
   pieces: PieceRec[];
   dir?: 1 | -1;
   name?: string;
+  /**
+   * Ports whose joint has been split on purpose: they never count as joined
+   * to a port they touch. Only kept while something still touches them.
+   */
+  cuts?: [piece: number, port: number][];
 }
 
 export function emptyCourse(): Course {
@@ -48,6 +53,14 @@ export interface Closure extends FrameError {
   b: PortRef;
 }
 
+/** Two ports that are joined, by the stored graph or by meeting (spec 5.3). */
+export interface Joint {
+  a: PortRef;
+  b: PortRef;
+  /** `link`: stored as a connection; `closure`: two loose ports that meet. */
+  kind: 'link' | 'closure';
+}
+
 /**
  * Something that can be built in the editor but not with real parts:
  * a floor end that is not level, or two parts that cannot be joined.
@@ -67,6 +80,12 @@ export interface Layout {
   closures: Closure[];
   /** Ports joined to nothing. */
   open: PortRef[];
+  /** Every joint, links first. */
+  joints: Joint[];
+  /** For each piece, the id of the group of pieces joined to it (they move together). */
+  group: number[];
+  /** Open ports marked as split from a port they touch. */
+  split: PortRef[];
 }
 
 export const portKey = (r: PortRef): string => `${r.piece}:${r.port}`;
@@ -95,6 +114,10 @@ export function validateCourse(course: Course): void {
       if (p < 0 || p >= other.ports.length) throw new Error(`piece ${i}: no port ${p} on piece ${j}`);
     }
   });
+  for (const [piece, port] of course.cuts ?? []) {
+    const rec = course.pieces[piece];
+    if (!rec || port < 0 || port >= getPart(rec.part).ports.length) throw new Error(`split mark on missing port ${piece}:${port}`);
+  }
 }
 
 /** Ports two pieces can be joined by: same kind and lane count, and partners that allow each other. */
@@ -132,6 +155,8 @@ export function isLevel(frame: Matrix4): boolean {
 export function layoutCourse(course: Course): Layout {
   const pieces: PlacedPiece[] = [];
   const connected = new Set<string>();
+  const links: Joint[] = [];
+  const cut = new Set((course.cuts ?? []).map(([piece, port]) => portKey({ piece, port })));
   const problems: Problem[] = [];
   course.pieces.forEach((rec, i) => {
     const part = getPart(rec.part);
@@ -143,6 +168,7 @@ export function layoutCourse(course: Course): Layout {
       if (!compatible(pieces[j].part, p, part, rec.port)) problems.push({ kind: 'cannot-join', piece: i, port: rec.port });
       connected.add(portKey({ piece: j, port: p }));
       connected.add(portKey({ piece: i, port: rec.port }));
+      links.push({ a: { piece: j, port: p }, b: { piece: i, port: rec.port }, kind: 'link' });
     } else if ('free' in rec) {
       const base = rec.free ? pieces[rec.free[0]].ports[rec.free[1]] : new Matrix4();
       matrix = attach(base.clone().multiply(poseToMatrix(rec.pose)), geo.ports[rec.port]);
@@ -169,7 +195,7 @@ export function layoutCourse(course: Course): Layout {
     for (let y = x + 1; y < loose.length; y++) {
       const a = loose[x];
       const b = loose[y];
-      if (a.piece === b.piece) continue;
+      if (a.piece === b.piece || cut.has(portKey(a)) || cut.has(portKey(b))) continue;
       if (!compatible(pieces[a.piece].part, a.port, pieces[b.piece].part, b.port)) continue;
       const err = facingError(pieces[a.piece].ports[a.port], pieces[b.piece].ports[b.port]);
       if (err.distance <= CLOSE_DISTANCE && err.angle <= CLOSE_ANGLE) candidates.push({ a, b, ...err });
@@ -185,7 +211,15 @@ export function layoutCourse(course: Course): Layout {
     closures.push(c);
   }
   const open = loose.filter((r) => !closed.has(portKey(r)));
-  return { pieces, problems, connected, closures, open };
+  const joints: Joint[] = [...links, ...closures.map((c): Joint => ({ a: c.a, b: c.b, kind: 'closure' }))];
+
+  // Group joined pieces (union-find).
+  const parent = pieces.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  for (const j of joints) parent[find(j.a.piece)] = find(j.b.piece);
+  const group = pieces.map((_, i) => find(i));
+  const split = open.filter((r) => cut.has(portKey(r)));
+  return { pieces, problems, connected, closures, open, joints, group, split };
 }
 
 // ---- Editing. Each operation returns a new course and leaves the input alone.
@@ -239,7 +273,11 @@ export function deletePiece(course: Course, index: number): Course {
     if (outRef && outRef[0] > index) outRef[0]--;
     pieces.push(out);
   });
-  return { ...clone(course), pieces };
+  const next: Course = { ...clone(course), pieces };
+  if (course.cuts) {
+    next.cuts = course.cuts.filter(([p]) => p !== index).map(([p, port]): [number, number] => [p > index ? p - 1 : p, port]);
+  }
+  return tidyCuts(next);
 }
 
 /**
@@ -265,7 +303,9 @@ export function flipPiece(course: Course, index: number): Course {
     const ref = anchorRef(other);
     if (ref && ref[0] === index) ref[1] = ref[1] === oldPort ? newPort : oldPort;
   });
-  return next;
+  // The piece has turned round, so its old joints are gone.
+  if (next.cuts) next.cuts = next.cuts.filter(([p]) => p !== index);
+  return tidyCuts(next);
 }
 
 export function setVariant(course: Course, index: number, variant: number): Course {
@@ -283,11 +323,8 @@ export function partCounts(course: Course): Map<string, number> {
   return counts;
 }
 
-// ---- Free placement (spec 5.2, 8)
+// ---- Joining, splitting and free placement (spec 5.2, 5.3, 8)
 
-/** Snap steps while moving a piece (spec 8). */
-export const SNAP_DISTANCE = 10;
-export const SNAP_ANGLE = 15;
 /** Open ports closer than this pull together while dragging (spec 8). */
 export const MAGNET_DISTANCE = 40;
 export const MAGNET_ANGLE = 10;
@@ -305,69 +342,54 @@ export function placementOf(rec: PieceRec): Placement {
   return { base: null, pose: IDENTITY_POSE };
 }
 
-function freeRec(rec: PieceRec, port: number, base: PortRef | null, pose: Pose): PieceRec {
-  const out: PieceRec = { part: rec.part, port, free: base && [base.piece, base.port], pose };
+function freeRec(rec: PieceRec, base: PortRef | null, pose: Pose): PieceRec {
+  const out: PieceRec = { part: rec.part, port: 'port' in rec ? rec.port : 0, free: base && [base.piece, base.port], pose };
   if (rec.variant !== undefined) out.variant = rec.variant;
   return out;
-}
-
-/** The piece and every piece anchored to it, directly or through others. */
-export function movingGroup(course: Course, index: number): Set<number> {
-  const group = new Set([index]);
-  course.pieces.forEach((rec, i) => {
-    const ref = anchorRef(rec);
-    if (ref && group.has(ref[0])) group.add(i);
-  });
-  return group;
 }
 
 function baseFrame(layout: Layout, base: PortRef | null): Matrix4 {
   return base ? layout.pieces[base.piece].ports[base.port] : new Matrix4();
 }
 
-function snapPose(pose: Pose): Pose {
-  const step = (x: number, s: number) => Math.round(x / s) * s || 0;
-  return {
-    pos: pose.pos.map((x) => step(x, SNAP_DISTANCE)) as Pose['pos'],
-    rot: [step(pose.rot[0], SNAP_ANGLE), pose.rot[1], pose.rot[2]],
-  };
+/** The pieces joined to `index`, which move together; or just the piece when moved alone. */
+export function movingGroup(layout: Layout, index: number, alone = false): Set<number> {
+  if (alone) return new Set([index]);
+  const id = layout.group[index];
+  return new Set(layout.group.flatMap((g, i) => (g === id ? [i] : [])));
 }
 
-export interface MoveOptions {
-  /** Move only this piece; pieces hanging off it stay where they are. */
-  alone?: boolean;
-  /** Round the pose from the base port to 10 mm / 15° (spec 8). */
-  snap?: boolean;
+/** Pieces in different groups (islands). */
+export function groupCount(layout: Layout): number {
+  return new Set(layout.group).size;
 }
 
 /**
- * Free a piece so its anchoring port faces `target` (world). Its pose is
- * kept relative to the port it hung off, so a jump gap stays a jump gap
- * when parts before it change (spec 5.2).
+ * Move the pieces in `group` by the world transform `delta`. Pieces outside
+ * it stay where they are: any that hung off a moving piece keep their pose
+ * from the same port, recomputed so they do not move (spec 5.2).
  */
-export function movePiece(course: Course, index: number, target: Matrix4, opts: MoveOptions = {}): Course {
+export function moveGroup(course: Course, group: Set<number>, delta: Matrix4): Course {
   const layout = layoutCourse(course);
-  const rec = course.pieces[index];
-  const { base } = placementOf(rec);
-  let pose = matrixToPose(baseFrame(layout, base).clone().invert().multiply(target));
-  if (opts.snap) pose = snapPose(pose);
   const next = clone(course);
-  next.pieces[index] = freeRec(rec, 'port' in rec ? rec.port : 0, base, pose);
-  if (opts.alone) {
-    next.pieces.forEach((other, i) => {
-      const ref = anchorRef(other);
-      if (i > index && ref && ref[0] === index) next.pieces[i] = freeAt(other, anchorFrame(layout, i));
-    });
-  }
+  course.pieces.forEach((rec, i) => {
+    const ref = anchorRef(rec);
+    const hungOffMoving = ref !== null && group.has(ref[0]);
+    if (group.has(i) === hungOffMoving) return; // moves with its anchor, or nothing moves
+    const { base } = placementOf(rec);
+    const anchor = anchorFrame(layout, i);
+    const target = group.has(i) ? delta.clone().multiply(anchor) : anchor;
+    const from = base && group.has(base.piece) ? delta.clone().multiply(baseFrame(layout, base)) : baseFrame(layout, base);
+    next.pieces[i] = freeRec(rec, base, matrixToPose(from.clone().invert().multiply(target)));
+  });
   return next;
 }
 
 /** Set a piece's pose from its base port, freeing it if it was connected. */
 export function setPose(course: Course, index: number, pose: Pose): Course {
   const next = clone(course);
-  const rec = course.pieces[index];
-  next.pieces[index] = freeRec(rec, 'port' in rec ? rec.port : 0, placementOf(rec).base, pose);
-  return next;
+  next.pieces[index] = freeRec(course.pieces[index], placementOf(course.pieces[index]).base, pose);
+  return tidyCuts(next);
 }
 
 export interface Magnet {
@@ -378,13 +400,13 @@ export interface Magnet {
 }
 
 /**
- * Find the nearest pair of open ports, one on the pieces moving with
- * `index` and one on the rest, that are close enough to pull together.
+ * The nearest pair of loose ports, one on the moving pieces and one on the
+ * rest, that are close enough to pull together. Split ports count too, so
+ * dropping a piece back where it was joins it again.
  */
-export function findMagnet(course: Course, index: number, distance = MAGNET_DISTANCE): Magnet | null {
+export function findMagnet(course: Course, group: Set<number>, distance = MAGNET_DISTANCE): Magnet | null {
   const layout = layoutCourse(course);
-  const group = movingGroup(course, index);
-  // Ports already closed between two fixed pieces are taken.
+  // Ports already joined between two fixed pieces are taken.
   const taken = new Set<string>();
   for (const c of layout.closures) {
     if (!group.has(c.a.piece) && !group.has(c.b.piece)) {
@@ -410,29 +432,80 @@ export function findMagnet(course: Course, index: number, distance = MAGNET_DIST
   return best && { moving: best.moving, fixed: best.fixed };
 }
 
-/**
- * Pull the moving pieces so the magnet's ports face exactly. When the
- * dragged piece itself meets an earlier piece it becomes a plain connection.
- */
-export function applyMagnet(course: Course, index: number, magnet: Magnet): Course {
-  const { moving, fixed } = magnet;
-  const rec = course.pieces[index];
-  if (moving.piece === index && fixed.piece < index) {
-    const next = clone(course);
-    const out: PieceRec = { part: rec.part, port: moving.port, to: [fixed.piece, fixed.port] };
-    if (rec.variant !== undefined) out.variant = rec.variant;
-    next.pieces[index] = out;
-    return next;
-  }
+/** Pull the moving pieces so the magnet's ports face exactly, and join them. */
+export function applyMagnet(course: Course, group: Set<number>, magnet: Magnet): Course {
   const layout = layoutCourse(course);
-  const m = layout.pieces[moving.piece].ports[moving.port];
-  const f = layout.pieces[fixed.piece].ports[fixed.port];
+  const m = layout.pieces[magnet.moving.piece].ports[magnet.moving.port];
+  const f = layout.pieces[magnet.fixed.piece].ports[magnet.fixed.port];
   // The rigid move that turns the moving port onto the fixed one.
   const pull = f.clone().multiply(FACE).multiply(m.clone().invert());
-  const { base } = placementOf(rec);
-  const target = pull.multiply(anchorFrame(layout, index));
-  const pose = matrixToPose(baseFrame(layout, base).clone().invert().multiply(target));
+  return uncut(moveGroup(course, group, pull), [magnet.moving, magnet.fixed]);
+}
+
+function uncut(course: Course, refs: PortRef[]): Course {
+  if (!course.cuts) return course;
+  const keys = new Set(refs.map(portKey));
+  const cuts = course.cuts.filter(([piece, port]) => !keys.has(portKey({ piece, port })));
+  const next = { ...course };
+  if (cuts.length) next.cuts = cuts;
+  else delete next.cuts;
+  return next;
+}
+
+/**
+ * Split a joint (spec 8). A stored connection becomes a free placement at
+ * the same spot; both ports are marked so they stay apart until moved.
+ */
+export function splitJoint(course: Course, a: PortRef, b: PortRef): Course {
   const next = clone(course);
-  next.pieces[index] = freeRec(rec, 'port' in rec ? rec.port : 0, base, pose);
+  for (const [x, y] of [[a, b], [b, a]]) {
+    const rec = course.pieces[y.piece];
+    if ('to' in rec && rec.to[0] === x.piece && rec.to[1] === x.port && rec.port === y.port) {
+      next.pieces[y.piece] = freeRec(rec, x, IDENTITY_POSE);
+    }
+  }
+  next.cuts = [...(course.cuts ?? []), [a.piece, a.port], [b.piece, b.port]];
+  return next;
+}
+
+/** Join two ports that meet, undoing a split; ports a little apart are pulled together first. */
+export function joinPorts(course: Course, a: PortRef, b: PortRef): Course {
+  const later = a.piece > b.piece ? a : b;
+  const earlier = later === a ? b : a;
+  const layout = layoutCourse(uncut(course, [a, b]));
+  if (layout.group[a.piece] === layout.group[b.piece]) return uncut(course, [a, b]);
+  return applyMagnet(course, movingGroup(layout, later.piece), { moving: later, fixed: earlier });
+}
+
+/** A loose port near `ref` that it could join: for the "join" button. */
+export function joinableNear(layout: Layout, ref: PortRef, distance = MAGNET_DISTANCE): PortRef | null {
+  const here = layout.pieces[ref.piece];
+  let best: { ref: PortRef; d: number } | null = null;
+  for (const other of layout.open) {
+    if (other.piece === ref.piece) continue;
+    const there = layout.pieces[other.piece];
+    if (!compatible(here.part, ref.port, there.part, other.port)) continue;
+    const err = facingError(here.ports[ref.port], there.ports[other.port]);
+    if (err.distance <= distance && err.angle <= MAGNET_ANGLE && (!best || err.distance < best.d)) best = { ref: other, d: err.distance };
+  }
+  return best?.ref ?? null;
+}
+
+/** Drop split marks on ports that no longer touch anything they could join. */
+export function tidyCuts(course: Course): Course {
+  if (!course.cuts) return course;
+  const loose = { ...course };
+  delete loose.cuts;
+  const meeting = new Set(layoutCourse(loose).closures.flatMap((c) => [portKey(c.a), portKey(c.b)]));
+  const seen = new Set<string>();
+  const cuts = course.cuts.filter(([piece, port]) => {
+    const key = portKey({ piece, port });
+    if (!meeting.has(key) || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const next = { ...course };
+  if (cuts.length) next.cuts = cuts;
+  else delete next.cuts;
   return next;
 }

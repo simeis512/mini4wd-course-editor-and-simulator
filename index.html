@@ -98,6 +98,7 @@
           <button id="flip" title="反転 (F)">反転</button>
           <button id="delete" title="削除 (Delete)">削除</button>
         </div>
+        <div id="group-info" class="hint"></div>
         <h2>配置</h2>
         <div id="placement-base" class="hint"></div>
         <div class="pose-grid">
@@ -118,7 +119,22 @@
           <label><input id="snap" type="checkbox" checked /> スナップ</label>
           <label><input id="move-alone" type="checkbox" /> このピースだけ動かす</label>
         </div>
-        <p class="hint">選んだピースをドラッグで移動（2D）。つながった先も一緒に動きます。スナップは 10mm / 15°、Shift を押している間は解除。開いた口に近づけると吸着します。</p>
+        <p class="hint">選んだピースをドラッグで移動（2D）。つながっているピースは一緒に動きます。切り離すには緑のつなぎ目を選んで「分断」。スナップは 10mm / 15°、Shift を押している間は解除。開いた口に近づけると吸着してつながります。</p>
+      </section>
+      <section id="joint-panel" hidden>
+        <h2>選択中のつなぎ目</h2>
+        <div id="joint-name"></div>
+        <div class="row">
+          <button id="split" title="分断 (Delete)">分断</button>
+        </div>
+        <p class="hint">分断すると、口は向き合ったまま切り離されます（赤い矢印）。ピースを動かすと、それぞれ別に動きます。</p>
+      </section>
+      <section id="port-panel" hidden>
+        <h2>選択中の口</h2>
+        <div class="row">
+          <span id="join-name"></span>
+          <button id="join">とつなぐ</button>
+        </div>
       </section>
       <h2>コース</h2>
       <div id="info"></div>

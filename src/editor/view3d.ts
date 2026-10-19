@@ -126,10 +126,12 @@ export class OrbitView {
       this.pieces = buildCourseMeshes(layout);
       for (const p of this.pieces) this.root.add(p);
     }
+    // The selected piece glows; the pieces joined to it (which move with it) glow faintly.
+    const group = selection?.kind === 'piece' ? layout.group[selection.index] : -1;
     this.pieces.forEach((g, i) => {
-      const on = selection?.kind === 'piece' && selection.index === i;
+      const level = selection?.kind === 'piece' && selection.index === i ? 2 : layout.group[i] === group ? 1 : 0;
       g.traverse((o) => {
-        if (o instanceof THREE.Mesh) o.material = on ? highlighted(o.material) : unhighlighted(o.material);
+        if (o instanceof THREE.Mesh) o.material = level ? highlighted(o.material, level) : unhighlighted(o.material);
       });
     });
     this.markers.clear();
@@ -194,16 +196,18 @@ const MARKER_GEOMETRY = new THREE.ConeGeometry(45, 90, 16).rotateX(Math.PI / 2).
 const MARKER_OPEN = new THREE.MeshStandardMaterial({ color: 0xff9a2e, emissive: 0x552200 });
 const MARKER_SELECTED = new THREE.MeshStandardMaterial({ color: 0x3fd0ff, emissive: 0x114455 });
 
-const highlightCache = new WeakMap<THREE.Material, THREE.Material>();
+const HIGHLIGHT = [0, 0x0a2a35, 0x1a6680];
+const highlightCache = [0, 1, 2].map(() => new WeakMap<THREE.Material, THREE.Material>());
 const baseOf = new WeakMap<THREE.Material, THREE.Material>();
 
-function highlighted(m: THREE.Material | THREE.Material[]): THREE.Material {
+/** `level` 2: the selection; 1: joined to it. */
+function highlighted(m: THREE.Material | THREE.Material[], level: number): THREE.Material {
   const base = unhighlighted(m);
-  let h = highlightCache.get(base);
+  let h = highlightCache[level].get(base);
   if (!h) {
     const c = (base as THREE.MeshStandardMaterial).clone();
-    c.emissive = new THREE.Color(0x1a6680);
-    highlightCache.set(base, c);
+    c.emissive = new THREE.Color(HIGHLIGHT[level]);
+    highlightCache[level].set(base, c);
     baseOf.set(c, base);
     h = c;
   }
