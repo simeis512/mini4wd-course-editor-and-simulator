@@ -141,3 +141,34 @@ describe('banks', () => {
     expect(pos(end).y).toBeCloseTo(pos(start).y, 6);
   });
 });
+
+describe('slopes', () => {
+  const up = (m: Matrix4) => new Vector3(0, 1, 0).transformDirection(m);
+  const pos = (m: Matrix4) => new Vector3().setFromMatrixPosition(m);
+  const levelAngle = (m: Matrix4) => up(m).angleTo(new Vector3(0, 1, 0));
+
+  it('climbs 110 mm and ends level', () => {
+    const layout = layoutCourse(chain(['straight', 'slope-a', 'slope-b', 'straight']));
+    const start = layout.pieces[0].ports[0];
+    const top = layout.pieces[3].ports[1];
+    expect(pos(top).y - pos(start).y).toBeCloseTo(110, 6);
+    expect(levelAngle(top)).toBeLessThan(1e-9);
+    expect(layout.problems).toEqual([]);
+  });
+
+  it('comes back down to the floor with the pieces turned round', () => {
+    // Up, along the top, then down: the upper piece first, the lower one reversed.
+    let c = chain(['straight', 'slope-a', 'slope-b', 'straight', 'slope-b', 'slope-a', 'straight']);
+    c = flipPiece(c, 5);
+    const layout = layoutCourse(c);
+    const end = layout.pieces[6].ports[1];
+    expect(pos(end).y).toBeCloseTo(0, 6);
+    expect(levelAngle(end)).toBeLessThan(1e-9);
+    expect(layout.problems).toEqual([]);
+  });
+
+  it('flags the lower piece put on the floor the wrong way round', () => {
+    const c = flipPiece(chain(['straight', 'slope-a']), 1);
+    expect(layoutCourse(c).problems).toEqual([{ kind: 'not-level', piece: 1, port: 0 }]);
+  });
+});
