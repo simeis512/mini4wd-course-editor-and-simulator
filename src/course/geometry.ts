@@ -71,9 +71,18 @@ export function sampleCenterline(segments: readonly Segment[]): Matrix4[] {
   return frames;
 }
 
-export interface PartGeometry {
+export interface TrackGeometry {
   /** Centreline samples in part-local coordinates. */
   samples: Matrix4[];
+  /** Lane positions measured from this centreline. */
+  lanes: number[];
+}
+
+export interface PartGeometry {
+  /** Main centreline samples in part-local coordinates. */
+  samples: Matrix4[];
+  /** Every stretch of road: the main centreline first, then the part's `tracks`. */
+  tracks: TrackGeometry[];
   /** Port frames in part-local coordinates; forward points out of the part. */
   ports: Matrix4[];
   /** Centreline length, mm. */
@@ -94,8 +103,14 @@ export function partGeometry(part: PartDef): PartGeometry {
   let geo = geometryCache.get(part.id);
   if (!geo) {
     const samples = sampleCenterline(part.segments);
+    const tracks: TrackGeometry[] = [{ samples, lanes: part.lanes }];
+    for (const t of part.tracks ?? []) {
+      const start = poseToMatrix(t.start);
+      tracks.push({ samples: sampleCenterline(t.segments).map((f) => start.clone().multiply(f)), lanes: t.lanes });
+    }
     geo = {
       samples,
+      tracks,
       ports: part.ports.map((p) => portFrame(p, samples)),
       length: part.segments.reduce((sum, s) => sum + s.length, 0),
     };

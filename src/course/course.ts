@@ -97,11 +97,12 @@ export function validateCourse(course: Course): void {
   });
 }
 
-/** Ports two pieces can be joined by: same kind and lane count. */
+/** Ports two pieces can be joined by: same kind and lane count, and partners that allow each other. */
 export function compatible(a: PartDef, ap: number, b: PartDef, bp: number): boolean {
   const pa = a.ports[ap];
   const pb = b.ports[bp];
   if (a.cannotJoin?.includes(b.id) || b.cannotJoin?.includes(a.id)) return false;
+  if ((pa.partners && !pa.partners.includes(b.id)) || (pb.partners && !pb.partners.includes(a.id))) return false;
   return (pa.kind ?? 'std') === (pb.kind ?? 'std') && pa.lanes.length === pb.lanes.length;
 }
 

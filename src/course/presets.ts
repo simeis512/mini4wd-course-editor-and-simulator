@@ -10,11 +10,20 @@ export function chain(parts: string[]): Course {
 }
 
 /**
- * The basic set's oval with the lane change replaced by straights (lane
- * change parts arrive in phase 2): straight, wave, straight, a U-turn of
- * four curves, three straights, another U-turn.
+ * The basic set's oval: straight, wave, straight, a U-turn of four curves,
+ * the lane change (bridge approach, centre, bridge approach the other way
+ * round), another U-turn. The lane change's upper ports meet by loop
+ * closure.
  */
 export function basicOval(): Course {
   const uTurn = ['curve45', 'curve45', 'curve45', 'curve45'];
-  return chain(['straight', 'wave', 'straight', ...uTurn, 'straight', 'straight', 'straight', ...uTurn]);
+  const course = chain(['straight', 'wave', 'straight', ...uTurn, 'bridge-approach']);
+  const f = course.pieces.length - 1;
+  course.pieces.push(
+    { part: 'lane-change-center', port: 0, to: [f, 1] },
+    { part: 'bridge-approach', port: 1, to: [f + 1, 1] },
+    { part: 'curve45', port: 0, to: [f + 2, 0] },
+    ...uTurn.slice(1).map((part, i): PieceRec => ({ part, port: 0, to: [f + 3 + i, 1] })),
+  );
+  return course;
 }

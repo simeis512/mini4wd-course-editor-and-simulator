@@ -1,8 +1,8 @@
 import { Matrix4, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { getPart, laneLinks, laneOffset, portLaneOffsets, type PartDef } from './catalog';
-import { jointLanes } from './course';
-import { attach, partGeometry, pointOnFrame } from './geometry';
+import { compatible, jointLanes } from './course';
+import { attach, facingError, partGeometry, pointOnFrame } from './geometry';
 import { crossSection, halfWidth } from './mesh';
 
 const pos = (m: Matrix4) => new Vector3().setFromMatrixPosition(m);
@@ -120,5 +120,71 @@ describe('lanes through parts and joints', () => {
       { lane: 1, right: -60 },
       { lane: 2, right: 60 },
     ]);
+  });
+});
+
+describe('lane change', () => {
+  const f = getPart('bridge-approach');
+  const c = getPart('lane-change-center');
+
+  /** Follow a lane through a part from one port; returns [port, lane] where it comes out. */
+  function through(part: PartDef, port: number, lane: number): [number, number] {
+    for (const l of laneLinks(part)) {
+      if (l.from[0] === port && l.from[1] === lane) return l.to;
+      if (l.to[0] === port && l.to[1] === lane) return l.from;
+    }
+    throw new Error(`lane ${lane} of port ${port} goes nowhere`);
+  }
+
+  function across(a: PartDef, ap: number, lane: number, b: PartDef, bp: number): number {
+    const pair = jointLanes(a, ap, b, bp).find(([la]) => la === lane);
+    if (!pair) throw new Error(`lane ${lane} does not cross the joint`);
+    return pair[1];
+  }
+
+  it('moves every lane over by one: the right lane to the left, the others one to the right', () => {
+    const out = [0, 1, 2].map((lane) => {
+      // Entry approach, its upper or lower port, into the centre.
+      const [p1, l1] = through(f, 0, lane);
+      const cp = p1 === 1 ? 0 : 2;
+      const [cp2, l2] = through(c, cp, across(f, p1, l1, c, cp));
+      // Exit approach is turned round: it joins by the same kind of port.
+      const fp = cp2 === 1 ? 1 : 2;
+      const [fp2, l3] = through(f, fp, across(c, cp2, l2, f, fp));
+      expect(fp2).toBe(0);
+      // Looking along the course, the turned-round approach's lanes read right to left.
+      return 2 - l3;
+    });
+    expect(out).toEqual([1, 2, 0]);
+  });
+
+  it('lifts the right lane to the bridge height and keeps it level at the top', () => {
+    const upper = partGeometry(f).ports[2];
+    const ramp = partGeometry(f).tracks[1].samples.at(-1)!;
+    expect(pos(ramp).distanceTo(pos(upper))).toBeLessThan(1e-6);
+    expect(forward(ramp).angleTo(forward(upper))).toBeLessThan(1e-9);
+    expect(pos(upper).y).toBe(100);
+  });
+
+  it('only joins the lane change ports to each other', () => {
+    expect(compatible(f, 1, c, 0)).toBe(true);
+    expect(compatible(f, 2, c, 2)).toBe(true);
+    expect(compatible(f, 2, f, 2)).toBe(false);
+    expect(compatible(f, 1, getPart('straight'), 0)).toBe(false);
+    expect(compatible(f, 0, getPart('straight'), 1)).toBe(true);
+  });
+
+  it('meets the bridge ends of the centre exactly with the approaches', () => {
+    const geoF = partGeometry(f);
+    const geoC = partGeometry(c);
+    const centre = attach(geoF.ports[1], geoC.ports[0]);
+    const err = facingError(geoF.ports[2], centre.clone().multiply(geoC.ports[2]));
+    expect(err.distance).toBeLessThan(1e-6);
+    expect(err.angle).toBeLessThan(1e-4);
+    // Bridge and under-bridge track ends line up with their ports.
+    const overEnd = geoC.tracks[1].samples.at(-1)!;
+    expect(pos(overEnd).distanceTo(pos(geoC.ports[3]))).toBeLessThan(1e-6);
+    const underEnd = pointOnFrame(geoC.samples.at(-1)!, laneOffset(0) + 60, 0);
+    expect(underEnd.distanceTo(pos(geoC.ports[1]))).toBeLessThan(1e-6);
   });
 });

@@ -63,6 +63,20 @@ export interface PortDef {
   kind?: string;
   /** This end sits on the floor, so its frame must be level (bank approach). */
   floor?: boolean;
+  /** The only parts this port joins, when it is limited (the lane change's own ports). */
+  partners?: string[];
+}
+
+/**
+ * A stretch of road swept along its own centreline, for parts whose lanes
+ * part ways (the lane change's ramp and bridges). Lane positions are
+ * measured from this track's centreline.
+ */
+export interface Track {
+  /** Where the track's centreline starts, in part-local coordinates. */
+  start: Pose;
+  segments: Segment[];
+  lanes: number[];
 }
 
 /**
@@ -94,6 +108,8 @@ export interface PartDef {
   ports: PortDef[];
   /** Lane positions the cross-section covers: any 1 to 3 of 0, 1, 2. */
   lanes: number[];
+  /** Further road swept along centrelines of its own, beside the main one. */
+  tracks?: Track[];
   /**
    * Which port lane runs to which (spec 3.2). Left out on a two-ended part,
    * where each lane runs straight through (see `laneLinks`).
@@ -151,7 +167,30 @@ const SLOPE_RUN = STRAIGHT_LENGTH;
  * half the run turn through 2·atan(rise / run).
  */
 const SLOPE_PITCH = (2 * Math.atan(SLOPE_DROP / SLOPE_RUN) * 180) / Math.PI;
-const SLOPE_ARC_LENGTH = ((SLOPE_RUN / 2) * ((SLOPE_PITCH * Math.PI) / 180)) / Math.sin((SLOPE_PITCH * Math.PI) / 180);
+const SLOPE_ARC_LENGTH = sArcLength(SLOPE_DROP, SLOPE_RUN);
+
+/**
+ * Length of each of the two equal arcs of an S that climbs `rise` over a
+ * floor run of `run`, turning through `sPitch(rise, run)` and back.
+ */
+function sArcLength(rise: number, run: number): number {
+  const a = (sPitch(rise, run) * Math.PI) / 180;
+  return ((run / 2) * a) / Math.sin(a);
+}
+
+function sPitch(rise: number, run: number): number {
+  return (2 * Math.atan(rise / run) * 180) / Math.PI;
+}
+
+/** Road height of the lane change's upper lane (unmeasured, provisional). */
+export const BRIDGE_HEIGHT = 100;
+/** Floor length of each lane change piece: three pieces span 1620 (inferred). */
+const LANE_CHANGE_LENGTH = STRAIGHT_LENGTH;
+const RAMP_PITCH = sPitch(BRIDGE_HEIGHT, LANE_CHANGE_LENGTH);
+const RAMP_ARC_LENGTH = sArcLength(BRIDGE_HEIGHT, LANE_CHANGE_LENGTH);
+/** Lateral offset of the right-hand lane, as a part-local X (+ X is left). */
+const RIGHT_LANE_X = -laneOffset(2);
+const LANE_CHANGE_NOTE = `坂の高さ・長さ、橋の横ずれは未計測のため仮形状（橋の高さ${BRIDGE_HEIGHT}、各ピースの床の長さ${LANE_CHANGE_LENGTH}）`;
 
 export const PARTS: readonly PartDef[] = [
   {
@@ -225,6 +264,98 @@ export const PARTS: readonly PartDef[] = [
     confidence: 'inferred',
     note: `落差110のみ確定。曲がり方は未計測のため仮形状（床の長さ540、最大${SLOPE_PITCH.toFixed(1)}°のS字）`,
   },
+  {
+    // Lane change entry (F, spec 3.5): three lanes come in, the right-hand
+    // lane climbs to the bridge and the other two carry on underneath. The
+    // exit is the same part the other way round. On its own, with the upper
+    // and lower ports left open, it works as a jump ramp.
+    id: 'bridge-approach',
+    name: 'ブリッジアプローチ',
+    setCode: 'F',
+    segments: [{ length: LANE_CHANGE_LENGTH }],
+    lanes: [0, 1],
+    tracks: [
+      {
+        start: { pos: [RIGHT_LANE_X, 0, 0], rot: [0, 0, 0] },
+        segments: [
+          { length: RAMP_ARC_LENGTH, pitch: RAMP_PITCH },
+          { length: RAMP_ARC_LENGTH, pitch: -RAMP_PITCH },
+        ],
+        lanes: [1],
+      },
+    ],
+    ports: [
+      { id: 'a', anchor: 'start', lanes: ALL_LANES },
+      { id: 'lower', anchor: 'end', lanes: [0, 1], kind: 'lc-lower', partners: ['lane-change-center'] },
+      {
+        id: 'upper',
+        anchor: { pos: [RIGHT_LANE_X, BRIDGE_HEIGHT, LANE_CHANGE_LENGTH], rot: [0, 0, 0] },
+        lanes: [2],
+        kind: 'lc-upper',
+        partners: ['lane-change-center'],
+      },
+    ],
+    laneLinks: [
+      { from: [0, 0], to: [1, 0] },
+      { from: [0, 1], to: [1, 1] },
+      { from: [0, 2], to: [2, 2] },
+    ],
+    variants: [PALETTE.white, PALETTE.gray, PALETTE.black],
+    defaultVariant: 0,
+    confidence: 'inferred',
+    note: LANE_CHANGE_NOTE,
+  },
+  {
+    // Lane change centre (E+E+D as one set, spec 3.5): the bridge carries
+    // the upper lane from the right edge across to the left edge while the
+    // two lanes underneath move one lane to the right. It only joins bridge
+    // approaches, upper and lower ports together.
+    id: 'lane-change-center',
+    name: 'レーンチェンジ中央部',
+    setCode: 'D+E',
+    segments: [{ length: LANE_CHANGE_LENGTH, lateralProfile: 'lc-under' }],
+    lanes: [0, 1],
+    tracks: [
+      {
+        start: { pos: [RIGHT_LANE_X, BRIDGE_HEIGHT, 0], rot: [0, 0, 0] },
+        segments: [{ length: LANE_CHANGE_LENGTH, lateralProfile: 'lc-over' }],
+        lanes: [1],
+      },
+    ],
+    ports: [
+      { id: 'lower-a', anchor: 'start', lanes: [0, 1], kind: 'lc-lower', partners: ['bridge-approach'] },
+      {
+        id: 'lower-b',
+        anchor: { pos: [-laneOffset(1) - GLOBAL_SPEC.lanePitch / 2, 0, LANE_CHANGE_LENGTH], rot: [0, 0, 0] },
+        lanes: [1, 2],
+        kind: 'lc-lower',
+        partners: ['bridge-approach'],
+      },
+      {
+        id: 'upper-a',
+        anchor: { pos: [RIGHT_LANE_X, BRIDGE_HEIGHT, 0], rot: [180, 0, 0] },
+        lanes: [2],
+        kind: 'lc-upper',
+        partners: ['bridge-approach'],
+      },
+      {
+        id: 'upper-b',
+        anchor: { pos: [-laneOffset(0), BRIDGE_HEIGHT, LANE_CHANGE_LENGTH], rot: [0, 0, 0] },
+        lanes: [0],
+        kind: 'lc-upper',
+        partners: ['bridge-approach'],
+      },
+    ],
+    laneLinks: [
+      { from: [0, 0], to: [1, 1] },
+      { from: [0, 1], to: [1, 2] },
+      { from: [2, 2], to: [3, 0] },
+    ],
+    variants: [PALETTE.white, PALETTE.gray, PALETTE.black],
+    defaultVariant: 0,
+    confidence: 'inferred',
+    note: LANE_CHANGE_NOTE,
+  },
 ];
 
 const PART_BY_ID = new Map(PARTS.map((p) => [p.id, p]));
@@ -244,7 +375,15 @@ export function hasPart(id: string): boolean {
  * reuse or renumber an entry, or old URLs will open the wrong parts.
  */
 export const CATALOG_VERSION = 1;
-export const PART_CODES: readonly string[] = ['straight', 'curve45', 'wave', 'bank-approach-20', 'slope'];
+export const PART_CODES: readonly string[] = [
+  'straight',
+  'curve45',
+  'wave',
+  'bank-approach-20',
+  'slope',
+  'bridge-approach',
+  'lane-change-center',
+];
 
 export function variantOf(part: PartDef, index: number | undefined): Variant {
   return part.variants[index ?? part.defaultVariant] ?? part.variants[part.defaultVariant];

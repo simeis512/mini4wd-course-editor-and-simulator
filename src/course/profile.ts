@@ -19,6 +19,18 @@ export interface LateralProfile {
 /** Provisional wave amplitude (peak sideways offset), mm. */
 export const WAVE_AMPLITUDE = 30;
 
+/**
+ * A smooth sideways step of `shift` mm (+ left) over the whole segment, level
+ * at both ends: the lane change's bridges and the road under them.
+ */
+function step(shift: number): LateralProfile {
+  return {
+    offset: (s, length) => (shift / 2) * (1 - Math.cos((Math.PI * s) / length)),
+    slope: (s, length) => ((shift * Math.PI) / (2 * length)) * Math.sin((Math.PI * s) / length),
+    maxStep: 10,
+  };
+}
+
 const PROFILES: Record<string, LateralProfile> = {
   // One raised-cosine bump: on the straight line and parallel to it at both
   // ends, so the joints line up with a straight.
@@ -27,6 +39,11 @@ const PROFILES: Record<string, LateralProfile> = {
     slope: (s, length) => ((WAVE_AMPLITUDE * Math.PI) / length) * Math.sin((2 * Math.PI * s) / length),
     maxStep: 10,
   },
+  // Lane change centre (spec 3.5): the two lower lanes move one lane to the
+  // right under the bridge while the upper lane crosses from the right edge
+  // to the left edge.
+  'lc-under': step(-120),
+  'lc-over': step(240),
 };
 
 export function lateralProfile(id: string): LateralProfile {

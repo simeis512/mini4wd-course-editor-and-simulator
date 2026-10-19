@@ -5,7 +5,9 @@ import { partGeometry, pointOnFrame } from '../course/geometry';
 import { crossSection, halfWidth } from '../course/mesh';
 import type { PickHandlers, Selection } from './selection';
 
+/** One stretch of road of a piece, as seen from above. */
 interface Outline {
+  piece: number;
   /** Left edge then right edge reversed: a closed polygon in world X/Z. */
   polygon: [number, number][];
   fences: [number, number][][];
@@ -27,7 +29,7 @@ export class TopView {
   private ctx: CanvasRenderingContext2D;
   private layout: Layout | null = null;
   private outlines: Outline[] = [];
-  /** Piece indices from the lowest piece to the highest. */
+  /** Outline indices from the lowest road to the highest. */
   private order: number[] = [];
   private selection: Selection = null;
   /** World point (mm) at the canvas centre, and zoom in px per mm. */
@@ -55,17 +57,20 @@ export class TopView {
   setData(layout: Layout, selection: Selection): void {
     if (layout !== this.layout) {
       this.layout = layout;
-      this.outlines = layout.pieces.map((pc) => {
-        const samples = partGeometry(pc.part).samples.map((s) => pc.matrix.clone().multiply(s));
-        const p = new Vector3();
-        const edge = (x: number) => samples.map((f): [number, number] => (pointOnFrame(f, x, 0, p), [p.x, p.z]));
-        const section = crossSection(pc.part.lanes);
-        return {
-          polygon: [...edge(section.left), ...edge(section.right).reverse()],
-          fences: section.fences.map(edge),
-          height: samples.reduce((sum, f) => sum + f.elements[13], 0) / samples.length,
-        };
-      });
+      this.outlines = layout.pieces.flatMap((pc, piece) =>
+        partGeometry(pc.part).tracks.map((track) => {
+          const samples = track.samples.map((s) => pc.matrix.clone().multiply(s));
+          const p = new Vector3();
+          const edge = (x: number) => samples.map((f): [number, number] => (pointOnFrame(f, x, 0, p), [p.x, p.z]));
+          const section = crossSection(track.lanes);
+          return {
+            piece,
+            polygon: [...edge(section.left), ...edge(section.right).reverse()],
+            fences: section.fences.map(edge),
+            height: samples.reduce((sum, f) => sum + f.elements[13], 0) / samples.length,
+          };
+        }),
+      );
       // Stable sort keeps placing order between pieces at the same height.
       this.order = this.outlines.map((_, i) => i).sort((a, b) => this.outlines[a].height - this.outlines[b].height);
     }
@@ -129,8 +134,8 @@ export class TopView {
     };
 
     for (const i of this.order) {
-      const pc = layout.pieces[i];
       const o = this.outlines[i];
+      const pc = layout.pieces[o.piece];
       const color = variantOf(pc.part, pc.rec.variant).color;
       path(o.polygon, true);
       ctx.fillStyle = color;
@@ -148,11 +153,14 @@ export class TopView {
     }
 
     const sel = this.selection;
-    if (sel?.kind === 'piece' && this.outlines[sel.index]) {
-      path(this.outlines[sel.index].polygon, true);
-      ctx.strokeStyle = '#3fd0ff';
-      ctx.lineWidth = 3;
-      ctx.stroke();
+    if (sel?.kind === 'piece') {
+      for (const o of this.outlines) {
+        if (o.piece !== sel.index) continue;
+        path(o.polygon, true);
+        ctx.strokeStyle = '#3fd0ff';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
     }
 
     for (const c of layout.closures) this.drawPort(c.a, '#39c26b', 0.6);
@@ -232,7 +240,8 @@ export class TopView {
     const [x, z] = this.toWorld(sx, sy);
     for (let k = this.order.length - 1; k >= 0; k--) {
       const i = this.order[k];
-      if (insidePolygon(x, z, this.outlines[i].polygon)) return { kind: 'piece', index: i };
+      const o = this.outlines[i];
+      if (insidePolygon(x, z, o.polygon)) return { kind: 'piece', index: o.piece };
     }
     return null;
   }

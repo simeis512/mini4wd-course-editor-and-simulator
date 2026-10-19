@@ -87,14 +87,17 @@ function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y
 }
 
 /** Road and fence geometry of a part in part-local millimetres. */
-export function buildPartGeometry(part: PartDef): { road: THREE.BufferGeometry; fences: THREE.BufferGeometry[] } {
-  const frames = partGeometry(part).samples;
-  const section = crossSection(part.lanes);
-  const road = sweepBox(frames, section.left, section.right, -roadThickness, 0);
-  const fences = section.fences.map((x) =>
-    sweepBox(frames, x - fenceThickness / 2, x + fenceThickness / 2, 0, fenceHeight),
-  );
-  return { road, fences };
+export function buildPartGeometry(part: PartDef): { roads: THREE.BufferGeometry[]; fences: THREE.BufferGeometry[] } {
+  const roads: THREE.BufferGeometry[] = [];
+  const fences: THREE.BufferGeometry[] = [];
+  for (const { samples, lanes } of partGeometry(part).tracks) {
+    const section = crossSection(lanes);
+    roads.push(sweepBox(samples, section.left, section.right, -roadThickness, 0));
+    for (const x of section.fences) {
+      fences.push(sweepBox(samples, x - fenceThickness / 2, x + fenceThickness / 2, 0, fenceHeight));
+    }
+  }
+  return { roads, fences };
 }
 
 const partGeometryCache = new Map<string, ReturnType<typeof buildPartGeometry>>();
@@ -128,7 +131,7 @@ export function buildCourseMeshes(layout: Layout): THREE.Group[] {
     const group = new THREE.Group();
     group.name = `piece-${i}`;
     group.userData.piece = i;
-    group.add(new THREE.Mesh(geo.road, material(color, 1)));
+    for (const r of geo.roads) group.add(new THREE.Mesh(r, material(color, 1)));
     for (const f of geo.fences) group.add(new THREE.Mesh(f, material(color, 0.85)));
     group.matrixAutoUpdate = false;
     group.matrix.copy(pc.matrix);
