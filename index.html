@@ -41,6 +41,9 @@
       .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
       .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
       ul { margin: 4px 0; padding-left: 18px; }
+      .pose-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+      .pose-grid label { display: flex; gap: 4px; align-items: center; white-space: nowrap; }
+      .pose-grid input { width: 100%; min-width: 0; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
       .ok { color: var(--ok); }
       .warn { color: var(--warn); }
       #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #000c; padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 10; }
@@ -95,6 +98,27 @@
           <button id="flip" title="反転 (F)">反転</button>
           <button id="delete" title="削除 (Delete)">削除</button>
         </div>
+        <h2>配置</h2>
+        <div id="placement-base" class="hint"></div>
+        <div class="pose-grid">
+          <label>前 <input id="pose-z" type="number" step="10" /> mm</label>
+          <label>向き <input id="pose-yaw" type="number" step="15" /> °</label>
+          <label>左 <input id="pose-x" type="number" step="10" /> mm</label>
+          <label>上り <input id="pose-pitch" type="number" step="1" /> °</label>
+          <label>上 <input id="pose-y" type="number" step="10" /> mm</label>
+          <label>傾き <input id="pose-roll" type="number" step="1" /> °</label>
+        </div>
+        <div class="row">
+          <button id="rot-left" title="左に15°回す (Q、Shift で 1°)">⟲ 15°</button>
+          <button id="rot-right" title="右に15°回す (E、Shift で 1°)">⟳ 15°</button>
+          <button id="raise" title="10mm 上げる">↑ 10mm</button>
+          <button id="lower" title="10mm 下げる">↓ 10mm</button>
+        </div>
+        <div class="row">
+          <label><input id="snap" type="checkbox" checked /> スナップ</label>
+          <label><input id="move-alone" type="checkbox" /> このピースだけ動かす</label>
+        </div>
+        <p class="hint">選んだピースをドラッグで移動（2D）。つながった先も一緒に動きます。スナップは 10mm / 15°、Shift を押している間は解除。開いた口に近づけると吸着します。</p>
       </section>
       <h2>コース</h2>
       <div id="info"></div>

@@ -1,25 +1,37 @@
+import { Matrix4, Vector3 } from 'three';
 import { getPart, hasPart, PARTS, variantOf } from '../course/catalog';
 import { courseFromHash, courseToHash } from '../course/codec';
 import {
   addPiece,
+  anchorFrame,
+  applyMagnet,
   compatible,
   deletePiece,
   emptyCourse,
+  findMagnet,
   flipPiece,
   layoutCourse,
+  MAGNET_DISTANCE,
+  movePiece,
   partCounts,
+  placementOf,
   portKey,
+  setPose,
   setVariant,
   validateCourse,
   type Course,
   type Layout,
 } from '../course/course';
+import { partGeometry, type Pose } from '../course/geometry';
 import { basicOval } from '../course/presets';
 import type { Selection } from './selection';
 import { TopView } from './view2d';
 import { OrbitView } from './view3d';
 
 const HISTORY_LIMIT = 200;
+/** Ports this many screen pixels apart still pull together while dragging. */
+const MAGNET_PX = 12;
+const POSE_FIELDS = ['pose-x', 'pose-y', 'pose-z', 'pose-yaw', 'pose-pitch', 'pose-roll'] as const;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -35,10 +47,17 @@ export class EditorApp {
   /** The hash we last wrote, so our own updates are not reloaded. */
   private writtenHash = '';
   private hashWrite = Promise.resolve();
+  /** A piece being dragged in the top view, and the course as it would be if dropped now. */
+  private drag: { index: number; start: Course; anchor: Matrix4; preview: Course | null } | null = null;
 
   constructor() {
     const onPick = (s: Selection) => this.select(s);
-    this.top = new TopView($('view2d'), { onPick });
+    this.top = new TopView($('view2d'), {
+      onPick,
+      onDragStart: (index) => this.dragStart(index),
+      onDragMove: (dx, dz, noSnap) => this.dragMove(dx, dz, noSnap),
+      onDragEnd: (commit) => this.dragEnd(commit),
+    });
     this.orbit = new OrbitView($('view3d'), { onPick });
     this.buildPalette();
     this.bindUi();
@@ -172,6 +191,73 @@ export class EditorApp {
     this.commit(deletePiece(this.course, s.index));
   }
 
+  // ---- Free placement (spec 5.2, 8)
+
+  private get snapOn(): boolean {
+    return $<HTMLInputElement>('snap').checked;
+  }
+
+  private get moveAlone(): boolean {
+    return $<HTMLInputElement>('move-alone').checked;
+  }
+
+  private dragStart(index: number): boolean {
+    this.drag = { index, start: this.course, anchor: anchorFrame(this.layout, index), preview: null };
+    return true;
+  }
+
+  private dragMove(dx: number, dz: number, noSnap: boolean): void {
+    const d = this.drag;
+    if (!d) return;
+    const target = new Matrix4().makeTranslation(dx, 0, dz).multiply(d.anchor);
+    let next = movePiece(d.start, d.index, target, { alone: this.moveAlone, snap: this.snapOn && !noSnap });
+    const magnet = findMagnet(next, d.index, Math.max(MAGNET_DISTANCE, MAGNET_PX / this.top.pxPerMm));
+    if (magnet) next = applyMagnet(next, d.index, magnet);
+    d.preview = next;
+    this.top.setData(layoutCourse(next), this.selection);
+  }
+
+  private dragEnd(commit: boolean): void {
+    const d = this.drag;
+    this.drag = null;
+    if (!d?.preview) return;
+    if (commit) this.commit(d.preview, { kind: 'piece', index: d.index });
+    else this.refresh(false);
+  }
+
+  /** Move the selected piece by a rigid transform applied in world space. */
+  private moveSelected(by: Matrix4): void {
+    const s = this.selection;
+    if (s?.kind !== 'piece') return;
+    const target = by.multiply(anchorFrame(this.layout, s.index));
+    this.commit(movePiece(this.course, s.index, target, { alone: this.moveAlone }), s);
+  }
+
+  /** Turn the selected piece about its middle, + to the left (anticlockwise from above). */
+  private rotateSelected(deg: number): void {
+    const s = this.selection;
+    if (s?.kind !== 'piece') return;
+    const pc = this.layout.pieces[s.index];
+    const samples = partGeometry(pc.part).samples;
+    const c = samples
+      .reduce((sum, f) => sum.add(new Vector3().setFromMatrixPosition(f)), new Vector3())
+      .divideScalar(samples.length)
+      .applyMatrix4(pc.matrix);
+    const turn = new Matrix4()
+      .makeTranslation(c.x, c.y, c.z)
+      .multiply(new Matrix4().makeRotationY((deg * Math.PI) / 180))
+      .multiply(new Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+    this.moveSelected(turn);
+  }
+
+  private setPoseFromFields(): void {
+    const s = this.selection;
+    if (s?.kind !== 'piece') return;
+    const [x, y, z, yaw, pitch, roll] = POSE_FIELDS.map((id) => Number($<HTMLInputElement>(id).value) || 0);
+    const pose: Pose = { pos: [x, y, z], rot: [yaw, pitch, roll] };
+    this.commit(setPose(this.course, s.index, pose), s);
+  }
+
   private async copyUrl(): Promise<void> {
     await this.hashWrite;
     try {
@@ -253,6 +339,11 @@ export class EditorApp {
       if (s?.kind !== 'piece') return;
       this.commit(setVariant(this.course, s.index, Number((e.target as HTMLSelectElement).value)), s);
     });
+    $('rot-left').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? 1 : 15));
+    $('rot-right').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? -1 : -15));
+    $('raise').addEventListener('click', () => this.moveSelected(new Matrix4().makeTranslation(0, 10, 0)));
+    $('lower').addEventListener('click', () => this.moveSelected(new Matrix4().makeTranslation(0, -10, 0)));
+    for (const id of POSE_FIELDS) $(id).addEventListener('change', () => this.setPoseFromFields());
 
     window.addEventListener('keydown', (e) => {
       const t = e.target as HTMLElement;
@@ -269,6 +360,10 @@ export class EditorApp {
         this.deleteSelected();
       } else if (!mod && e.key.toLowerCase() === 'f') {
         this.flipSelected();
+      } else if (!mod && e.key.toLowerCase() === 'q') {
+        this.rotateSelected(e.shiftKey ? 1 : 15);
+      } else if (!mod && e.key.toLowerCase() === 'e') {
+        this.rotateSelected(e.shiftKey ? -1 : -15);
       } else if (e.key === 'Escape') {
         this.select(null);
       }
@@ -312,6 +407,15 @@ export class EditorApp {
       );
       select.value = String(pc.part.variants.indexOf(variantOf(pc.part, pc.rec.variant)));
       $<HTMLButtonElement>('flip').disabled = pc.part.ports.length !== 2;
+
+      const { base, pose } = placementOf(pc.rec);
+      const from = base ? `#${base.piece + 1} ${layout.pieces[base.piece].part.name} の口から` : 'ワールド原点から';
+      $('placement-base').textContent = 'free' in pc.rec ? `自由配置（${from}）` : base ? `連結（${from}）` : '先頭（原点）';
+      const values = [...pose.pos, ...pose.rot];
+      POSE_FIELDS.forEach((id, i) => {
+        const input = $<HTMLInputElement>(id);
+        if (document.activeElement !== input) input.value = String(values[i]);
+      });
     }
 
     // Course summary.

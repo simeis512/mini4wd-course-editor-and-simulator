@@ -3,7 +3,7 @@ import { variantOf } from '../course/catalog';
 import { portKey, type Layout, type PortRef } from '../course/course';
 import { partGeometry, pointOnFrame } from '../course/geometry';
 import { crossSection, halfWidth } from '../course/mesh';
-import type { PickHandlers, Selection } from './selection';
+import type { DragHandlers, PickHandlers, Selection } from './selection';
 
 /** One stretch of road of a piece, as seen from above. */
 interface Outline {
@@ -40,10 +40,12 @@ export class TopView {
   private dragged = false;
   private downAt = { x: 0, y: 0 };
   private pinch: { dist: number; scale: number } | null = null;
+  /** A piece is being dragged instead of the view being panned. */
+  private moving = false;
 
   constructor(
     private canvas: HTMLCanvasElement,
-    private handlers: PickHandlers,
+    private handlers: PickHandlers & DragHandlers,
   ) {
     this.ctx = canvas.getContext('2d')!;
     canvas.addEventListener('pointerdown', (e) => this.onDown(e));
@@ -76,6 +78,11 @@ export class TopView {
     }
     this.selection = selection;
     this.draw();
+  }
+
+  /** Current zoom, px per mm. */
+  get pxPerMm(): number {
+    return this.scale;
   }
 
   /** Zoom and pan so the whole course fits. */
@@ -237,11 +244,16 @@ export class TopView {
       if (d < PORT_HIT && (!best || d < best.d)) best = { ref, d };
     }
     if (best) return { kind: 'port', ref: best.ref };
+    const piece = this.pieceAt(sx, sy);
+    return piece === null ? null : { kind: 'piece', index: piece };
+  }
+
+  /** The topmost piece under a screen point. */
+  private pieceAt(sx: number, sy: number): number | null {
     const [x, z] = this.toWorld(sx, sy);
     for (let k = this.order.length - 1; k >= 0; k--) {
-      const i = this.order[k];
-      const o = this.outlines[i];
-      if (insidePolygon(x, z, o.polygon)) return { kind: 'piece', index: o.piece };
+      const o = this.outlines[this.order[k]];
+      if (insidePolygon(x, z, o.polygon)) return o.piece;
     }
     return null;
   }
@@ -258,7 +270,12 @@ export class TopView {
     if (this.pointers.size === 1) {
       this.dragged = false;
       this.downAt = p;
+      // Dragging the selected piece moves it; dragging anything else pans.
+      const sel = this.selection;
+      this.moving = sel?.kind === 'piece' && this.pieceAt(p.x, p.y) === sel.index && this.handlers.onDragStart(sel.index);
     } else {
+      if (this.moving) this.handlers.onDragEnd(false);
+      this.moving = false;
       this.dragged = true;
       this.pinch = { dist: this.pinchDistance(), scale: this.scale };
     }
@@ -269,6 +286,13 @@ export class TopView {
     if (!prev) return;
     const p = this.local(e);
     if (!this.dragged && Math.hypot(p.x - this.downAt.x, p.y - this.downAt.y) > TAP_SLOP) this.dragged = true;
+    if (this.dragged && this.moving) {
+      const [x0, z0] = this.toWorld(this.downAt.x, this.downAt.y);
+      const [x1, z1] = this.toWorld(p.x, p.y);
+      this.pointers.set(e.pointerId, p);
+      this.handlers.onDragMove(x1 - x0, z1 - z0, e.shiftKey);
+      return;
+    }
     if (this.dragged) {
       // Pan by the movement of this pointer (halved while pinching with two).
       const k = this.pointers.size;
@@ -286,6 +310,11 @@ export class TopView {
   private onUp(e: PointerEvent, cancelled = false): void {
     if (!this.pointers.delete(e.pointerId)) return;
     if (this.pointers.size < 2) this.pinch = null;
+    if (this.moving && this.pointers.size === 0) {
+      this.moving = false;
+      this.handlers.onDragEnd(this.dragged && !cancelled);
+      if (this.dragged) return;
+    }
     if (this.pointers.size === 0 && !this.dragged && !cancelled) {
       const p = this.local(e);
       this.handlers.onPick(this.pick(p.x, p.y));

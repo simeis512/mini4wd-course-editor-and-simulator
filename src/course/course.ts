@@ -214,7 +214,7 @@ function freeAt(rec: PieceRec, target: Matrix4): PieceRec {
 }
 
 /** The frame a piece's anchoring port faces, in world space. */
-function anchorFrame(layout: Layout, index: number): Matrix4 {
+export function anchorFrame(layout: Layout, index: number): Matrix4 {
   const rec = layout.pieces[index].rec;
   const port = 'port' in rec ? rec.port : 0;
   return layout.pieces[index].ports[port].clone().multiply(FACE);
@@ -281,4 +281,158 @@ export function partCounts(course: Course): Map<string, number> {
   const counts = new Map<string, number>();
   for (const rec of course.pieces) counts.set(rec.part, (counts.get(rec.part) ?? 0) + 1);
   return counts;
+}
+
+// ---- Free placement (spec 5.2, 8)
+
+/** Snap steps while moving a piece (spec 8). */
+export const SNAP_DISTANCE = 10;
+export const SNAP_ANGLE = 15;
+/** Open ports closer than this pull together while dragging (spec 8). */
+export const MAGNET_DISTANCE = 40;
+export const MAGNET_ANGLE = 10;
+
+/** Where a piece is placed from: the port it hangs off (null: the world) and its pose from there. */
+export interface Placement {
+  base: PortRef | null;
+  pose: Pose;
+}
+
+/** A connected piece reads as a zero pose from the port it joins (spec 5.1). */
+export function placementOf(rec: PieceRec): Placement {
+  if ('to' in rec) return { base: { piece: rec.to[0], port: rec.to[1] }, pose: IDENTITY_POSE };
+  if ('free' in rec) return { base: rec.free && { piece: rec.free[0], port: rec.free[1] }, pose: rec.pose };
+  return { base: null, pose: IDENTITY_POSE };
+}
+
+function freeRec(rec: PieceRec, port: number, base: PortRef | null, pose: Pose): PieceRec {
+  const out: PieceRec = { part: rec.part, port, free: base && [base.piece, base.port], pose };
+  if (rec.variant !== undefined) out.variant = rec.variant;
+  return out;
+}
+
+/** The piece and every piece anchored to it, directly or through others. */
+export function movingGroup(course: Course, index: number): Set<number> {
+  const group = new Set([index]);
+  course.pieces.forEach((rec, i) => {
+    const ref = anchorRef(rec);
+    if (ref && group.has(ref[0])) group.add(i);
+  });
+  return group;
+}
+
+function baseFrame(layout: Layout, base: PortRef | null): Matrix4 {
+  return base ? layout.pieces[base.piece].ports[base.port] : new Matrix4();
+}
+
+function snapPose(pose: Pose): Pose {
+  const step = (x: number, s: number) => Math.round(x / s) * s || 0;
+  return {
+    pos: pose.pos.map((x) => step(x, SNAP_DISTANCE)) as Pose['pos'],
+    rot: [step(pose.rot[0], SNAP_ANGLE), pose.rot[1], pose.rot[2]],
+  };
+}
+
+export interface MoveOptions {
+  /** Move only this piece; pieces hanging off it stay where they are. */
+  alone?: boolean;
+  /** Round the pose from the base port to 10 mm / 15° (spec 8). */
+  snap?: boolean;
+}
+
+/**
+ * Free a piece so its anchoring port faces `target` (world). Its pose is
+ * kept relative to the port it hung off, so a jump gap stays a jump gap
+ * when parts before it change (spec 5.2).
+ */
+export function movePiece(course: Course, index: number, target: Matrix4, opts: MoveOptions = {}): Course {
+  const layout = layoutCourse(course);
+  const rec = course.pieces[index];
+  const { base } = placementOf(rec);
+  let pose = matrixToPose(baseFrame(layout, base).clone().invert().multiply(target));
+  if (opts.snap) pose = snapPose(pose);
+  const next = clone(course);
+  next.pieces[index] = freeRec(rec, 'port' in rec ? rec.port : 0, base, pose);
+  if (opts.alone) {
+    next.pieces.forEach((other, i) => {
+      const ref = anchorRef(other);
+      if (i > index && ref && ref[0] === index) next.pieces[i] = freeAt(other, anchorFrame(layout, i));
+    });
+  }
+  return next;
+}
+
+/** Set a piece's pose from its base port, freeing it if it was connected. */
+export function setPose(course: Course, index: number, pose: Pose): Course {
+  const next = clone(course);
+  const rec = course.pieces[index];
+  next.pieces[index] = freeRec(rec, 'port' in rec ? rec.port : 0, placementOf(rec).base, pose);
+  return next;
+}
+
+export interface Magnet {
+  /** Port on the moving pieces. */
+  moving: PortRef;
+  /** Open port on a piece that stays put. */
+  fixed: PortRef;
+}
+
+/**
+ * Find the nearest pair of open ports, one on the pieces moving with
+ * `index` and one on the rest, that are close enough to pull together.
+ */
+export function findMagnet(course: Course, index: number, distance = MAGNET_DISTANCE): Magnet | null {
+  const layout = layoutCourse(course);
+  const group = movingGroup(course, index);
+  // Ports already closed between two fixed pieces are taken.
+  const taken = new Set<string>();
+  for (const c of layout.closures) {
+    if (!group.has(c.a.piece) && !group.has(c.b.piece)) {
+      taken.add(portKey(c.a));
+      taken.add(portKey(c.b));
+    }
+  }
+  const loose = layout.pieces.flatMap((pc, piece) =>
+    pc.ports.map((_, port) => ({ piece, port })).filter((r) => !layout.connected.has(portKey(r)) && !taken.has(portKey(r))),
+  );
+  let best: (Magnet & { d: number }) | null = null;
+  for (const m of loose) {
+    if (!group.has(m.piece)) continue;
+    for (const f of loose) {
+      if (group.has(f.piece)) continue;
+      if (!compatible(layout.pieces[m.piece].part, m.port, layout.pieces[f.piece].part, f.port)) continue;
+      const err = facingError(layout.pieces[m.piece].ports[m.port], layout.pieces[f.piece].ports[f.port]);
+      if (err.distance <= distance && err.angle <= MAGNET_ANGLE && (!best || err.distance < best.d)) {
+        best = { moving: m, fixed: f, d: err.distance };
+      }
+    }
+  }
+  return best && { moving: best.moving, fixed: best.fixed };
+}
+
+/**
+ * Pull the moving pieces so the magnet's ports face exactly. When the
+ * dragged piece itself meets an earlier piece it becomes a plain connection.
+ */
+export function applyMagnet(course: Course, index: number, magnet: Magnet): Course {
+  const { moving, fixed } = magnet;
+  const rec = course.pieces[index];
+  if (moving.piece === index && fixed.piece < index) {
+    const next = clone(course);
+    const out: PieceRec = { part: rec.part, port: moving.port, to: [fixed.piece, fixed.port] };
+    if (rec.variant !== undefined) out.variant = rec.variant;
+    next.pieces[index] = out;
+    return next;
+  }
+  const layout = layoutCourse(course);
+  const m = layout.pieces[moving.piece].ports[moving.port];
+  const f = layout.pieces[fixed.piece].ports[fixed.port];
+  // The rigid move that turns the moving port onto the fixed one.
+  const pull = f.clone().multiply(FACE).multiply(m.clone().invert());
+  const { base } = placementOf(rec);
+  const target = pull.multiply(anchorFrame(layout, index));
+  const pose = matrixToPose(baseFrame(layout, base).clone().invert().multiply(target));
+  const next = clone(course);
+  next.pieces[index] = freeRec(rec, 'port' in rec ? rec.port : 0, base, pose);
+  return next;
 }
