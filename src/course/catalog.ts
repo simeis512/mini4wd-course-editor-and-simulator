@@ -119,29 +119,17 @@ const CURVE_RADIUS = 540;
 const CURVE_ANGLE = 45;
 /** Short ramp; roughly a third of a straight judging by product photos (inferred). */
 const BANK_APPROACH_LENGTH = 180;
-/** The two slope pieces together climb this much (official). */
+/** Height the slope climbs (official). */
 const SLOPE_DROP = 110;
-/** Length of each slope piece; assumed to be a straight's length (unconfirmed). */
-const SLOPE_PIECE_LENGTH = STRAIGHT_LENGTH;
-
+/** Floor length of the slope: the same as a straight (per the user; unmeasured). */
+const SLOPE_RUN = STRAIGHT_LENGTH;
 /**
- * Pitch change (deg) of a vertical arc of length `length` that climbs
- * `rise` from level. Solved by bisection; rise/length grows with the angle.
+ * Provisional S shape: a concave arc into the climb and a convex arc back to
+ * level, meeting halfway up. Two equal arcs that each rise half the drop over
+ * half the run turn through 2·atan(rise / run).
  */
-function arcPitchForRise(length: number, rise: number): number {
-  const riseAt = (t: number) => (length * (1 - Math.cos(t))) / t;
-  let lo = 1e-9;
-  let hi = Math.PI / 2;
-  for (let i = 0; i < 60; i++) {
-    const mid = (lo + hi) / 2;
-    if (riseAt(mid) < rise) lo = mid;
-    else hi = mid;
-  }
-  return (((lo + hi) / 2) * 180) / Math.PI;
-}
-
-/** Each slope piece is one arc climbing half the drop (provisional shape). */
-const SLOPE_PITCH = arcPitchForRise(SLOPE_PIECE_LENGTH, SLOPE_DROP / 2);
+const SLOPE_PITCH = (2 * Math.atan(SLOPE_DROP / SLOPE_RUN) * 180) / Math.PI;
+const SLOPE_ARC_LENGTH = ((SLOPE_RUN / 2) * ((SLOPE_PITCH * Math.PI) / 180)) / Math.sin((SLOPE_PITCH * Math.PI) / 180);
 
 export const PARTS: readonly PartDef[] = [
   {
@@ -199,32 +187,21 @@ export const PARTS: readonly PartDef[] = [
     note: '長さと坂の曲がり方は未計測のため仮形状（長さ180、0°→20°へ一定に上る）',
   },
   {
-    // Lower piece of the slope section: from the floor it bends up into the
-    // incline. The upper piece then bends back to level 110 mm up (spec 3.4).
-    id: 'slope-a',
-    name: 'スロープ（下）',
-    segments: [{ length: SLOPE_PIECE_LENGTH, pitch: SLOPE_PITCH }],
-    ports: [
-      { id: 'a', anchor: 'start', lanes: ALL_LANES, floor: true },
-      { id: 'b', anchor: 'end', lanes: ALL_LANES },
+    // Slope section: level at both ends, climbing 110 mm in an S between them
+    // (spec 3.4). Going down is the same part turned round; the official
+    // photo puts two face to face to make a hill.
+    id: 'slope',
+    name: 'スロープ',
+    segments: [
+      { length: SLOPE_ARC_LENGTH, pitch: SLOPE_PITCH },
+      { length: SLOPE_ARC_LENGTH, pitch: -SLOPE_PITCH },
     ],
-    lanes: ALL_LANES,
-    variants: [PALETTE.red, PALETTE.orange],
-    defaultVariant: 0,
-    confidence: 'inferred',
-    note: `落差110のみ確定。長さと曲がり方は未計測のため仮形状（長さ540、0°→${SLOPE_PITCH.toFixed(1)}°へ一定に曲がる）`,
-  },
-  {
-    // Upper piece: bends from the incline back to level at the top.
-    id: 'slope-b',
-    name: 'スロープ（上）',
-    segments: [{ length: SLOPE_PIECE_LENGTH, pitch: -SLOPE_PITCH }],
     ports: twoEnded(),
     lanes: ALL_LANES,
     variants: [PALETTE.red, PALETTE.orange],
     defaultVariant: 0,
     confidence: 'inferred',
-    note: `落差110のみ確定。長さと曲がり方は未計測のため仮形状（長さ540、${SLOPE_PITCH.toFixed(1)}°→0°へ一定に曲がる）`,
+    note: `落差110のみ確定。曲がり方は未計測のため仮形状（床の長さ540、最大${SLOPE_PITCH.toFixed(1)}°のS字）`,
   },
 ];
 
@@ -245,7 +222,7 @@ export function hasPart(id: string): boolean {
  * reuse or renumber an entry, or old URLs will open the wrong parts.
  */
 export const CATALOG_VERSION = 1;
-export const PART_CODES: readonly string[] = ['straight', 'curve45', 'wave', 'bank-approach-20', 'slope-a', 'slope-b'];
+export const PART_CODES: readonly string[] = ['straight', 'curve45', 'wave', 'bank-approach-20', 'slope'];
 
 export function variantOf(part: PartDef, index: number | undefined): Variant {
   return part.variants[index ?? part.defaultVariant] ?? part.variants[part.defaultVariant];
