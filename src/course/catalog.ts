@@ -53,6 +53,8 @@ export interface PortDef {
   lanes: number[];
   /** Connection kind; only ports of the same kind and lane count connect. */
   kind?: string;
+  /** This end sits on the floor, so its frame must be level (bank approach). */
+  floor?: boolean;
 }
 
 export type Material = 'current' | 'old-gray';
@@ -79,6 +81,8 @@ export interface PartDef {
   /** Index into `variants` used when a piece does not choose one. */
   defaultVariant: number;
   confidence: Confidence;
+  /** Parts this part cannot be joined to directly (e.g. two ramps in a row). */
+  cannotJoin?: string[];
   /** Shown in the editor when the geometry is a placeholder. */
   note?: string;
   /**
@@ -159,7 +163,12 @@ export const PARTS: readonly PartDef[] = [
     id: 'bank-approach-20',
     name: 'バンクアプローチ20',
     segments: [{ length: BANK_APPROACH_LENGTH, pitch: 20 }],
-    ports: twoEnded(),
+    // The low end goes on the floor; the high end only takes the inclined course.
+    ports: [
+      { id: 'a', anchor: 'start', lanes: ALL_LANES, floor: true },
+      { id: 'b', anchor: 'end', lanes: ALL_LANES },
+    ],
+    cannotJoin: ['bank-approach-20'],
     lanes: ALL_LANES,
     variants: [PALETTE.red, PALETTE.orange, PALETTE.black],
     defaultVariant: 0,

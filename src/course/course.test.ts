@@ -1,6 +1,6 @@
 import { Matrix4, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { addPiece, deletePiece, emptyCourse, flipPiece, layoutCourse, partCounts, setVariant } from './course';
+import { addPiece, compatible, deletePiece, emptyCourse, flipPiece, layoutCourse, partCounts, setVariant } from './course';
 import { facingError } from './geometry';
 import { basicOval, chain } from './presets';
 
@@ -115,6 +115,21 @@ describe('banks', () => {
     const mid = layout.pieces[3].ports[0]; // flipped, so port 0 is the far end
     expect(forward(mid).y).toBeCloseTo(0, 9);
     expect(right(mid).y).toBeCloseTo(-sin20, 9);
+  });
+
+  it('accepts the banked U-turn as buildable', () => {
+    expect(bankedUTurn().problems).toEqual([]);
+  });
+
+  it('flags a bank approach put on the floor upside down', () => {
+    const c = flipPiece(chain(['straight', 'bank-approach-20']), 1);
+    expect(layoutCourse(c).problems).toEqual([{ kind: 'not-level', piece: 1, port: 0 }]);
+  });
+
+  it('does not join two bank approaches', () => {
+    const layout = layoutCourse(chain(['straight', 'bank-approach-20', 'bank-approach-20']));
+    expect(compatible(layout.pieces[1].part, 1, layout.pieces[2].part, 0)).toBe(false);
+    expect(layout.problems).toContainEqual({ kind: 'cannot-join', piece: 2, port: 0 });
   });
 
   it('comes back down level at the height it started', () => {
