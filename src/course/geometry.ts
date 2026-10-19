@@ -1,5 +1,6 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
 import type { PartDef, PortDef, Segment } from './catalog';
+import { lateralProfile } from './profile';
 
 /**
  * Frames are rigid transforms (Matrix4) in millimetres. In a frame's local
@@ -24,7 +25,9 @@ function sinc(x: number): number {
 /**
  * Sample a part's centreline as frames, starting at the identity. Each step
  * turns half its rotation, moves along the chord, then turns the other
- * half, which is exact for constant-curvature arcs.
+ * half, which is exact for constant-curvature arcs. A segment with a
+ * `lateralProfile` swings its frames sideways off that path and turns them
+ * to follow the swing.
  */
 export function sampleCenterline(segments: readonly Segment[]): Matrix4[] {
   const frame = new Matrix4();
@@ -32,14 +35,18 @@ export function sampleCenterline(segments: readonly Segment[]): Matrix4[] {
   const half = new Matrix4();
   const move = new Matrix4();
   const axis = new Vector3();
+  const swing = new Matrix4();
+  const turn = new Matrix4();
   for (const seg of segments) {
     const yaw = (seg.yaw ?? 0) * DEG;
     const pitch = (seg.pitch ?? 0) * DEG;
     const roll = (seg.roll ?? 0) * DEG;
+    const profile = seg.lateralProfile ? lateralProfile(seg.lateralProfile) : undefined;
     // Local rotation vector: + pitch climbs (about −X), + roll lowers the right side (about +Z).
     const rot = new Vector3(-pitch, yaw, roll);
     const totalAngle = rot.length();
-    const steps = Math.max(1, Math.ceil(seg.length / MAX_STEP_LENGTH), Math.ceil(totalAngle / (MAX_STEP_ANGLE * DEG)));
+    const maxStep = Math.min(MAX_STEP_LENGTH, profile?.maxStep ?? Infinity);
+    const steps = Math.max(1, Math.ceil(seg.length / maxStep), Math.ceil(totalAngle / (MAX_STEP_ANGLE * DEG)));
     const stepAngle = totalAngle / steps;
     const ds = seg.length / steps;
     if (stepAngle > 0) {
@@ -51,7 +58,14 @@ export function sampleCenterline(segments: readonly Segment[]): Matrix4[] {
     move.makeTranslation(0, 0, ds * sinc(stepAngle / 2));
     for (let i = 0; i < steps; i++) {
       frame.multiply(half).multiply(move).multiply(half);
-      frames.push(frame.clone());
+      const f = frame.clone();
+      if (profile) {
+        // + X is left; turning about + Y by θ swings forward towards the left.
+        const s = (i + 1) * ds;
+        swing.makeTranslation(profile.offset(s, seg.length), 0, 0);
+        f.multiply(swing).multiply(turn.makeRotationY(Math.atan(profile.slope(s, seg.length))));
+      }
+      frames.push(f);
     }
   }
   return frames;
