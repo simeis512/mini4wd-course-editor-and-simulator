@@ -53,6 +53,8 @@ export interface PortDef {
   lanes: number[];
   /** Connection kind; only ports of the same kind and lane count connect. */
   kind?: string;
+  /** This end sits on the floor, so its frame must be level (bank approach). */
+  floor?: boolean;
 }
 
 export type Material = 'current' | 'old-gray';
@@ -79,6 +81,8 @@ export interface PartDef {
   /** Index into `variants` used when a piece does not choose one. */
   defaultVariant: number;
   confidence: Confidence;
+  /** Parts this part cannot be joined to directly (e.g. two ramps in a row). */
+  cannotJoin?: string[];
   /** Shown in the editor when the geometry is a placeholder. */
   note?: string;
   /**
@@ -113,6 +117,8 @@ function twoEnded(): PortDef[] {
 const STRAIGHT_LENGTH = 540;
 const CURVE_RADIUS = 540;
 const CURVE_ANGLE = 45;
+/** Short ramp; roughly a third of a straight judging by product photos (inferred). */
+const BANK_APPROACH_LENGTH = 180;
 
 export const PARTS: readonly PartDef[] = [
   {
@@ -150,6 +156,25 @@ export const PARTS: readonly PartDef[] = [
     confidence: 'inferred',
     note: '凹凸は未計測のため平らに表示',
   },
+  {
+    // A ramp up to a 20° incline (spec 14). Curves joined after it lie in
+    // the inclined plane, so a U-turn rises to a 20° bank at its middle and
+    // comes back down; the exit is the same part placed the other way round.
+    id: 'bank-approach-20',
+    name: 'バンクアプローチ20',
+    segments: [{ length: BANK_APPROACH_LENGTH, pitch: 20 }],
+    // The low end goes on the floor; the high end only takes the inclined course.
+    ports: [
+      { id: 'a', anchor: 'start', lanes: ALL_LANES, floor: true },
+      { id: 'b', anchor: 'end', lanes: ALL_LANES },
+    ],
+    cannotJoin: ['bank-approach-20'],
+    lanes: ALL_LANES,
+    variants: [PALETTE.red, PALETTE.orange, PALETTE.black],
+    defaultVariant: 0,
+    confidence: 'inferred',
+    note: '長さと坂の曲がり方は未計測のため仮形状（長さ180、0°→20°へ一定に上る）',
+  },
 ];
 
 const PART_BY_ID = new Map(PARTS.map((p) => [p.id, p]));
@@ -169,7 +194,7 @@ export function hasPart(id: string): boolean {
  * reuse or renumber an entry, or old URLs will open the wrong parts.
  */
 export const CATALOG_VERSION = 1;
-export const PART_CODES: readonly string[] = ['straight', 'curve45', 'wave'];
+export const PART_CODES: readonly string[] = ['straight', 'curve45', 'wave', 'bank-approach-20'];
 
 export function variantOf(part: PartDef, index: number | undefined): Variant {
   return part.variants[index ?? part.defaultVariant] ?? part.variants[part.defaultVariant];

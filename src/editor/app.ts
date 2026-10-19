@@ -142,9 +142,16 @@ export class EditorApp {
     }
     if (s?.kind !== 'port') return;
     const target = this.layout.pieces[s.ref.piece].part;
-    const port = part.ports.findIndex((_, p) => compatible(target, s.ref.port, part, p));
-    if (port < 0) return;
-    const next = addPiece(this.course, partId, s.ref, port);
+    const ports = part.ports.map((_, p) => p).filter((p) => compatible(target, s.ref.port, part, p));
+    if (ports.length === 0) return;
+    // Prefer the way round that real parts allow (a bank approach's floor end on the level).
+    const tries = ports.map((p) => addPiece(this.course, partId, s.ref, p));
+    const fits = tries.findIndex((c) => {
+      const index = c.pieces.length - 1;
+      return !layoutCourse(c).problems.some((pr) => pr.piece === index);
+    });
+    const port = ports[Math.max(0, fits)];
+    const next = tries[Math.max(0, fits)];
     // Keep going from the new piece's far end.
     const index = next.pieces.length - 1;
     const far = part.ports.findIndex((_, p) => p !== port);
@@ -314,6 +321,10 @@ export class EditorApp {
       info.push(`<div class="warn">未接続の口: ${layout.open.length}</div>`);
     } else if (course.pieces.length > 0) {
       info.push('<div class="ok">コースは閉じています</div>');
+    }
+    for (const pr of layout.problems) {
+      const what = pr.kind === 'not-level' ? '床側の端が水平ではありません（向きが逆かもしれません）' : 'このパーツ同士はつなげません';
+      info.push(`<div class="warn">#${pr.piece + 1} ${layout.pieces[pr.piece].part.name}: ${what}</div>`);
     }
     for (const c of layout.closures) {
       info.push(`<div class="muted">ループ閉じ（#${c.a.piece + 1}–#${c.b.piece + 1}）: 誤差 ${c.distance.toFixed(1)}mm / ${c.angle.toFixed(1)}°</div>`);

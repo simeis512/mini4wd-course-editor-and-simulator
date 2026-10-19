@@ -1,5 +1,6 @@
+import { Matrix4, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { addPiece, deletePiece, emptyCourse, flipPiece, layoutCourse, partCounts, setVariant } from './course';
+import { addPiece, compatible, deletePiece, emptyCourse, flipPiece, layoutCourse, partCounts, setVariant } from './course';
 import { facingError } from './geometry';
 import { basicOval, chain } from './presets';
 
@@ -85,5 +86,58 @@ describe('editing', () => {
 
   it('counts parts', () => {
     expect(Object.fromEntries(partCounts(basicOval()))).toEqual({ straight: 5, wave: 1, curve45: 8 });
+  });
+});
+
+describe('banks', () => {
+  const up = (m: Matrix4) => new Vector3(0, 1, 0).transformDirection(m);
+  const forward = (m: Matrix4) => new Vector3(0, 0, 1).transformDirection(m);
+  const right = (m: Matrix4) => new Vector3(-1, 0, 0).transformDirection(m);
+  const pos = (m: Matrix4) => new Vector3().setFromMatrixPosition(m);
+  const sin20 = Math.sin((20 * Math.PI) / 180);
+
+  /** Straight, bank approach, U-turn of four right-hand curves, bank approach reversed, straight. */
+  function bankedUTurn() {
+    let c = chain(['straight', 'bank-approach-20', 'curve45', 'curve45', 'curve45', 'curve45', 'bank-approach-20', 'straight']);
+    for (const i of [2, 3, 4, 5, 6]) c = flipPiece(c, i);
+    return layoutCourse(c);
+  }
+
+  it('ends the bank approach climbing at 20° without leaning', () => {
+    const top = layoutCourse(chain(['straight', 'bank-approach-20'])).pieces[1].ports[1];
+    expect(forward(top).y).toBeCloseTo(sin20, 9);
+    expect(right(top).y).toBeCloseTo(0, 9);
+  });
+
+  it('banks the middle of the U-turn 20° with the inside low', () => {
+    const layout = bankedUTurn();
+    // Halfway round, after two curves.
+    const mid = layout.pieces[3].ports[0]; // flipped, so port 0 is the far end
+    expect(forward(mid).y).toBeCloseTo(0, 9);
+    expect(right(mid).y).toBeCloseTo(-sin20, 9);
+  });
+
+  it('accepts the banked U-turn as buildable', () => {
+    expect(bankedUTurn().problems).toEqual([]);
+  });
+
+  it('flags a bank approach put on the floor upside down', () => {
+    const c = flipPiece(chain(['straight', 'bank-approach-20']), 1);
+    expect(layoutCourse(c).problems).toEqual([{ kind: 'not-level', piece: 1, port: 0 }]);
+  });
+
+  it('does not join two bank approaches', () => {
+    const layout = layoutCourse(chain(['straight', 'bank-approach-20', 'bank-approach-20']));
+    expect(compatible(layout.pieces[1].part, 1, layout.pieces[2].part, 0)).toBe(false);
+    expect(layout.problems).toContainEqual({ kind: 'cannot-join', piece: 2, port: 0 });
+  });
+
+  it('comes back down level at the height it started', () => {
+    const layout = bankedUTurn();
+    const start = layout.pieces[0].ports[0];
+    const end = layout.pieces[7].ports[1];
+    expect(up(end).angleTo(new Vector3(0, 1, 0))).toBeLessThan(1e-9);
+    expect(forward(end).z).toBeCloseTo(-1, 9);
+    expect(pos(end).y).toBeCloseTo(pos(start).y, 6);
   });
 });

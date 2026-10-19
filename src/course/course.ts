@@ -1,4 +1,4 @@
-import { Matrix4 } from 'three';
+import { Matrix4, Vector3 } from 'three';
 import { CATALOG_VERSION, getPart, type PartDef } from './catalog';
 import { attach, FACE, facingError, IDENTITY_POSE, matrixToPose, partGeometry, poseToMatrix, type FrameError, type Pose } from './geometry';
 
@@ -48,8 +48,19 @@ export interface Closure extends FrameError {
   b: PortRef;
 }
 
+/**
+ * Something that can be built in the editor but not with real parts:
+ * a floor end that is not level, or two parts that cannot be joined.
+ */
+export interface Problem {
+  kind: 'not-level' | 'cannot-join';
+  piece: number;
+  port: number;
+}
+
 export interface Layout {
   pieces: PlacedPiece[];
+  problems: Problem[];
   /** Ports joined by the stored graph. */
   connected: Set<string>;
   /** Open ports that meet within tolerance and count as joined (spec 5.3). */
@@ -90,13 +101,22 @@ export function validateCourse(course: Course): void {
 export function compatible(a: PartDef, ap: number, b: PartDef, bp: number): boolean {
   const pa = a.ports[ap];
   const pb = b.ports[bp];
+  if (a.cannotJoin?.includes(b.id) || b.cannotJoin?.includes(a.id)) return false;
   return (pa.kind ?? 'std') === (pb.kind ?? 'std') && pa.lanes.length === pb.lanes.length;
+}
+
+const LEVEL_COS = Math.cos((CLOSE_ANGLE * Math.PI) / 180);
+
+/** Whether a port frame lies flat: its up is within the closure angle of world up. */
+export function isLevel(frame: Matrix4): boolean {
+  return new Vector3(0, 1, 0).transformDirection(frame).y >= LEVEL_COS;
 }
 
 /** Work out where every piece sits from the connection graph. */
 export function layoutCourse(course: Course): Layout {
   const pieces: PlacedPiece[] = [];
   const connected = new Set<string>();
+  const problems: Problem[] = [];
   course.pieces.forEach((rec, i) => {
     const part = getPart(rec.part);
     const geo = partGeometry(part);
@@ -104,6 +124,7 @@ export function layoutCourse(course: Course): Layout {
     if ('to' in rec) {
       const [j, p] = rec.to;
       matrix = attach(pieces[j].ports[p], geo.ports[rec.port]);
+      if (!compatible(pieces[j].part, p, part, rec.port)) problems.push({ kind: 'cannot-join', piece: i, port: rec.port });
       connected.add(portKey({ piece: j, port: p }));
       connected.add(portKey({ piece: i, port: rec.port }));
     } else if ('free' in rec) {
@@ -112,7 +133,11 @@ export function layoutCourse(course: Course): Layout {
     } else {
       matrix = new Matrix4();
     }
-    pieces.push({ rec, part, matrix, ports: geo.ports.map((p) => matrix.clone().multiply(p)) });
+    const ports = geo.ports.map((p) => matrix.clone().multiply(p));
+    part.ports.forEach((def, p) => {
+      if (def.floor && !isLevel(ports[p])) problems.push({ kind: 'not-level', piece: i, port: p });
+    });
+    pieces.push({ rec, part, matrix, ports });
   });
 
   const loose: PortRef[] = [];
@@ -144,7 +169,7 @@ export function layoutCourse(course: Course): Layout {
     closures.push(c);
   }
   const open = loose.filter((r) => !closed.has(portKey(r)));
-  return { pieces, connected, closures, open };
+  return { pieces, problems, connected, closures, open };
 }
 
 // ---- Editing. Each operation returns a new course and leaves the input alone.
