@@ -6,17 +6,35 @@ import { partGeometry, pointOnFrame } from './geometry';
 /** Scene units are metres; course data is in millimetres. */
 export const MM = 0.001;
 
-const { laneCount, lanePitch, fenceHeight, fenceThickness, roadThickness } = GLOBAL_SPEC;
+const { lanePitch, fenceHeight, fenceThickness, roadThickness } = GLOBAL_SPEC;
 
-/** Lateral positions (+ right) of the fence centres: two outer fences and the dividers. */
-export function fenceOffsets(): number[] {
-  const out: number[] = [];
-  for (let i = 0; i <= laneCount; i++) out.push(laneOffset(0) - lanePitch / 2 + i * lanePitch);
-  return out;
+/** Cross-section of the lanes a part covers (spec 3.2); offsets are from the centreline, + right. */
+export interface CrossSection {
+  /** Outside edges of the outer fences. */
+  left: number;
+  right: number;
+  /** Fence centres: the outer fences and the dividers. */
+  fences: number[];
 }
 
-/** Half the full width of the track, to the outside of the outer fences. */
-export const HALF_WIDTH = -fenceOffsets()[0] + fenceThickness / 2;
+export function crossSection(lanes: readonly number[]): CrossSection {
+  const fences = new Set<number>();
+  for (const l of lanes) {
+    fences.add(laneOffset(l) - lanePitch / 2);
+    fences.add(laneOffset(l) + lanePitch / 2);
+  }
+  const sorted = [...fences].sort((a, b) => a - b);
+  return {
+    left: sorted[0] - fenceThickness / 2,
+    right: sorted[sorted.length - 1] + fenceThickness / 2,
+    fences: sorted,
+  };
+}
+
+/** Half the width of `laneCount` lanes side by side, to the outside of the outer fences. */
+export function halfWidth(laneCount: number): number {
+  return (laneCount * lanePitch + fenceThickness) / 2;
+}
 
 /**
  * Sweep a rectangle (lateral `x0..x1`, height `y0..y1`) along the frames.
@@ -69,13 +87,17 @@ function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y
 }
 
 /** Road and fence geometry of a part in part-local millimetres. */
-export function buildPartGeometry(part: PartDef): { road: THREE.BufferGeometry; fences: THREE.BufferGeometry[] } {
-  const frames = partGeometry(part).samples;
-  const road = sweepBox(frames, -HALF_WIDTH, HALF_WIDTH, -roadThickness, 0);
-  const fences = fenceOffsets().map((x) =>
-    sweepBox(frames, x - fenceThickness / 2, x + fenceThickness / 2, 0, fenceHeight),
-  );
-  return { road, fences };
+export function buildPartGeometry(part: PartDef): { roads: THREE.BufferGeometry[]; fences: THREE.BufferGeometry[] } {
+  const roads: THREE.BufferGeometry[] = [];
+  const fences: THREE.BufferGeometry[] = [];
+  for (const { samples, lanes } of partGeometry(part).tracks) {
+    const section = crossSection(lanes);
+    roads.push(sweepBox(samples, section.left, section.right, -roadThickness, 0));
+    for (const x of section.fences) {
+      fences.push(sweepBox(samples, x - fenceThickness / 2, x + fenceThickness / 2, 0, fenceHeight));
+    }
+  }
+  return { roads, fences };
 }
 
 const partGeometryCache = new Map<string, ReturnType<typeof buildPartGeometry>>();
@@ -109,7 +131,7 @@ export function buildCourseMeshes(layout: Layout): THREE.Group[] {
     const group = new THREE.Group();
     group.name = `piece-${i}`;
     group.userData.piece = i;
-    group.add(new THREE.Mesh(geo.road, material(color, 1)));
+    for (const r of geo.roads) group.add(new THREE.Mesh(r, material(color, 1)));
     for (const f of geo.fences) group.add(new THREE.Mesh(f, material(color, 0.85)));
     group.matrixAutoUpdate = false;
     group.matrix.copy(pc.matrix);

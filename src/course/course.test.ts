@@ -8,11 +8,14 @@ describe('layoutCourse', () => {
   it('closes the basic oval with no error', () => {
     const layout = layoutCourse(basicOval());
     expect(layout.open).toEqual([]);
-    expect(layout.closures).toHaveLength(1);
-    const [c] = layout.closures;
-    expect([c.a, c.b]).toContainEqual({ piece: 0, port: 0 });
-    expect(c.distance).toBeLessThan(0.01);
-    expect(c.angle).toBeLessThan(0.01);
+    expect(layout.problems).toEqual([]);
+    // The loop itself and the lane change's two upper joints.
+    expect(layout.closures).toHaveLength(3);
+    expect(layout.closures.flatMap((c) => [c.a, c.b])).toContainEqual({ piece: 0, port: 0 });
+    for (const c of layout.closures) {
+      expect(c.distance).toBeLessThan(0.01);
+      expect(c.angle).toBeLessThan(0.01);
+    }
   });
 
   it('closes a ring of eight curves', () => {
@@ -70,7 +73,7 @@ describe('editing', () => {
       layout.pieces[i].matrix.elements.forEach((x, k) => expect(x).toBeCloseTo(was[k], 0));
     }
     // The far end still closes onto the start, and the gap is left open.
-    expect(layout.closures).toHaveLength(1);
+    expect(layout.closures).toHaveLength(3);
     expect(layout.open).toEqual([
       { piece: 2, port: 1 },
       { piece: 3, port: 0 },
@@ -85,7 +88,13 @@ describe('editing', () => {
   });
 
   it('counts parts', () => {
-    expect(Object.fromEntries(partCounts(basicOval()))).toEqual({ straight: 5, wave: 1, curve45: 8 });
+    expect(Object.fromEntries(partCounts(basicOval()))).toEqual({
+      straight: 2,
+      wave: 1,
+      curve45: 8,
+      'bridge-approach': 2,
+      'lane-change-center': 1,
+    });
   });
 });
 

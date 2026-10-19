@@ -1,5 +1,5 @@
 import { Matrix4, Vector3 } from 'three';
-import { CATALOG_VERSION, getPart, type PartDef } from './catalog';
+import { CATALOG_VERSION, getPart, portLaneOffsets, type PartDef } from './catalog';
 import { attach, FACE, facingError, IDENTITY_POSE, matrixToPose, partGeometry, poseToMatrix, type FrameError, type Pose } from './geometry';
 
 /** A placed piece. Pieces only refer to pieces before them (spec 5.1). */
@@ -97,12 +97,28 @@ export function validateCourse(course: Course): void {
   });
 }
 
-/** Ports two pieces can be joined by: same kind and lane count. */
+/** Ports two pieces can be joined by: same kind and lane count, and partners that allow each other. */
 export function compatible(a: PartDef, ap: number, b: PartDef, bp: number): boolean {
   const pa = a.ports[ap];
   const pb = b.ports[bp];
   if (a.cannotJoin?.includes(b.id) || b.cannotJoin?.includes(a.id)) return false;
+  if ((pa.partners && !pa.partners.includes(b.id)) || (pb.partners && !pb.partners.includes(a.id))) return false;
   return (pa.kind ?? 'std') === (pb.kind ?? 'std') && pa.lanes.length === pb.lanes.length;
+}
+
+/**
+ * Lanes that meet at a joint between port `ap` of `a` and port `bp` of `b`,
+ * as [lane on a, lane on b]. The ports face each other, so the lane on the
+ * right of one is on the left of the other.
+ */
+export function jointLanes(a: PartDef, ap: number, b: PartDef, bp: number): [number, number][] {
+  const others = portLaneOffsets(b.ports[bp]);
+  const out: [number, number][] = [];
+  for (const { lane, right } of portLaneOffsets(a.ports[ap])) {
+    const match = others.find((o) => Math.abs(o.right + right) < 1e-6);
+    if (match) out.push([lane, match.lane]);
+  }
+  return out;
 }
 
 const LEVEL_COS = Math.cos((CLOSE_ANGLE * Math.PI) / 180);

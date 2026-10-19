@@ -26,7 +26,7 @@ describe('codec', () => {
 
   it('keeps the basic oval short', async () => {
     const value = await encodeCourse(basicOval());
-    expect(value.length).toBeLessThan(60);
+    expect(value.length).toBeLessThan(70);
   });
 
   it('returns null when the hash has no course', async () => {

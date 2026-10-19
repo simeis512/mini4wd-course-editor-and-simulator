@@ -6,7 +6,17 @@
  * totals and still need measuring against real parts (see `confidence`).
  */
 
-import { WAVE_AMPLITUDE } from './profile';
+import type { Pose } from './geometry';
+import {
+  BRIDGE_HEIGHT,
+  BRIDGE_OVERLAP,
+  BRIDGE_RUN,
+  bridgeRise,
+  bridgeRiseSlope,
+  LANE_CHANGE_LENGTH,
+  RAMP_RUN,
+  WAVE_AMPLITUDE,
+} from './profile';
 
 export type Confidence = 'official' | 'community' | 'inferred' | 'unknown';
 
@@ -42,21 +52,49 @@ export interface Segment {
 }
 
 /**
- * Where a port sits on the part's centreline. Phase 1 parts only have
- * ports at the two ends of the centreline; later parts (lane change) will
- * add explicit frames.
+ * Where a port sits (spec 3.3). 'start' and 'end' put it at that end of the
+ * centreline, moved sideways to the middle of the lanes it carries. A pose
+ * gives the port frame itself in part-local coordinates: forward points out
+ * of the part and the origin is the middle of the port's lanes on the road.
  */
-export type PortAnchor = 'start' | 'end';
+export type PortAnchor = 'start' | 'end' | Pose;
 
 export interface PortDef {
   id: string;
   anchor: PortAnchor;
-  /** Lane positions this port carries (0 = left looking along the centreline). */
+  /**
+   * Lane positions this port carries (0 = left looking along the
+   * centreline). On a port placed by a pose they are listed left to right
+   * looking out of the port.
+   */
   lanes: number[];
   /** Connection kind; only ports of the same kind and lane count connect. */
   kind?: string;
   /** This end sits on the floor, so its frame must be level (bank approach). */
   floor?: boolean;
+  /** The only parts this port joins, when it is limited (the lane change's own ports). */
+  partners?: string[];
+}
+
+/**
+ * A stretch of road swept along its own centreline, for parts whose lanes
+ * part ways (the lane change's ramp and bridges). Lane positions are
+ * measured from this track's centreline.
+ */
+export interface Track {
+  /** Where the track's centreline starts, in part-local coordinates. */
+  start: Pose;
+  segments: Segment[];
+  lanes: number[];
+}
+
+/**
+ * A lane running through a part from one port to another (spec 3.2), e.g.
+ * lane 2 of port 0 comes out as lane 0 of port 1.
+ */
+export interface LaneLink {
+  from: [port: number, lane: number];
+  to: [port: number, lane: number];
 }
 
 export type Material = 'current' | 'old-gray';
@@ -77,8 +115,15 @@ export interface PartDef {
   setCode?: string;
   segments: Segment[];
   ports: PortDef[];
-  /** Lane positions the cross-section covers. */
+  /** Lane positions the cross-section covers: any 1 to 3 of 0, 1, 2. */
   lanes: number[];
+  /** Further road swept along centrelines of its own, beside the main one. */
+  tracks?: Track[];
+  /**
+   * Which port lane runs to which (spec 3.2). Left out on a two-ended part,
+   * where each lane runs straight through (see `laneLinks`).
+   */
+  laneLinks?: LaneLink[];
   variants: Variant[];
   /** Index into `variants` used when a piece does not choose one. */
   defaultVariant: number;
@@ -132,6 +177,13 @@ const SLOPE_RUN = STRAIGHT_LENGTH;
  */
 const SLOPE_PITCH = (2 * Math.atan(SLOPE_DROP / SLOPE_RUN) * 180) / Math.PI;
 const SLOPE_ARC_LENGTH = ((SLOPE_RUN / 2) * ((SLOPE_PITCH * Math.PI) / 180)) / Math.sin((SLOPE_PITCH * Math.PI) / 180);
+
+/** Height and gradient (deg) of the upper lane at the bridge joints, a third into each approach. */
+const JOINT_HEIGHT = bridgeRise(RAMP_RUN);
+const JOINT_PITCH = (Math.atan(bridgeRiseSlope(RAMP_RUN)) * 180) / Math.PI;
+/** Lateral offset of the right-hand lane, as a part-local X (+ X is left). */
+const RIGHT_LANE_X = -laneOffset(2);
+const LANE_CHANGE_NOTE = `橋がアプローチ側へ約1/3入り込み、全体で1つのなだらかな山になる形は公式の図・写真どおり。寸法は未計測のため仮（橋の最高点${BRIDGE_HEIGHT}、各ピースの床の長さ${LANE_CHANGE_LENGTH}）`;
 
 export const PARTS: readonly PartDef[] = [
   {
@@ -205,6 +257,98 @@ export const PARTS: readonly PartDef[] = [
     confidence: 'inferred',
     note: `落差110のみ確定。曲がり方は未計測のため仮形状（床の長さ540、最大${SLOPE_PITCH.toFixed(1)}°のS字）`,
   },
+  {
+    // Lane change entry (F, spec 3.5): three lanes come in, the right-hand
+    // lane climbs towards the bridge and the other two carry on underneath.
+    // The climb and the bridge make one smooth hump, so the upper port is on
+    // the slope. The
+    // exit is the same part the other way round. On its own, with the upper
+    // and lower ports left open, it works as a jump ramp.
+    id: 'bridge-approach',
+    name: 'ブリッジアプローチ',
+    setCode: 'F',
+    segments: [{ length: LANE_CHANGE_LENGTH }],
+    lanes: [0, 1],
+    tracks: [
+      {
+        start: { pos: [RIGHT_LANE_X, 0, 0], rot: [0, 0, 0] },
+        segments: [{ length: RAMP_RUN, lateralProfile: 'lc-ramp' }],
+        lanes: [1],
+      },
+    ],
+    ports: [
+      { id: 'a', anchor: 'start', lanes: ALL_LANES },
+      { id: 'lower', anchor: 'end', lanes: [0, 1], kind: 'lc-lower', partners: ['lane-change-center'] },
+      {
+        id: 'upper',
+        anchor: { pos: [RIGHT_LANE_X, JOINT_HEIGHT, RAMP_RUN], rot: [0, JOINT_PITCH, 0] },
+        lanes: [2],
+        kind: 'lc-upper',
+        partners: ['lane-change-center'],
+      },
+    ],
+    laneLinks: [
+      { from: [0, 0], to: [1, 0] },
+      { from: [0, 1], to: [1, 1] },
+      { from: [0, 2], to: [2, 2] },
+    ],
+    variants: [PALETTE.white, PALETTE.gray, PALETTE.black],
+    defaultVariant: 0,
+    confidence: 'inferred',
+    note: LANE_CHANGE_NOTE,
+  },
+  {
+    // Lane change centre (E+E+D as one set, spec 3.5): the bridge carries
+    // the upper lane from the right edge across to the left edge while the
+    // two lanes underneath move one lane to the right. The bridge sticks out
+    // a third of a piece over each approach, so its upper ports sit there.
+    // It only joins bridge approaches, upper and lower ports together.
+    id: 'lane-change-center',
+    name: 'レーンチェンジ中央部',
+    setCode: 'D+E',
+    segments: [{ length: LANE_CHANGE_LENGTH, lateralProfile: 'lc-under' }],
+    lanes: [0, 1],
+    tracks: [
+      {
+        start: { pos: [RIGHT_LANE_X, 0, -BRIDGE_OVERLAP], rot: [0, 0, 0] },
+        segments: [{ length: BRIDGE_RUN, lateralProfile: 'lc-over' }],
+        lanes: [1],
+      },
+    ],
+    ports: [
+      { id: 'lower-a', anchor: 'start', lanes: [0, 1], kind: 'lc-lower', partners: ['bridge-approach'] },
+      {
+        id: 'lower-b',
+        anchor: { pos: [-laneOffset(1) - GLOBAL_SPEC.lanePitch / 2, 0, LANE_CHANGE_LENGTH], rot: [0, 0, 0] },
+        lanes: [1, 2],
+        kind: 'lc-lower',
+        partners: ['bridge-approach'],
+      },
+      {
+        id: 'upper-a',
+        anchor: { pos: [RIGHT_LANE_X, JOINT_HEIGHT, -BRIDGE_OVERLAP], rot: [180, -JOINT_PITCH, 0] },
+        lanes: [2],
+        kind: 'lc-upper',
+        partners: ['bridge-approach'],
+      },
+      {
+        id: 'upper-b',
+        anchor: { pos: [-laneOffset(0), JOINT_HEIGHT, LANE_CHANGE_LENGTH + BRIDGE_OVERLAP], rot: [0, -JOINT_PITCH, 0] },
+        lanes: [0],
+        kind: 'lc-upper',
+        partners: ['bridge-approach'],
+      },
+    ],
+    laneLinks: [
+      { from: [0, 0], to: [1, 1] },
+      { from: [0, 1], to: [1, 2] },
+      { from: [2, 2], to: [3, 0] },
+    ],
+    variants: [PALETTE.white, PALETTE.gray, PALETTE.black],
+    defaultVariant: 0,
+    confidence: 'inferred',
+    note: LANE_CHANGE_NOTE,
+  },
 ];
 
 const PART_BY_ID = new Map(PARTS.map((p) => [p.id, p]));
@@ -224,7 +368,15 @@ export function hasPart(id: string): boolean {
  * reuse or renumber an entry, or old URLs will open the wrong parts.
  */
 export const CATALOG_VERSION = 1;
-export const PART_CODES: readonly string[] = ['straight', 'curve45', 'wave', 'bank-approach-20', 'slope'];
+export const PART_CODES: readonly string[] = [
+  'straight',
+  'curve45',
+  'wave',
+  'bank-approach-20',
+  'slope',
+  'bridge-approach',
+  'lane-change-center',
+];
 
 export function variantOf(part: PartDef, index: number | undefined): Variant {
   return part.variants[index ?? part.defaultVariant] ?? part.variants[part.defaultVariant];
@@ -233,4 +385,33 @@ export function variantOf(part: PartDef, index: number | undefined): Variant {
 /** Lateral offset of a lane centre from the centreline, + is right. */
 export function laneOffset(lane: number): number {
   return (lane - (GLOBAL_SPEC.laneCount - 1) / 2) * GLOBAL_SPEC.lanePitch;
+}
+
+/**
+ * Lanes running through a part. A two-ended part without a table links each
+ * lane both ports carry to itself.
+ */
+export function laneLinks(part: PartDef): LaneLink[] {
+  if (part.laneLinks) return part.laneLinks;
+  if (part.ports.length !== 2) return [];
+  const [a, b] = part.ports;
+  return a.lanes.filter((l) => b.lanes.includes(l)).map((l) => ({ from: [0, l], to: [1, l] }));
+}
+
+/** Lateral offset (+ right, looking out of the port) of each lane the port carries from the port's origin. */
+export function portLaneOffsets(port: PortDef): { lane: number; right: number }[] {
+  const { lanes, anchor } = port;
+  if (typeof anchor !== 'string') {
+    return lanes.map((lane, i) => ({ lane, right: (i - (lanes.length - 1) / 2) * GLOBAL_SPEC.lanePitch }));
+  }
+  const mid = portLaneCentre(port);
+  // Looking out of the start port is looking back along the centreline.
+  const sign = anchor === 'start' ? -1 : 1;
+  return lanes.map((lane) => ({ lane, right: sign * (laneOffset(lane) - mid) }));
+}
+
+/** Lateral offset (+ right) from the centreline of the middle of the lanes an end port carries. */
+export function portLaneCentre(port: PortDef): number {
+  if (port.lanes.length === 0) return 0;
+  return port.lanes.reduce((sum, l) => sum + laneOffset(l), 0) / port.lanes.length;
 }

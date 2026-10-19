@@ -1,5 +1,5 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
-import type { PartDef, PortDef, Segment } from './catalog';
+import { portLaneCentre, type PartDef, type PortDef, type Segment } from './catalog';
 import { lateralProfile } from './profile';
 
 /**
@@ -27,7 +27,7 @@ function sinc(x: number): number {
  * turns half its rotation, moves along the chord, then turns the other
  * half, which is exact for constant-curvature arcs. A segment with a
  * `lateralProfile` swings its frames sideways off that path and turns them
- * to follow the swing.
+ * to follow the swing; one that also rises lifts and tilts them too.
  */
 export function sampleCenterline(segments: readonly Segment[]): Matrix4[] {
   const frame = new Matrix4();
@@ -37,6 +37,7 @@ export function sampleCenterline(segments: readonly Segment[]): Matrix4[] {
   const axis = new Vector3();
   const swing = new Matrix4();
   const turn = new Matrix4();
+  const tilt = new Matrix4();
   for (const seg of segments) {
     const yaw = (seg.yaw ?? 0) * DEG;
     const pitch = (seg.pitch ?? 0) * DEG;
@@ -56,24 +57,40 @@ export function sampleCenterline(segments: readonly Segment[]): Matrix4[] {
       half.identity();
     }
     move.makeTranslation(0, 0, ds * sinc(stepAngle / 2));
+    // A profile moves the frame off the plain path; it also applies where the
+    // segment starts, e.g. a bridge that begins on a slope.
+    const offPath = (f: Matrix4, s: number): Matrix4 => {
+      if (!profile) return f;
+      // + X is left; turning about + Y by θ swings forward towards the left.
+      const dx = profile.slope(s, seg.length);
+      const dy = profile.riseSlope?.(s, seg.length) ?? 0;
+      swing.makeTranslation(profile.offset(s, seg.length), profile.rise?.(s, seg.length) ?? 0, 0);
+      f.multiply(swing).multiply(turn.makeRotationY(Math.atan(dx)));
+      // + pitch climbs, which is a turn about − X.
+      if (dy !== 0) f.multiply(tilt.makeRotationX(-Math.atan(dy / Math.hypot(1, dx))));
+      return f;
+    };
+    if (profile) frames[frames.length - 1] = offPath(frame.clone(), 0);
     for (let i = 0; i < steps; i++) {
       frame.multiply(half).multiply(move).multiply(half);
-      const f = frame.clone();
-      if (profile) {
-        // + X is left; turning about + Y by θ swings forward towards the left.
-        const s = (i + 1) * ds;
-        swing.makeTranslation(profile.offset(s, seg.length), 0, 0);
-        f.multiply(swing).multiply(turn.makeRotationY(Math.atan(profile.slope(s, seg.length))));
-      }
-      frames.push(f);
+      frames.push(offPath(frame.clone(), (i + 1) * ds));
     }
   }
   return frames;
 }
 
-export interface PartGeometry {
+export interface TrackGeometry {
   /** Centreline samples in part-local coordinates. */
   samples: Matrix4[];
+  /** Lane positions measured from this centreline. */
+  lanes: number[];
+}
+
+export interface PartGeometry {
+  /** Main centreline samples in part-local coordinates. */
+  samples: Matrix4[];
+  /** Every stretch of road: the main centreline first, then the part's `tracks`. */
+  tracks: TrackGeometry[];
   /** Port frames in part-local coordinates; forward points out of the part. */
   ports: Matrix4[];
   /** Centreline length, mm. */
@@ -83,20 +100,25 @@ export interface PartGeometry {
 const geometryCache = new Map<string, PartGeometry>();
 
 function portFrame(port: PortDef, samples: Matrix4[]): Matrix4 {
-  switch (port.anchor) {
-    case 'start':
-      return FACE.clone();
-    case 'end':
-      return samples[samples.length - 1].clone();
-  }
+  if (typeof port.anchor !== 'string') return poseToMatrix(port.anchor);
+  // Move to the middle of the port's lanes; local + X is left.
+  const side = new Matrix4().makeTranslation(-portLaneCentre(port), 0, 0);
+  if (port.anchor === 'start') return side.multiply(FACE);
+  return samples[samples.length - 1].clone().multiply(side);
 }
 
 export function partGeometry(part: PartDef): PartGeometry {
   let geo = geometryCache.get(part.id);
   if (!geo) {
     const samples = sampleCenterline(part.segments);
+    const tracks: TrackGeometry[] = [{ samples, lanes: part.lanes }];
+    for (const t of part.tracks ?? []) {
+      const start = poseToMatrix(t.start);
+      tracks.push({ samples: sampleCenterline(t.segments).map((f) => start.clone().multiply(f)), lanes: t.lanes });
+    }
     geo = {
       samples,
+      tracks,
       ports: part.ports.map((p) => portFrame(p, samples)),
       length: part.segments.reduce((sum, s) => sum + s.length, 0),
     };

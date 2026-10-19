@@ -152,9 +152,11 @@ export class EditorApp {
     });
     const port = ports[Math.max(0, fits)];
     const next = tries[Math.max(0, fits)];
-    // Keep going from the new piece's far end.
+    // Keep going from the new piece's next open port (the lane change
+    // centre's upper port closes onto the approach by itself).
     const index = next.pieces.length - 1;
-    const far = part.ports.findIndex((_, p) => p !== port);
+    const open = new Set(layoutCourse(next).open.map(portKey));
+    const far = part.ports.findIndex((_, p) => p !== port && open.has(portKey({ piece: index, port: p })));
     this.commit(next, far >= 0 ? { kind: 'port', ref: { piece: index, port: far } } : null);
   }
 
@@ -327,6 +329,7 @@ export class EditorApp {
       info.push(`<div class="warn">#${pr.piece + 1} ${layout.pieces[pr.piece].part.name}: ${what}</div>`);
     }
     for (const c of layout.closures) {
+      if (layout.pieces[c.a.piece].part.ports[c.a.port].kind === 'lc-upper') continue;
       info.push(`<div class="muted">ループ閉じ（#${c.a.piece + 1}–#${c.b.piece + 1}）: 誤差 ${c.distance.toFixed(1)}mm / ${c.angle.toFixed(1)}°</div>`);
     }
     $('info').innerHTML = info.join('');
