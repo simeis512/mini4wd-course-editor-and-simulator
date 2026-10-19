@@ -150,6 +150,19 @@ export const PARTS: readonly PartDef[] = [
     confidence: 'inferred',
     note: '凹凸は未計測のため平らに表示',
   },
+  {
+    // Twists the track from flat to a 20° bank (spec 14). The exit of a bank
+    // is the same part placed the other way round.
+    id: 'bank-approach-20',
+    name: 'バンクアプローチ20',
+    segments: [{ length: STRAIGHT_LENGTH, roll: 20 }],
+    ports: twoEnded(),
+    lanes: ALL_LANES,
+    variants: [PALETTE.white],
+    defaultVariant: 0,
+    confidence: 'inferred',
+    note: '長さとひねりの中心は未計測のため仮形状（長さ540、中心線まわりにひねる）',
+  },
 ];
 
 const PART_BY_ID = new Map(PARTS.map((p) => [p.id, p]));
@@ -169,7 +182,7 @@ export function hasPart(id: string): boolean {
  * reuse or renumber an entry, or old URLs will open the wrong parts.
  */
 export const CATALOG_VERSION = 1;
-export const PART_CODES: readonly string[] = ['straight', 'curve45', 'wave'];
+export const PART_CODES: readonly string[] = ['straight', 'curve45', 'wave', 'bank-approach-20'];
 
 export function variantOf(part: PartDef, index: number | undefined): Variant {
   return part.variants[index ?? part.defaultVariant] ?? part.variants[part.defaultVariant];

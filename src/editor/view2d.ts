@@ -9,6 +9,8 @@ interface Outline {
   /** Left edge then right edge reversed: a closed polygon in world X/Z. */
   polygon: [number, number][];
   fences: [number, number][][];
+  /** Mean road height, mm; higher pieces are drawn over lower ones. */
+  height: number;
 }
 
 /** Pixels a pointer may move and still count as a tap. */
@@ -25,6 +27,8 @@ export class TopView {
   private ctx: CanvasRenderingContext2D;
   private layout: Layout | null = null;
   private outlines: Outline[] = [];
+  /** Piece indices from the lowest piece to the highest. */
+  private order: number[] = [];
   private selection: Selection = null;
   /** World point (mm) at the canvas centre, and zoom in px per mm. */
   private cx = 0;
@@ -58,8 +62,11 @@ export class TopView {
         return {
           polygon: [...edge(-HALF_WIDTH), ...edge(HALF_WIDTH).reverse()],
           fences: fenceOffsets().map(edge),
+          height: samples.reduce((sum, f) => sum + f.elements[13], 0) / samples.length,
         };
       });
+      // Stable sort keeps placing order between pieces at the same height.
+      this.order = this.outlines.map((_, i) => i).sort((a, b) => this.outlines[a].height - this.outlines[b].height);
     }
     this.selection = selection;
     this.draw();
@@ -120,7 +127,8 @@ export class TopView {
       if (close) ctx.closePath();
     };
 
-    layout.pieces.forEach((pc, i) => {
+    for (const i of this.order) {
+      const pc = layout.pieces[i];
       const o = this.outlines[i];
       const color = variantOf(pc.part, pc.rec.variant).color;
       path(o.polygon, true);
@@ -136,7 +144,7 @@ export class TopView {
       }
       path(o.polygon, true);
       ctx.stroke();
-    });
+    }
 
     const sel = this.selection;
     if (sel?.kind === 'piece' && this.outlines[sel.index]) {
@@ -219,7 +227,8 @@ export class TopView {
     }
     if (best) return { kind: 'port', ref: best.ref };
     const [x, z] = this.toWorld(sx, sy);
-    for (let i = this.outlines.length - 1; i >= 0; i--) {
+    for (let k = this.order.length - 1; k >= 0; k--) {
+      const i = this.order[k];
       if (insidePolygon(x, z, this.outlines[i].polygon)) return { kind: 'piece', index: i };
     }
     return null;
