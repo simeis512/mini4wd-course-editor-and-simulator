@@ -7,7 +7,16 @@
  */
 
 import type { Pose } from './geometry';
-import { WAVE_AMPLITUDE } from './profile';
+import {
+  BRIDGE_HEIGHT,
+  BRIDGE_OVERLAP,
+  BRIDGE_RUN,
+  bridgeRise,
+  bridgeRiseSlope,
+  LANE_CHANGE_LENGTH,
+  RAMP_RUN,
+  WAVE_AMPLITUDE,
+} from './profile';
 
 export type Confidence = 'official' | 'community' | 'inferred' | 'unknown';
 
@@ -167,39 +176,14 @@ const SLOPE_RUN = STRAIGHT_LENGTH;
  * half the run turn through 2·atan(rise / run).
  */
 const SLOPE_PITCH = (2 * Math.atan(SLOPE_DROP / SLOPE_RUN) * 180) / Math.PI;
-const SLOPE_ARC_LENGTH = sArcLength(SLOPE_DROP, SLOPE_RUN);
+const SLOPE_ARC_LENGTH = ((SLOPE_RUN / 2) * ((SLOPE_PITCH * Math.PI) / 180)) / Math.sin((SLOPE_PITCH * Math.PI) / 180);
 
-/**
- * Length of each of the two equal arcs of an S that climbs `rise` over a
- * floor run of `run`, turning through `sPitch(rise, run)` and back.
- */
-function sArcLength(rise: number, run: number): number {
-  const a = (sPitch(rise, run) * Math.PI) / 180;
-  return ((run / 2) * a) / Math.sin(a);
-}
-
-function sPitch(rise: number, run: number): number {
-  return (2 * Math.atan(rise / run) * 180) / Math.PI;
-}
-
-/** Road height of the lane change's upper lane (unmeasured, provisional). */
-export const BRIDGE_HEIGHT = 100;
-/** Floor length of each lane change piece: three pieces span 1620 (inferred). */
-const LANE_CHANGE_LENGTH = STRAIGHT_LENGTH;
-/**
- * The bridge reaches about a third of the way into each approach (official
- * top view of 69579), so the approach's ramp climbs over the first two
- * thirds and the bridge crosses over the centre and a third of each
- * approach in one gentle curve.
- */
-const BRIDGE_OVERLAP = LANE_CHANGE_LENGTH / 3;
-const RAMP_RUN = LANE_CHANGE_LENGTH - BRIDGE_OVERLAP;
-const BRIDGE_RUN = LANE_CHANGE_LENGTH + 2 * BRIDGE_OVERLAP;
-const RAMP_PITCH = sPitch(BRIDGE_HEIGHT, RAMP_RUN);
-const RAMP_ARC_LENGTH = sArcLength(BRIDGE_HEIGHT, RAMP_RUN);
+/** Height and gradient (deg) of the upper lane at the bridge joints, a third into each approach. */
+const JOINT_HEIGHT = bridgeRise(RAMP_RUN);
+const JOINT_PITCH = (Math.atan(bridgeRiseSlope(RAMP_RUN)) * 180) / Math.PI;
 /** Lateral offset of the right-hand lane, as a part-local X (+ X is left). */
 const RIGHT_LANE_X = -laneOffset(2);
-const LANE_CHANGE_NOTE = `橋がアプローチ側へ約1/3入り込む形は公式の上面図どおり。寸法は未計測のため仮（橋の高さ${BRIDGE_HEIGHT}、各ピースの床の長さ${LANE_CHANGE_LENGTH}）`;
+const LANE_CHANGE_NOTE = `橋がアプローチ側へ約1/3入り込み、全体で1つのなだらかな山になる形は公式の図・写真どおり。寸法は未計測のため仮（橋の最高点${BRIDGE_HEIGHT}、各ピースの床の長さ${LANE_CHANGE_LENGTH}）`;
 
 export const PARTS: readonly PartDef[] = [
   {
@@ -275,7 +259,9 @@ export const PARTS: readonly PartDef[] = [
   },
   {
     // Lane change entry (F, spec 3.5): three lanes come in, the right-hand
-    // lane climbs to the bridge and the other two carry on underneath. The
+    // lane climbs towards the bridge and the other two carry on underneath.
+    // The climb and the bridge make one smooth hump, so the upper port is on
+    // the slope. The
     // exit is the same part the other way round. On its own, with the upper
     // and lower ports left open, it works as a jump ramp.
     id: 'bridge-approach',
@@ -286,10 +272,7 @@ export const PARTS: readonly PartDef[] = [
     tracks: [
       {
         start: { pos: [RIGHT_LANE_X, 0, 0], rot: [0, 0, 0] },
-        segments: [
-          { length: RAMP_ARC_LENGTH, pitch: RAMP_PITCH },
-          { length: RAMP_ARC_LENGTH, pitch: -RAMP_PITCH },
-        ],
+        segments: [{ length: RAMP_RUN, lateralProfile: 'lc-ramp' }],
         lanes: [1],
       },
     ],
@@ -298,7 +281,7 @@ export const PARTS: readonly PartDef[] = [
       { id: 'lower', anchor: 'end', lanes: [0, 1], kind: 'lc-lower', partners: ['lane-change-center'] },
       {
         id: 'upper',
-        anchor: { pos: [RIGHT_LANE_X, BRIDGE_HEIGHT, RAMP_RUN], rot: [0, 0, 0] },
+        anchor: { pos: [RIGHT_LANE_X, JOINT_HEIGHT, RAMP_RUN], rot: [0, JOINT_PITCH, 0] },
         lanes: [2],
         kind: 'lc-upper',
         partners: ['lane-change-center'],
@@ -327,7 +310,7 @@ export const PARTS: readonly PartDef[] = [
     lanes: [0, 1],
     tracks: [
       {
-        start: { pos: [RIGHT_LANE_X, BRIDGE_HEIGHT, -BRIDGE_OVERLAP], rot: [0, 0, 0] },
+        start: { pos: [RIGHT_LANE_X, 0, -BRIDGE_OVERLAP], rot: [0, 0, 0] },
         segments: [{ length: BRIDGE_RUN, lateralProfile: 'lc-over' }],
         lanes: [1],
       },
@@ -343,14 +326,14 @@ export const PARTS: readonly PartDef[] = [
       },
       {
         id: 'upper-a',
-        anchor: { pos: [RIGHT_LANE_X, BRIDGE_HEIGHT, -BRIDGE_OVERLAP], rot: [180, 0, 0] },
+        anchor: { pos: [RIGHT_LANE_X, JOINT_HEIGHT, -BRIDGE_OVERLAP], rot: [180, -JOINT_PITCH, 0] },
         lanes: [2],
         kind: 'lc-upper',
         partners: ['bridge-approach'],
       },
       {
         id: 'upper-b',
-        anchor: { pos: [-laneOffset(0), BRIDGE_HEIGHT, LANE_CHANGE_LENGTH + BRIDGE_OVERLAP], rot: [0, 0, 0] },
+        anchor: { pos: [-laneOffset(0), JOINT_HEIGHT, LANE_CHANGE_LENGTH + BRIDGE_OVERLAP], rot: [0, -JOINT_PITCH, 0] },
         lanes: [0],
         kind: 'lc-upper',
         partners: ['bridge-approach'],

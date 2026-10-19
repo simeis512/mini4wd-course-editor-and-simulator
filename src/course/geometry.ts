@@ -27,7 +27,7 @@ function sinc(x: number): number {
  * turns half its rotation, moves along the chord, then turns the other
  * half, which is exact for constant-curvature arcs. A segment with a
  * `lateralProfile` swings its frames sideways off that path and turns them
- * to follow the swing.
+ * to follow the swing; one that also rises lifts and tilts them too.
  */
 export function sampleCenterline(segments: readonly Segment[]): Matrix4[] {
   const frame = new Matrix4();
@@ -37,6 +37,7 @@ export function sampleCenterline(segments: readonly Segment[]): Matrix4[] {
   const axis = new Vector3();
   const swing = new Matrix4();
   const turn = new Matrix4();
+  const tilt = new Matrix4();
   for (const seg of segments) {
     const yaw = (seg.yaw ?? 0) * DEG;
     const pitch = (seg.pitch ?? 0) * DEG;
@@ -56,16 +57,23 @@ export function sampleCenterline(segments: readonly Segment[]): Matrix4[] {
       half.identity();
     }
     move.makeTranslation(0, 0, ds * sinc(stepAngle / 2));
+    // A profile moves the frame off the plain path; it also applies where the
+    // segment starts, e.g. a bridge that begins on a slope.
+    const offPath = (f: Matrix4, s: number): Matrix4 => {
+      if (!profile) return f;
+      // + X is left; turning about + Y by θ swings forward towards the left.
+      const dx = profile.slope(s, seg.length);
+      const dy = profile.riseSlope?.(s, seg.length) ?? 0;
+      swing.makeTranslation(profile.offset(s, seg.length), profile.rise?.(s, seg.length) ?? 0, 0);
+      f.multiply(swing).multiply(turn.makeRotationY(Math.atan(dx)));
+      // + pitch climbs, which is a turn about − X.
+      if (dy !== 0) f.multiply(tilt.makeRotationX(-Math.atan(dy / Math.hypot(1, dx))));
+      return f;
+    };
+    if (profile) frames[frames.length - 1] = offPath(frame.clone(), 0);
     for (let i = 0; i < steps; i++) {
       frame.multiply(half).multiply(move).multiply(half);
-      const f = frame.clone();
-      if (profile) {
-        // + X is left; turning about + Y by θ swings forward towards the left.
-        const s = (i + 1) * ds;
-        swing.makeTranslation(profile.offset(s, seg.length), 0, 0);
-        f.multiply(swing).multiply(turn.makeRotationY(Math.atan(profile.slope(s, seg.length))));
-      }
-      frames.push(f);
+      frames.push(offPath(frame.clone(), (i + 1) * ds));
     }
   }
   return frames;

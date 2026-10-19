@@ -12,12 +12,45 @@ export interface LateralProfile {
   offset(s: number, length: number): number;
   /** d(offset)/ds at `s`. */
   slope(s: number, length: number): number;
+  /** Height above the centreline at `s`, for road that also climbs (the lane change bridge). */
+  rise?(s: number, length: number): number;
+  /** d(rise)/ds at `s`. */
+  riseSlope?(s: number, length: number): number;
   /** Longest sampling step that still draws the profile smoothly, mm. */
   maxStep: number;
 }
 
 /** Provisional wave amplitude (peak sideways offset), mm. */
 export const WAVE_AMPLITUDE = 30;
+
+/** Peak road height of the lane change bridge (unmeasured, provisional). */
+export const BRIDGE_HEIGHT = 100;
+/** Floor length of each lane change piece; F + centre + F span 1620 (inferred). */
+export const LANE_CHANGE_LENGTH = 540;
+/**
+ * The bridge reaches about a third of a piece into each approach (official
+ * top view of 69579).
+ */
+export const BRIDGE_OVERLAP = LANE_CHANGE_LENGTH / 3;
+/** Floor length the upper lane climbs over on the approach, up to the bridge joint. */
+export const RAMP_RUN = LANE_CHANGE_LENGTH - BRIDGE_OVERLAP;
+/** Floor length of the bridge (both E pieces). */
+export const BRIDGE_RUN = LANE_CHANGE_LENGTH + 2 * BRIDGE_OVERLAP;
+const LANE_CHANGE_SPAN = 3 * LANE_CHANGE_LENGTH;
+
+/**
+ * Height of the upper lane `u` mm from the start of the entry approach: one
+ * gentle hump over the whole lane change, level on the floor at both ends
+ * and highest over the middle of the centre (official photo of 69579; the
+ * curve itself is provisional).
+ */
+export function bridgeRise(u: number): number {
+  return (BRIDGE_HEIGHT / 2) * (1 - Math.cos((2 * Math.PI * u) / LANE_CHANGE_SPAN));
+}
+
+export function bridgeRiseSlope(u: number): number {
+  return ((BRIDGE_HEIGHT * Math.PI) / LANE_CHANGE_SPAN) * Math.sin((2 * Math.PI * u) / LANE_CHANGE_SPAN);
+}
 
 /**
  * A smooth sideways step of `shift` mm (+ left) over the whole segment, level
@@ -43,7 +76,20 @@ const PROFILES: Record<string, LateralProfile> = {
   // right under the bridge while the upper lane crosses from the right edge
   // to the left edge.
   'lc-under': step(-120),
-  'lc-over': step(240),
+  // The upper lane climbing the approach, straight in plan.
+  'lc-ramp': {
+    offset: () => 0,
+    slope: () => 0,
+    rise: (s) => bridgeRise(s),
+    riseSlope: (s) => bridgeRiseSlope(s),
+    maxStep: 10,
+  },
+  // The bridge: over the top of the hump while crossing to the left edge.
+  'lc-over': {
+    ...step(240),
+    rise: (s) => bridgeRise(s + RAMP_RUN),
+    riseSlope: (s) => bridgeRiseSlope(s + RAMP_RUN),
+  },
 };
 
 export function lateralProfile(id: string): LateralProfile {

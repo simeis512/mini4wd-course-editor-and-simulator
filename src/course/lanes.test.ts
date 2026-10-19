@@ -158,12 +158,21 @@ describe('lane change', () => {
     expect(out).toEqual([1, 2, 0]);
   });
 
-  it('lifts the right lane to the bridge height and keeps it level at the top', () => {
+  it('climbs the right lane smoothly into the bridge, highest over the middle', () => {
     const upper = partGeometry(f).ports[2];
-    const ramp = partGeometry(f).tracks[1].samples.at(-1)!;
-    expect(pos(ramp).distanceTo(pos(upper))).toBeLessThan(1e-6);
-    expect(forward(ramp).angleTo(forward(upper))).toBeLessThan(1e-9);
-    expect(pos(upper).y).toBe(100);
+    const ramp = partGeometry(f).tracks[1].samples;
+    // The ramp starts level on the floor and ends exactly at the upper port.
+    expect(pos(ramp[0]).y).toBeCloseTo(0, 9);
+    expect(forward(ramp[0]).y).toBeCloseTo(0, 9);
+    expect(pos(ramp.at(-1)!).distanceTo(pos(upper))).toBeLessThan(1e-6);
+    expect(forward(ramp.at(-1)!).angleTo(forward(upper))).toBeLessThan(1e-6);
+    expect(forward(upper).y).toBeGreaterThan(0.1);
+    // The bridge carries on the same slope and peaks over the centre's middle.
+    const bridge = partGeometry(c).tracks[1].samples;
+    expect(forward(bridge[0]).angleTo(forward(upper))).toBeLessThan(1e-6);
+    const top = bridge.reduce((a, b) => (pos(b).y > pos(a).y ? b : a));
+    expect(pos(top).y).toBeCloseTo(100, 6);
+    expect(pos(top).z).toBeCloseTo(270, 6);
   });
 
   it('only joins the lane change ports to each other', () => {
