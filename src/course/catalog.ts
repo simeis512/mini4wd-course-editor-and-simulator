@@ -186,11 +186,20 @@ function sPitch(rise: number, run: number): number {
 export const BRIDGE_HEIGHT = 100;
 /** Floor length of each lane change piece: three pieces span 1620 (inferred). */
 const LANE_CHANGE_LENGTH = STRAIGHT_LENGTH;
-const RAMP_PITCH = sPitch(BRIDGE_HEIGHT, LANE_CHANGE_LENGTH);
-const RAMP_ARC_LENGTH = sArcLength(BRIDGE_HEIGHT, LANE_CHANGE_LENGTH);
+/**
+ * The bridge reaches about a third of the way into each approach (official
+ * top view of 69579), so the approach's ramp climbs over the first two
+ * thirds and the bridge crosses over the centre and a third of each
+ * approach in one gentle curve.
+ */
+const BRIDGE_OVERLAP = LANE_CHANGE_LENGTH / 3;
+const RAMP_RUN = LANE_CHANGE_LENGTH - BRIDGE_OVERLAP;
+const BRIDGE_RUN = LANE_CHANGE_LENGTH + 2 * BRIDGE_OVERLAP;
+const RAMP_PITCH = sPitch(BRIDGE_HEIGHT, RAMP_RUN);
+const RAMP_ARC_LENGTH = sArcLength(BRIDGE_HEIGHT, RAMP_RUN);
 /** Lateral offset of the right-hand lane, as a part-local X (+ X is left). */
 const RIGHT_LANE_X = -laneOffset(2);
-const LANE_CHANGE_NOTE = `坂の高さ・長さ、橋の横ずれは未計測のため仮形状（橋の高さ${BRIDGE_HEIGHT}、各ピースの床の長さ${LANE_CHANGE_LENGTH}）`;
+const LANE_CHANGE_NOTE = `橋がアプローチ側へ約1/3入り込む形は公式の上面図どおり。寸法は未計測のため仮（橋の高さ${BRIDGE_HEIGHT}、各ピースの床の長さ${LANE_CHANGE_LENGTH}）`;
 
 export const PARTS: readonly PartDef[] = [
   {
@@ -289,7 +298,7 @@ export const PARTS: readonly PartDef[] = [
       { id: 'lower', anchor: 'end', lanes: [0, 1], kind: 'lc-lower', partners: ['lane-change-center'] },
       {
         id: 'upper',
-        anchor: { pos: [RIGHT_LANE_X, BRIDGE_HEIGHT, LANE_CHANGE_LENGTH], rot: [0, 0, 0] },
+        anchor: { pos: [RIGHT_LANE_X, BRIDGE_HEIGHT, RAMP_RUN], rot: [0, 0, 0] },
         lanes: [2],
         kind: 'lc-upper',
         partners: ['lane-change-center'],
@@ -308,8 +317,9 @@ export const PARTS: readonly PartDef[] = [
   {
     // Lane change centre (E+E+D as one set, spec 3.5): the bridge carries
     // the upper lane from the right edge across to the left edge while the
-    // two lanes underneath move one lane to the right. It only joins bridge
-    // approaches, upper and lower ports together.
+    // two lanes underneath move one lane to the right. The bridge sticks out
+    // a third of a piece over each approach, so its upper ports sit there.
+    // It only joins bridge approaches, upper and lower ports together.
     id: 'lane-change-center',
     name: 'レーンチェンジ中央部',
     setCode: 'D+E',
@@ -317,8 +327,8 @@ export const PARTS: readonly PartDef[] = [
     lanes: [0, 1],
     tracks: [
       {
-        start: { pos: [RIGHT_LANE_X, BRIDGE_HEIGHT, 0], rot: [0, 0, 0] },
-        segments: [{ length: LANE_CHANGE_LENGTH, lateralProfile: 'lc-over' }],
+        start: { pos: [RIGHT_LANE_X, BRIDGE_HEIGHT, -BRIDGE_OVERLAP], rot: [0, 0, 0] },
+        segments: [{ length: BRIDGE_RUN, lateralProfile: 'lc-over' }],
         lanes: [1],
       },
     ],
@@ -333,14 +343,14 @@ export const PARTS: readonly PartDef[] = [
       },
       {
         id: 'upper-a',
-        anchor: { pos: [RIGHT_LANE_X, BRIDGE_HEIGHT, 0], rot: [180, 0, 0] },
+        anchor: { pos: [RIGHT_LANE_X, BRIDGE_HEIGHT, -BRIDGE_OVERLAP], rot: [180, 0, 0] },
         lanes: [2],
         kind: 'lc-upper',
         partners: ['bridge-approach'],
       },
       {
         id: 'upper-b',
-        anchor: { pos: [-laneOffset(0), BRIDGE_HEIGHT, LANE_CHANGE_LENGTH], rot: [0, 0, 0] },
+        anchor: { pos: [-laneOffset(0), BRIDGE_HEIGHT, LANE_CHANGE_LENGTH + BRIDGE_OVERLAP], rot: [0, 0, 0] },
         lanes: [0],
         kind: 'lc-upper',
         partners: ['bridge-approach'],
