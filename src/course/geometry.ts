@@ -1,5 +1,5 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
-import type { PartDef, PortDef, Segment } from './catalog';
+import { portLaneCentre, type PartDef, type PortDef, type Segment } from './catalog';
 import { lateralProfile } from './profile';
 
 /**
@@ -83,12 +83,11 @@ export interface PartGeometry {
 const geometryCache = new Map<string, PartGeometry>();
 
 function portFrame(port: PortDef, samples: Matrix4[]): Matrix4 {
-  switch (port.anchor) {
-    case 'start':
-      return FACE.clone();
-    case 'end':
-      return samples[samples.length - 1].clone();
-  }
+  if (typeof port.anchor !== 'string') return poseToMatrix(port.anchor);
+  // Move to the middle of the port's lanes; local + X is left.
+  const side = new Matrix4().makeTranslation(-portLaneCentre(port), 0, 0);
+  if (port.anchor === 'start') return side.multiply(FACE);
+  return samples[samples.length - 1].clone().multiply(side);
 }
 
 export function partGeometry(part: PartDef): PartGeometry {

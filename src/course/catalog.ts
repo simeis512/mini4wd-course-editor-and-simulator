@@ -6,6 +6,7 @@
  * totals and still need measuring against real parts (see `confidence`).
  */
 
+import type { Pose } from './geometry';
 import { WAVE_AMPLITUDE } from './profile';
 
 export type Confidence = 'official' | 'community' | 'inferred' | 'unknown';
@@ -42,21 +43,35 @@ export interface Segment {
 }
 
 /**
- * Where a port sits on the part's centreline. Phase 1 parts only have
- * ports at the two ends of the centreline; later parts (lane change) will
- * add explicit frames.
+ * Where a port sits (spec 3.3). 'start' and 'end' put it at that end of the
+ * centreline, moved sideways to the middle of the lanes it carries. A pose
+ * gives the port frame itself in part-local coordinates: forward points out
+ * of the part and the origin is the middle of the port's lanes on the road.
  */
-export type PortAnchor = 'start' | 'end';
+export type PortAnchor = 'start' | 'end' | Pose;
 
 export interface PortDef {
   id: string;
   anchor: PortAnchor;
-  /** Lane positions this port carries (0 = left looking along the centreline). */
+  /**
+   * Lane positions this port carries (0 = left looking along the
+   * centreline). On a port placed by a pose they are listed left to right
+   * looking out of the port.
+   */
   lanes: number[];
   /** Connection kind; only ports of the same kind and lane count connect. */
   kind?: string;
   /** This end sits on the floor, so its frame must be level (bank approach). */
   floor?: boolean;
+}
+
+/**
+ * A lane running through a part from one port to another (spec 3.2), e.g.
+ * lane 2 of port 0 comes out as lane 0 of port 1.
+ */
+export interface LaneLink {
+  from: [port: number, lane: number];
+  to: [port: number, lane: number];
 }
 
 export type Material = 'current' | 'old-gray';
@@ -77,8 +92,13 @@ export interface PartDef {
   setCode?: string;
   segments: Segment[];
   ports: PortDef[];
-  /** Lane positions the cross-section covers. */
+  /** Lane positions the cross-section covers: any 1 to 3 of 0, 1, 2. */
   lanes: number[];
+  /**
+   * Which port lane runs to which (spec 3.2). Left out on a two-ended part,
+   * where each lane runs straight through (see `laneLinks`).
+   */
+  laneLinks?: LaneLink[];
   variants: Variant[];
   /** Index into `variants` used when a piece does not choose one. */
   defaultVariant: number;
@@ -233,4 +253,33 @@ export function variantOf(part: PartDef, index: number | undefined): Variant {
 /** Lateral offset of a lane centre from the centreline, + is right. */
 export function laneOffset(lane: number): number {
   return (lane - (GLOBAL_SPEC.laneCount - 1) / 2) * GLOBAL_SPEC.lanePitch;
+}
+
+/**
+ * Lanes running through a part. A two-ended part without a table links each
+ * lane both ports carry to itself.
+ */
+export function laneLinks(part: PartDef): LaneLink[] {
+  if (part.laneLinks) return part.laneLinks;
+  if (part.ports.length !== 2) return [];
+  const [a, b] = part.ports;
+  return a.lanes.filter((l) => b.lanes.includes(l)).map((l) => ({ from: [0, l], to: [1, l] }));
+}
+
+/** Lateral offset (+ right, looking out of the port) of each lane the port carries from the port's origin. */
+export function portLaneOffsets(port: PortDef): { lane: number; right: number }[] {
+  const { lanes, anchor } = port;
+  if (typeof anchor !== 'string') {
+    return lanes.map((lane, i) => ({ lane, right: (i - (lanes.length - 1) / 2) * GLOBAL_SPEC.lanePitch }));
+  }
+  const mid = portLaneCentre(port);
+  // Looking out of the start port is looking back along the centreline.
+  const sign = anchor === 'start' ? -1 : 1;
+  return lanes.map((lane) => ({ lane, right: sign * (laneOffset(lane) - mid) }));
+}
+
+/** Lateral offset (+ right) from the centreline of the middle of the lanes an end port carries. */
+export function portLaneCentre(port: PortDef): number {
+  if (port.lanes.length === 0) return 0;
+  return port.lanes.reduce((sum, l) => sum + laneOffset(l), 0) / port.lanes.length;
 }

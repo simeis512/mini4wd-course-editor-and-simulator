@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import { variantOf } from '../course/catalog';
 import { portKey, type Layout, type PortRef } from '../course/course';
 import { partGeometry, pointOnFrame } from '../course/geometry';
-import { fenceOffsets, HALF_WIDTH } from '../course/mesh';
+import { crossSection, halfWidth } from '../course/mesh';
 import type { PickHandlers, Selection } from './selection';
 
 interface Outline {
@@ -59,9 +59,10 @@ export class TopView {
         const samples = partGeometry(pc.part).samples.map((s) => pc.matrix.clone().multiply(s));
         const p = new Vector3();
         const edge = (x: number) => samples.map((f): [number, number] => (pointOnFrame(f, x, 0, p), [p.x, p.z]));
+        const section = crossSection(pc.part.lanes);
         return {
-          polygon: [...edge(-HALF_WIDTH), ...edge(HALF_WIDTH).reverse()],
-          fences: fenceOffsets().map(edge),
+          polygon: [...edge(section.left), ...edge(section.right).reverse()],
+          fences: section.fences.map(edge),
           height: samples.reduce((sum, f) => sum + f.elements[13], 0) / samples.length,
         };
       });
@@ -190,10 +191,12 @@ export class TopView {
 
   /** A bar across the track at the port with an arrow pointing out of the piece. */
   private drawPort(ref: PortRef, color: string, size: number): void {
-    const frame = this.layout!.pieces[ref.piece].ports[ref.port];
+    const pc = this.layout!.pieces[ref.piece];
+    const frame = pc.ports[ref.port];
+    const half = halfWidth(pc.part.ports[ref.port].lanes.length);
     const p = new Vector3();
-    const [ax, ay] = this.toScreen(...xz(pointOnFrame(frame, -HALF_WIDTH, 0, p)));
-    const [bx, by] = this.toScreen(...xz(pointOnFrame(frame, HALF_WIDTH, 0, p)));
+    const [ax, ay] = this.toScreen(...xz(pointOnFrame(frame, -half, 0, p)));
+    const [bx, by] = this.toScreen(...xz(pointOnFrame(frame, half, 0, p)));
     const [cx, cy] = this.toScreen(...xz(pointOnFrame(frame, 0, 0, p)));
     const [fx, fy] = this.toScreen(...xz(p.set(0, 0, 1).applyMatrix4(frame)));
     const len = Math.hypot(fx - cx, fy - cy) || 1;
