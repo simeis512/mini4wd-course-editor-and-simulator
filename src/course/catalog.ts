@@ -113,6 +113,8 @@ function twoEnded(): PortDef[] {
 const STRAIGHT_LENGTH = 540;
 const CURVE_RADIUS = 540;
 const CURVE_ANGLE = 45;
+/** Short ramp; roughly a third of a straight judging by product photos (inferred). */
+const BANK_APPROACH_LENGTH = 180;
 
 export const PARTS: readonly PartDef[] = [
   {
@@ -151,17 +153,18 @@ export const PARTS: readonly PartDef[] = [
     note: '凹凸は未計測のため平らに表示',
   },
   {
-    // Twists the track from flat to a 20° bank (spec 14). The exit of a bank
-    // is the same part placed the other way round.
+    // A ramp up to a 20° incline (spec 14). Curves joined after it lie in
+    // the inclined plane, so a U-turn rises to a 20° bank at its middle and
+    // comes back down; the exit is the same part placed the other way round.
     id: 'bank-approach-20',
     name: 'バンクアプローチ20',
-    segments: [{ length: STRAIGHT_LENGTH, roll: 20 }],
+    segments: [{ length: BANK_APPROACH_LENGTH, pitch: 20 }],
     ports: twoEnded(),
     lanes: ALL_LANES,
-    variants: [PALETTE.white],
+    variants: [PALETTE.red, PALETTE.orange, PALETTE.black],
     defaultVariant: 0,
     confidence: 'inferred',
-    note: '長さとひねりの中心は未計測のため仮形状（長さ540、中心線まわりにひねる）',
+    note: '長さと坂の曲がり方は未計測のため仮形状（長さ180、0°→20°へ一定に上る）',
   },
 ];
 

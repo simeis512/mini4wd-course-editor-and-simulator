@@ -91,28 +91,38 @@ describe('editing', () => {
 
 describe('banks', () => {
   const up = (m: Matrix4) => new Vector3(0, 1, 0).transformDirection(m);
+  const forward = (m: Matrix4) => new Vector3(0, 0, 1).transformDirection(m);
   const right = (m: Matrix4) => new Vector3(-1, 0, 0).transformDirection(m);
-  const bank = Math.sin((20 * Math.PI) / 180);
+  const pos = (m: Matrix4) => new Vector3().setFromMatrixPosition(m);
+  const sin20 = Math.sin((20 * Math.PI) / 180);
 
-  it('carries the bank of a bank approach on through a curve', () => {
-    const layout = layoutCourse(chain(['straight', 'bank-approach-20', 'curve45']));
-    const into = layout.pieces[1].ports[1];
-    expect(right(into).y).toBeCloseTo(-bank, 9);
-    // The curve lies in the banked plane: its far end keeps the same up.
-    const out = layout.pieces[2].ports[1];
-    expect(up(out).angleTo(up(into))).toBeLessThan(1e-9);
-    expect(facingError(into, layout.pieces[2].ports[0]).distance).toBeLessThan(1e-9);
-  });
-
-  it('levels out again through a banked U-turn and a reversed bank approach', () => {
-    // Flip the curves so they turn right, towards the low side.
+  /** Straight, bank approach, U-turn of four right-hand curves, bank approach reversed, straight. */
+  function bankedUTurn() {
     let c = chain(['straight', 'bank-approach-20', 'curve45', 'curve45', 'curve45', 'curve45', 'bank-approach-20', 'straight']);
     for (const i of [2, 3, 4, 5, 6]) c = flipPiece(c, i);
-    const layout = layoutCourse(c);
+    return layoutCourse(c);
+  }
+
+  it('ends the bank approach climbing at 20° without leaning', () => {
+    const top = layoutCourse(chain(['straight', 'bank-approach-20'])).pieces[1].ports[1];
+    expect(forward(top).y).toBeCloseTo(sin20, 9);
+    expect(right(top).y).toBeCloseTo(0, 9);
+  });
+
+  it('banks the middle of the U-turn 20° with the inside low', () => {
+    const layout = bankedUTurn();
+    // Halfway round, after two curves.
+    const mid = layout.pieces[3].ports[0]; // flipped, so port 0 is the far end
+    expect(forward(mid).y).toBeCloseTo(0, 9);
+    expect(right(mid).y).toBeCloseTo(-sin20, 9);
+  });
+
+  it('comes back down level at the height it started', () => {
+    const layout = bankedUTurn();
+    const start = layout.pieces[0].ports[0];
     const end = layout.pieces[7].ports[1];
     expect(up(end).angleTo(new Vector3(0, 1, 0))).toBeLessThan(1e-9);
-    expect(new Vector3(0, 0, 1).transformDirection(end).z).toBeCloseTo(-1, 9);
-    // Rigid curves in a plane tilted by 20° end a U-turn 2·540·sin 20° lower.
-    expect(new Vector3().setFromMatrixPosition(end).y).toBeCloseTo(-2 * 540 * bank, 6);
+    expect(forward(end).z).toBeCloseTo(-1, 9);
+    expect(pos(end).y).toBeCloseTo(pos(start).y, 6);
   });
 });
