@@ -6,6 +6,8 @@
  * totals and still need measuring against real parts (see `confidence`).
  */
 
+import { WAVE_BUMPS, WAVE_HEIGHT } from './surface';
+
 export type Confidence = 'official' | 'community' | 'inferred' | 'unknown';
 
 /** Track-wide dimensions shared by every part. */
@@ -35,7 +37,7 @@ export interface Segment {
   pitch?: number;
   /** Change of bank angle, + lowers the right side. */
   roll?: number;
-  /** Id of a road-surface profile (wave, washboard...). Not rendered yet. */
+  /** Id of a road-surface profile (surface.ts), e.g. the wave's bumps. */
   heightProfile?: string;
 }
 
@@ -165,7 +167,7 @@ export const PARTS: readonly PartDef[] = [
     variants: [PALETTE.white, PALETTE.gray, PALETTE.black],
     defaultVariant: 0,
     confidence: 'inferred',
-    note: '凹凸は未計測のため平らに表示',
+    note: `凹凸は未計測のため仮形状（山${WAVE_BUMPS}つ、高さ${WAVE_HEIGHT}）`,
   },
   {
     // A ramp up to a 20° incline (spec 14). Curves joined after it lie in

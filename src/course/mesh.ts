@@ -20,28 +20,37 @@ export const HALF_WIDTH = -fenceOffsets()[0] + fenceThickness / 2;
 
 /**
  * Sweep a rectangle (lateral `x0..x1`, height `y0..y1`) along the frames.
+ * `lift[i]` raises the top edge at frame i (road surface profile).
  * Each side gets its own vertices so the corners stay sharp.
  */
-function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y1: number): THREE.BufferGeometry {
-  // Corners anticlockwise when looking along the centreline.
-  const corners: [number, number][] = [
-    [x0, y0],
-    [x1, y0],
-    [x1, y1],
-    [x0, y1],
+function sweepBox(
+  frames: THREE.Matrix4[],
+  lift: readonly number[],
+  x0: number,
+  x1: number,
+  y0: number,
+  y1: number,
+): THREE.BufferGeometry {
+  // Corners anticlockwise when looking along the centreline; `top` marks the raised ones.
+  const corners: [number, number, boolean][] = [
+    [x0, y0, false],
+    [x1, y0, false],
+    [x1, y1, true],
+    [x0, y1, true],
   ];
   const positions: number[] = [];
   const indices: number[] = [];
   const p = new THREE.Vector3();
   const n = frames.length;
   for (let side = 0; side < 4; side++) {
-    const [ax, ay] = corners[side];
-    const [bx, by] = corners[(side + 1) % 4];
+    const [ax, ay, at] = corners[side];
+    const [bx, by, bt] = corners[(side + 1) % 4];
     const base = positions.length / 3;
-    for (const f of frames) {
-      pointOnFrame(f, ax, ay, p);
+    for (let i = 0; i < n; i++) {
+      const f = frames[i];
+      pointOnFrame(f, ax, ay + (at ? lift[i] : 0), p);
       positions.push(p.x, p.y, p.z);
-      pointOnFrame(f, bx, by, p);
+      pointOnFrame(f, bx, by + (bt ? lift[i] : 0), p);
       positions.push(p.x, p.y, p.z);
     }
     for (let i = 0; i < n - 1; i++) {
@@ -49,13 +58,13 @@ function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y
       indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
     }
   }
-  for (const [f, flip] of [
-    [frames[0], true],
-    [frames[n - 1], false],
+  for (const [i, flip] of [
+    [0, true],
+    [n - 1, false],
   ] as const) {
     const base = positions.length / 3;
-    for (const [x, y] of corners) {
-      pointOnFrame(f, x, y, p);
+    for (const [x, y, top] of corners) {
+      pointOnFrame(frames[i], x, y + (top ? lift[i] : 0), p);
       positions.push(p.x, p.y, p.z);
     }
     if (flip) indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
@@ -70,10 +79,11 @@ function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y
 
 /** Road and fence geometry of a part in part-local millimetres. */
 export function buildPartGeometry(part: PartDef): { road: THREE.BufferGeometry; fences: THREE.BufferGeometry[] } {
-  const frames = partGeometry(part).samples;
-  const road = sweepBox(frames, -HALF_WIDTH, HALF_WIDTH, -roadThickness, 0);
+  const { samples: frames, heights } = partGeometry(part);
+  // The road surface follows the profile; fences keep their height above it.
+  const road = sweepBox(frames, heights, -HALF_WIDTH, HALF_WIDTH, -roadThickness, 0);
   const fences = fenceOffsets().map((x) =>
-    sweepBox(frames, x - fenceThickness / 2, x + fenceThickness / 2, 0, fenceHeight),
+    sweepBox(frames, heights, x - fenceThickness / 2, x + fenceThickness / 2, 0, fenceHeight),
   );
   return { road, fences };
 }

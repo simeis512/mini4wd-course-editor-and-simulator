@@ -1,5 +1,6 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
 import type { PartDef, PortDef, Segment } from './catalog';
+import { heightProfile } from './surface';
 
 /**
  * Frames are rigid transforms (Matrix4) in millimetres. In a frame's local
@@ -24,11 +25,13 @@ function sinc(x: number): number {
 /**
  * Sample a part's centreline as frames, starting at the identity. Each step
  * turns half its rotation, moves along the chord, then turns the other
- * half, which is exact for constant-curvature arcs.
+ * half, which is exact for constant-curvature arcs. `heights` holds the
+ * road surface height above each frame (spec 3.1 heightProfile).
  */
-export function sampleCenterline(segments: readonly Segment[]): Matrix4[] {
+export function sampleSurface(segments: readonly Segment[]): { frames: Matrix4[]; heights: number[] } {
   const frame = new Matrix4();
   const frames = [frame.clone()];
+  const heights = [0];
   const half = new Matrix4();
   const move = new Matrix4();
   const axis = new Vector3();
@@ -36,10 +39,12 @@ export function sampleCenterline(segments: readonly Segment[]): Matrix4[] {
     const yaw = (seg.yaw ?? 0) * DEG;
     const pitch = (seg.pitch ?? 0) * DEG;
     const roll = (seg.roll ?? 0) * DEG;
+    const profile = seg.heightProfile ? heightProfile(seg.heightProfile) : undefined;
     // Local rotation vector: + pitch climbs (about −X), + roll lowers the right side (about +Z).
     const rot = new Vector3(-pitch, yaw, roll);
     const totalAngle = rot.length();
-    const steps = Math.max(1, Math.ceil(seg.length / MAX_STEP_LENGTH), Math.ceil(totalAngle / (MAX_STEP_ANGLE * DEG)));
+    const maxStep = Math.min(MAX_STEP_LENGTH, profile?.maxStep ?? Infinity);
+    const steps = Math.max(1, Math.ceil(seg.length / maxStep), Math.ceil(totalAngle / (MAX_STEP_ANGLE * DEG)));
     const stepAngle = totalAngle / steps;
     const ds = seg.length / steps;
     if (stepAngle > 0) {
@@ -49,17 +54,25 @@ export function sampleCenterline(segments: readonly Segment[]): Matrix4[] {
       half.identity();
     }
     move.makeTranslation(0, 0, ds * sinc(stepAngle / 2));
+    heights[heights.length - 1] = profile ? profile.height(0, seg.length) : 0;
     for (let i = 0; i < steps; i++) {
       frame.multiply(half).multiply(move).multiply(half);
       frames.push(frame.clone());
+      heights.push(profile ? profile.height((i + 1) * ds, seg.length) : 0);
     }
   }
-  return frames;
+  return { frames, heights };
+}
+
+export function sampleCenterline(segments: readonly Segment[]): Matrix4[] {
+  return sampleSurface(segments).frames;
 }
 
 export interface PartGeometry {
   /** Centreline samples in part-local coordinates. */
   samples: Matrix4[];
+  /** Road surface height above each sample, mm (0 unless the part has a heightProfile). */
+  heights: number[];
   /** Port frames in part-local coordinates; forward points out of the part. */
   ports: Matrix4[];
   /** Centreline length, mm. */
@@ -80,9 +93,10 @@ function portFrame(port: PortDef, samples: Matrix4[]): Matrix4 {
 export function partGeometry(part: PartDef): PartGeometry {
   let geo = geometryCache.get(part.id);
   if (!geo) {
-    const samples = sampleCenterline(part.segments);
+    const { frames: samples, heights } = sampleSurface(part.segments);
     geo = {
       samples,
+      heights,
       ports: part.ports.map((p) => portFrame(p, samples)),
       length: part.segments.reduce((sum, s) => sum + s.length, 0),
     };
