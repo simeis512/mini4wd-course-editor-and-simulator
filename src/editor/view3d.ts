@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
 import { portKey, type Layout, type PortRef } from '../course/course';
-import { buildCourseMeshes, MM } from '../course/mesh';
+import { GLOBAL_SPEC } from '../course/catalog';
+import { partGeometry, pointOnFrame } from '../course/geometry';
+import { buildCourseMeshes, crossSection, MM } from '../course/mesh';
 import type { DragHandlers, PickHandlers, Selection } from './selection';
 
 const BACKGROUND = new THREE.Color(0x1b1d22);
@@ -31,6 +33,8 @@ export class OrbitView {
   private root = new THREE.Group();
   private pieces: THREE.Group[] = [];
   private markers = new THREE.Group();
+  /** Outlines of the selected piece (solid) and the pieces joined to it (dashed), as in the 2D view. */
+  private outlines = new THREE.Group();
   private layout: Layout | null = null;
   private active = false;
   private downAt: { x: number; y: number } | null = null;
@@ -61,10 +65,14 @@ export class OrbitView {
     this.scene.add(this.grid);
     this.root.scale.setScalar(MM);
     this.root.add(this.markers);
+    this.root.add(this.outlines);
     this.scene.add(this.root);
 
     this.camera.position.set(2, 2.5, -2);
     this.controls = new OrbitControls(this.camera, renderer.domElement);
+    // Middle drag moves the camera (as in most 3D tools); the wheel still zooms.
+    this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
+    this.controls.addEventListener('change', () => this.handlers.onViewChange?.());
 
     // Our own DOM overlay for AR: an exit button and a status line, so
     // problems on the phone are visible instead of a silent black screen.
@@ -148,7 +156,7 @@ export class OrbitView {
     if (e.target !== this.renderer.domElement || this.renderer.xr.isPresenting) return;
     this.downAt = { x: e.clientX, y: e.clientY };
     const sel = this.selection;
-    if (sel?.kind !== 'piece' || !e.isPrimary) return;
+    if (sel?.kind !== 'piece' || !e.isPrimary || e.button !== 0) return;
     const hit = this.raycaster(e).intersectObjects(this.pieces, true)[0];
     if (!hit || pieceOf(hit.object) !== sel.index || !this.handlers.onDragStart(sel.index)) return;
     e.stopPropagation();
@@ -187,6 +195,13 @@ export class OrbitView {
         if (o instanceof THREE.Mesh) o.material = level ? highlighted(o.material, level) : unhighlighted(o.material);
       });
     });
+    this.outlines.clear();
+    if (selection?.kind === 'piece') {
+      layout.pieces.forEach((pc, i) => {
+        if (layout.group[i] !== group) return;
+        for (const line of outlineOf(pc.matrix, pc.part, i === selection.index)) this.outlines.add(line);
+      });
+    }
     this.markers.clear();
     const split = new Set(layout.split.map(portKey));
     for (const ref of layout.open) {
@@ -204,6 +219,30 @@ export class OrbitView {
       m.userData.joint = { a: j.a, b: j.b };
       this.markers.add(m);
     }
+  }
+
+  /** Point on the page over the course point (mm), or null when it is behind the camera. */
+  clientOf(x: number, y: number, z: number): [number, number] | null {
+    this.root.updateMatrixWorld();
+    const p = this.root.localToWorld(new THREE.Vector3(x, y, z)).project(this.camera);
+    if (p.z > 1) return null;
+    const r = this.renderer.domElement.getBoundingClientRect();
+    return [r.left + ((p.x + 1) / 2) * r.width, r.top + ((1 - p.y) / 2) * r.height];
+  }
+
+  /** Floor point (course mm, X/Z) the camera looks at. */
+  get centre(): [number, number] {
+    return [this.controls.target.x / MM, this.controls.target.z / MM];
+  }
+
+  /** Floor point (course mm, X/Z) under a point on the page, or null when it is off the view or above the horizon. */
+  groundAt(clientX: number, clientY: number): [number, number] | null {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    if (clientX < r.left || clientY < r.top || clientX > r.right || clientY > r.bottom) return null;
+    const at = this.raycaster({ clientX, clientY }).ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), new THREE.Vector3());
+    if (!at) return null;
+    const p = this.root.worldToLocal(at);
+    return [p.x, p.z];
   }
 
   /** Aim the camera at the whole course. */
@@ -228,6 +267,7 @@ export class OrbitView {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
+    this.handlers.onViewChange?.();
   }
 
   private render(): void {
@@ -240,7 +280,7 @@ export class OrbitView {
     }
   }
 
-  private raycaster(e: PointerEvent): THREE.Raycaster {
+  private raycaster(e: { clientX: number; clientY: number }): THREE.Raycaster {
     const r = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     const ray = new THREE.Raycaster();
@@ -262,6 +302,24 @@ function pieceOf(object: THREE.Object3D): number | null {
   let o: THREE.Object3D | null = object;
   while (o && o.userData.piece === undefined) o = o.parent;
   return o ? o.userData.piece : null;
+}
+
+const OUTLINE_SOLID = new THREE.LineBasicMaterial({ color: 0x3fd0ff });
+const OUTLINE_DASHED = new THREE.LineDashedMaterial({ color: 0x3fd0ff, dashSize: 50, gapSize: 30 });
+
+/** The edge of a piece's road at the height of its fence tops, one loop per track. */
+function outlineOf(matrix: THREE.Matrix4, part: Parameters<typeof partGeometry>[0], solid: boolean): THREE.Line[] {
+  const p = new THREE.Vector3();
+  const y = GLOBAL_SPEC.fenceHeight + 1;
+  return partGeometry(part).tracks.map((track) => {
+    const frames = track.samples.map((f) => matrix.clone().multiply(f));
+    const section = crossSection(track.lanes);
+    const edge = (x: number) => frames.map((f) => pointOnFrame(f, x, y, p).clone());
+    const pts = [...edge(section.left), ...edge(section.right).reverse()];
+    const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), solid ? OUTLINE_SOLID : OUTLINE_DASHED);
+    if (!solid) line.computeLineDistances();
+    return line;
+  });
 }
 
 const MARKER_GEOMETRY = new THREE.ConeGeometry(45, 90, 16).rotateX(Math.PI / 2).translate(0, 30, 30);

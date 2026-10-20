@@ -128,6 +128,12 @@ export interface PartDef {
   /** Index into `variants` used when a piece does not choose one. */
   defaultVariant: number;
   confidence: Confidence;
+  /**
+   * Turning the part round makes a different shape (a curve turns the other
+   * way, a slope goes down), so the parts list offers it both ways round,
+   * named here: the first joins by port 0, the second by port 1.
+   */
+  ways?: [string, string];
   /** Parts this part cannot be joined to directly (e.g. two ramps in a row). */
   cannotJoin?: string[];
   /** Shown in the editor when the geometry is a placeholder. */
@@ -205,6 +211,7 @@ export const PARTS: readonly PartDef[] = [
     segments: [{ length: (Math.PI * CURVE_RADIUS * CURVE_ANGLE) / 180, yaw: CURVE_ANGLE }],
     ports: twoEnded(),
     lanes: ALL_LANES,
+    ways: ['左', '右'],
     variants: [PALETTE.red, PALETTE.blue, PALETTE.gray, PALETTE.green, PALETTE.black, PALETTE.yellow],
     defaultVariant: 0,
     confidence: 'inferred',
@@ -216,6 +223,7 @@ export const PARTS: readonly PartDef[] = [
     segments: [{ length: STRAIGHT_LENGTH, lateralProfile: 'wave' }],
     ports: twoEnded(),
     lanes: ALL_LANES,
+    ways: ['左', '右'],
     variants: [PALETTE.white, PALETTE.gray, PALETTE.black],
     defaultVariant: 0,
     confidence: 'inferred',
@@ -252,6 +260,7 @@ export const PARTS: readonly PartDef[] = [
     ],
     ports: twoEnded(),
     lanes: ALL_LANES,
+    ways: ['上り', '下り'],
     variants: [PALETTE.red, PALETTE.orange],
     defaultVariant: 0,
     confidence: 'inferred',

@@ -10,6 +10,8 @@ export type Selection =
 export interface PickHandlers {
   /** A tap landed on an open port, a piece, or nothing. */
   onPick(selection: Selection): void;
+  /** The view was panned, zoomed or turned, so things over it may need to follow. */
+  onViewChange?(): void;
 }
 
 /** Dragging a piece around in the top view. */

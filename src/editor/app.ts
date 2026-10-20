@@ -2,6 +2,7 @@ import { Matrix4, Vector3 } from 'three';
 import { getPart, hasPart, PARTS, variantOf } from '../course/catalog';
 import { courseFromHash, courseToHash } from '../course/codec';
 import {
+  addFreePiece,
   addPiece,
   applyMagnet,
   compatible,
@@ -9,6 +10,8 @@ import {
   emptyCourse,
   findMagnet,
   flipPiece,
+  footprint,
+  freeSpot,
   groupCount,
   joinableNear,
   joinPorts,
@@ -26,9 +29,11 @@ import {
   validateCourse,
   type Course,
   type Layout,
+  type PortRef,
 } from '../course/course';
 import { partGeometry, type Pose } from '../course/geometry';
 import { basicOval } from '../course/presets';
+import { partIcon } from './icons';
 import type { Selection } from './selection';
 import { TopView } from './view2d';
 import { OrbitView } from './view3d';
@@ -38,6 +43,10 @@ const HISTORY_LIMIT = 200;
 const MAGNET_PX = 12;
 /** Drag steps with snapping on (spec 8). */
 const SNAP_STEP = 10;
+/** A part dropped this close (screen px) to where it would sit on an open port joins that port. */
+const DROP_JOIN_PX = 40;
+/** …and at least this close in mm, so a zoomed-in view still catches it. */
+const DROP_JOIN_MM = 150;
 const POSE_FIELDS = ['pose-x', 'pose-y', 'pose-z', 'pose-yaw', 'pose-pitch', 'pose-roll'] as const;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -55,18 +64,39 @@ export class EditorApp {
   private writtenHash = '';
   private hashWrite = Promise.resolve();
   /** A piece being dragged in the top view, and the course as it would be if dropped now. */
-  private drag: { index: number; start: Course; group: Set<number>; preview: Course | null } | null = null;
+  private drag: {
+    index: number;
+    start: Course;
+    group: Set<number>;
+    preview: Course | null;
+    /** The pointer is over the side panel: dropping there puts a lone piece away (deletes it). */
+    overPanel: boolean;
+  } | null = null;
+  /** A part being dragged out of the parts list, and the course as it would be if dropped now. */
+  private paletteDrag: {
+    partId: string;
+    port: number | undefined;
+    pointerId: number;
+    from: { x: number; y: number };
+    active: boolean;
+    preview: Course | null;
+  } | null = null;
+  /** The click that ends a drag out of the parts list adds nothing more. */
+  private swallowClick = false;
 
   constructor() {
     const onPick = (s: Selection) => this.select(s);
+    const onViewChange = () => this.placeContext();
     this.top = new TopView($('view2d'), {
       onPick,
+      onViewChange,
       onDragStart: (index) => this.dragStart(index),
       onDragMove: (dx, dz, noSnap) => this.dragMove(dx, dz, noSnap),
       onDragEnd: (commit) => this.dragEnd(commit),
     });
     this.orbit = new OrbitView($('view3d'), {
       onPick,
+      onViewChange,
       onDragStart: (index) => this.dragStart(index),
       onDragMove: (dx, dz, noSnap) => this.dragMove(dx, dz, noSnap),
       onDragEnd: (commit) => this.dragEnd(commit),
@@ -168,31 +198,124 @@ export class EditorApp {
 
   // ---- Commands
 
-  private place(partId: string): void {
+  /**
+   * Join `partId` to the open port `at`. `port` fixes which of its ports
+   * joins (the way round chosen in the parts list); otherwise the way round that real
+   * parts allow wins (a bank approach's floor end on the level). Null when
+   * the part cannot join there.
+   */
+  private joinedTo(course: Course, partId: string, at: PortRef, port?: number): { next: Course; port: number } | null {
     const part = getPart(partId);
-    const s = this.selection;
-    if (this.course.pieces.length === 0) {
-      this.commit(addPiece(this.course, partId, null), { kind: 'port', ref: { piece: 0, port: 1 } });
-      return;
-    }
-    if (s?.kind !== 'port') return;
-    const target = this.layout.pieces[s.ref.piece].part;
-    const ports = part.ports.map((_, p) => p).filter((p) => compatible(target, s.ref.port, part, p));
-    if (ports.length === 0) return;
-    // Prefer the way round that real parts allow (a bank approach's floor end on the level).
-    const tries = ports.map((p) => addPiece(this.course, partId, s.ref, p));
+    const target = layoutCourse(course).pieces[at.piece].part;
+    const ports = part.ports
+      .map((_, p) => p)
+      .filter((p) => (port === undefined || p === port) && compatible(target, at.port, part, p));
+    if (ports.length === 0) return null;
+    const tries = ports.map((p) => addPiece(course, partId, at, p));
     const fits = tries.findIndex((c) => {
       const index = c.pieces.length - 1;
       return !layoutCourse(c).problems.some((pr) => pr.piece === index);
     });
-    const port = ports[Math.max(0, fits)];
-    const next = tries[Math.max(0, fits)];
-    // Keep going from the new piece's next open port (the lane change
-    // centre's upper port closes onto the approach by itself).
+    return { next: tries[Math.max(0, fits)], port: ports[Math.max(0, fits)] };
+  }
+
+  /** The new last piece's next open port, to keep going from (the lane change centre's upper port closes by itself). */
+  private nextPort(next: Course, port: number): Selection {
     const index = next.pieces.length - 1;
+    const part = getPart(next.pieces[index].part);
     const open = new Set(layoutCourse(next).open.map(portKey));
     const far = part.ports.findIndex((_, p) => p !== port && open.has(portKey({ piece: index, port: p })));
-    this.commit(next, far >= 0 ? { kind: 'port', ref: { piece: index, port: far } } : null);
+    return far >= 0 ? { kind: 'port', ref: { piece: index, port: far } } : null;
+  }
+
+  /**
+   * Add a part from the parts list: joined to the selected open port, as the
+   * first piece at the origin, or else on its own in a free spot near the
+   * middle of the view (#41).
+   */
+  private place(partId: string, side?: number): void {
+    const s = this.selection;
+    const port = side ?? 0;
+    if (this.course.pieces.length === 0) {
+      const next = addPiece(this.course, partId, null, port);
+      this.commit(next, this.nextPort(next, port));
+      return;
+    }
+    if (s?.kind === 'port') {
+      const joined = this.joinedTo(this.course, partId, s.ref, side);
+      if (joined) {
+        this.commit(joined.next, this.nextPort(joined.next, joined.port));
+        return;
+      }
+      this.toast('選んだ口にはつなげないパーツなので、単体で置きました');
+    }
+    const [cx, cz] = this.mode === '3d' ? this.orbit.centre : this.top.centre;
+    const [x, z] = freeSpot(this.course, partId, port, cx, cz);
+    const next = addFreePiece(this.course, partId, port, x, z);
+    this.commit(next, { kind: 'piece', index: next.pieces.length - 1 });
+  }
+
+  // ---- Dragging a part out of the parts list (#40)
+
+  private paletteDown(e: PointerEvent, partId: string, port: number | undefined): void {
+    if (!e.isPrimary || e.button !== 0) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    this.paletteDrag = { partId, port, pointerId: e.pointerId, from: { x: e.clientX, y: e.clientY }, active: false, preview: null };
+  }
+
+  private paletteMove(e: PointerEvent): void {
+    const d = this.paletteDrag;
+    if (!d || e.pointerId !== d.pointerId) return;
+    if (!d.active) {
+      if (Math.hypot(e.clientX - d.from.x, e.clientY - d.from.y) <= 6) return;
+      d.active = true;
+      document.body.classList.add('dragging-part');
+      $('context').hidden = true;
+    }
+    const at = this.mode === '3d' ? this.orbit.groundAt(e.clientX, e.clientY) : this.top.worldAt(e.clientX, e.clientY);
+    const preview = at && this.dropCourse(d.partId, d.port, at[0], at[1], e.shiftKey);
+    if (!preview && !d.preview) return;
+    d.preview = preview;
+    const layout = preview ? layoutCourse(preview) : this.layout;
+    const selection: Selection = preview ? { kind: 'piece', index: preview.pieces.length - 1 } : this.selection;
+    (this.mode === '3d' ? this.orbit : this.top).setData(layout, selection);
+  }
+
+  private paletteUp(e: PointerEvent, cancelled: boolean): void {
+    const d = this.paletteDrag;
+    if (!d || e.pointerId !== d.pointerId) return;
+    this.paletteDrag = null;
+    if (!d.active) return;
+    document.body.classList.remove('dragging-part');
+    this.swallowClick = true;
+    setTimeout(() => (this.swallowClick = false));
+    if (d.preview && !cancelled) this.commit(d.preview, { kind: 'piece', index: d.preview.pieces.length - 1 });
+    else this.refresh(false);
+  }
+
+  /**
+   * The course with `partId` dropped at (x, z): joined to an open port when
+   * it lands about where it would sit there, else on its own (#40).
+   */
+  private dropCourse(partId: string, port: number | undefined, x: number, z: number, noSnap: boolean): Course {
+    const reach = Math.max(DROP_JOIN_MM, this.mode === '2d' ? DROP_JOIN_PX / this.top.pxPerMm : 0);
+    // A piece filling a gap sits about as near from either end, so the way that closes it wins.
+    let best: { next: Course; open: number; d: number } | null = null;
+    for (const ref of this.layout.open) {
+      const joined = this.joinedTo(this.course, partId, ref, port);
+      if (!joined) continue;
+      const layout = layoutCourse(joined.next);
+      const [x0, x1, z0, z1] = footprint(layout.pieces[layout.pieces.length - 1]);
+      const d = Math.hypot((x0 + x1) / 2 - x, (z0 + z1) / 2 - z);
+      const open = layout.open.length;
+      if (d <= reach && (!best || open < best.open || (open === best.open && d < best.d))) best = { next: joined.next, open, d };
+    }
+    if (best) return best.next;
+    if (this.snapOn && !noSnap) {
+      x = Math.round(x / SNAP_STEP) * SNAP_STEP;
+      z = Math.round(z / SNAP_STEP) * SNAP_STEP;
+    }
+    return addFreePiece(this.course, partId, port ?? 0, x, z);
   }
 
   private flipSelected(): void {
@@ -218,8 +341,28 @@ export class EditorApp {
   }
 
   private dragStart(index: number): boolean {
-    this.drag = { index, start: this.course, group: movingGroup(this.layout, index, this.moveAlone), preview: null };
+    this.drag = { index, start: this.course, group: movingGroup(this.layout, index, this.moveAlone), preview: null, overPanel: false };
     return true;
+  }
+
+  /** Follow a piece drag onto the side panel, where a lone piece can be put away. */
+  private dragOverPanel(e: PointerEvent): void {
+    const d = this.drag;
+    if (!d?.preview) return;
+    const r = $('panel').getBoundingClientRect();
+    const over = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    if (over !== d.overPanel) {
+      d.overPanel = over;
+      const lone = d.group.size === 1;
+      const zone = $('trash-zone');
+      zone.hidden = !over;
+      zone.classList.toggle('blocked', !lone);
+      zone.textContent = lone
+        ? 'ここで離すとピースを片づけます（削除）'
+        : 'つながっているピースは片づけられません。分断するか「このピースだけ動かす」にしてください';
+    }
+    // Show the course without the piece while it would be put away.
+    if (over && d.group.size === 1) (this.mode === '3d' ? this.orbit : this.top).setData(layoutCourse(deletePiece(d.start, d.index)), null);
   }
 
   private dragMove(dx: number, dz: number, noSnap: boolean): void {
@@ -229,6 +372,7 @@ export class EditorApp {
       dx = Math.round(dx / SNAP_STEP) * SNAP_STEP;
       dz = Math.round(dz / SNAP_STEP) * SNAP_STEP;
     }
+    $('context').hidden = true;
     let next = moveGroup(d.start, d.group, new Matrix4().makeTranslation(dx, 0, dz));
     // The 3D view has no single scale, so it uses the plain magnet distance.
     const px = this.mode === '2d' ? MAGNET_PX / this.top.pxPerMm : 0;
@@ -241,8 +385,12 @@ export class EditorApp {
   private dragEnd(commit: boolean): void {
     const d = this.drag;
     this.drag = null;
+    $('trash-zone').hidden = true;
     if (!d?.preview) return;
-    if (commit) this.commit(tidyCuts(d.preview), { kind: 'piece', index: d.index });
+    if (commit && d.overPanel && d.group.size === 1) {
+      this.commit(deletePiece(d.start, d.index));
+      this.toast('ピースを片づけました（元に戻す で戻せます）');
+    } else if (commit && !d.overPanel) this.commit(tidyCuts(d.preview), { kind: 'piece', index: d.index });
     else this.refresh(false);
   }
 
@@ -338,15 +486,33 @@ export class EditorApp {
   private buildPalette(): void {
     const palette = $('palette');
     for (const part of PARTS) {
-      const b = document.createElement('button');
-      b.dataset.part = part.id;
-      b.innerHTML = `${part.name}${part.setCode ? ` <small>${part.setCode}</small>` : ''}`;
-      b.addEventListener('click', () => this.place(part.id));
-      palette.appendChild(b);
+      // A part that differs turned round comes both ways: port 0 first, then port 1 (#43).
+      const sides: [number | undefined, string][] = part.ways ? [[0, part.ways[0]], [1, part.ways[1]]] : [[undefined, '']];
+      for (const [port, side] of sides) {
+        const b = document.createElement('button');
+        b.dataset.part = part.id;
+        const label = document.createElement('span');
+        label.innerHTML = `${part.name}${side ? ` ${side}` : ''}${part.setCode ? ` <small>${part.setCode}</small>` : ''}`;
+        b.append(partIcon(part, port ?? 0), label);
+        b.title = `${part.name}${side ? `（${side}）` : ''}：クリックで追加、ドラッグでコースに置く`;
+        b.addEventListener('click', () => {
+          if (!this.swallowClick) this.place(part.id, port);
+        });
+        b.addEventListener('pointerdown', (e) => this.paletteDown(e, part.id, port));
+        b.addEventListener('pointermove', (e) => this.paletteMove(e));
+        b.addEventListener('pointerup', (e) => this.paletteUp(e, false));
+        b.addEventListener('pointercancel', (e) => this.paletteUp(e, true));
+        palette.appendChild(b);
+      }
     }
   }
 
   private bindUi(): void {
+    // Views capture the pointer while dragging, so its moves still bubble up here.
+    window.addEventListener('pointermove', (e) => this.dragOverPanel(e));
+    $<HTMLDetailsElement>('course-info').addEventListener('toggle', () => this.placeContext());
+    $('context').querySelector('details')!.addEventListener('toggle', () => this.placeContext());
+    $('context-close').addEventListener('click', () => this.select(null));
     $('mode-2d').addEventListener('click', () => this.setMode('2d'));
     $('mode-3d').addEventListener('click', () => this.setMode('3d'));
     $('undo').addEventListener('click', () => this.undo());
@@ -411,18 +577,19 @@ export class EditorApp {
     $<HTMLButtonElement>('undo').disabled = this.undoStack.length === 0;
     $<HTMLButtonElement>('redo').disabled = this.redoStack.length === 0;
 
-    // Palette: usable on an empty course or with an open port selected.
+    // Parts list: joins to the selected open port where it can, else adds on its own.
     const empty = course.pieces.length === 0;
     const target = s?.kind === 'port' ? layout.pieces[s.ref.piece].part : null;
     for (const b of $('palette').querySelectorAll<HTMLButtonElement>('button')) {
       const part = getPart(b.dataset.part!);
-      b.disabled = !empty && !(target && s?.kind === 'port' && part.ports.some((_, p) => compatible(target, s.ref.port, part, p)));
+      const joins = target && s?.kind === 'port' && part.ports.some((_, p) => compatible(target, s.ref.port, part, p));
+      b.classList.toggle('dim', !!target && !joins);
     }
     $('palette-hint').textContent = empty
-      ? 'パーツを選ぶと最初のピースを置きます'
+      ? 'クリックで最初のピースを置きます。コースへドラッグして好きな場所にも置けます'
       : s?.kind === 'port'
-        ? '選んだパーツを、選択中の口（水色の矢印）につなぎます'
-        : 'オレンジの矢印（開いた口）を選ぶと、そこにパーツをつなげます';
+        ? 'クリックで、選択中の口（水色の矢印）につなぎます。ドラッグでコースに置くこともできます'
+        : 'クリックで画面の中央付近に単体で置きます。開いた口（オレンジの矢印）を選んでからクリックすると、そこにつなぎます。コースへドラッグすると好きな場所に置け、口の先へ落とすとつながります';
 
     // Selected piece.
     const panel = $('selection-panel');
@@ -466,12 +633,12 @@ export class EditorApp {
       $('joint-name').textContent = `${name(s.a)} と ${name(s.b)} のつなぎ目`;
     }
     const near = s?.kind === 'port' ? joinableNear(layout, s.ref) : null;
-    $('port-panel').hidden = !near;
+    $('port-panel').hidden = s?.kind !== 'port';
+    $('join-row').hidden = !near;
     if (near) $('join-name').textContent = `近くの口（#${near.piece + 1} ${layout.pieces[near.piece].part.name}）`;
 
     // Course summary.
     const info: string[] = [];
-    info.push(`<div>ピース数: ${course.pieces.length}</div>`);
     const islands = groupCount(layout);
     if (islands > 1) info.push(`<div class="muted">つながりのまとまり: ${islands} 個</div>`);
     const counts = [...partCounts(course)].map(([id, n]) => `<li>${getPart(id).name} × ${n}</li>`);
@@ -491,6 +658,52 @@ export class EditorApp {
       info.push(`<div class="muted">ループ閉じ（#${c.a.piece + 1}–#${c.b.piece + 1}）: 誤差 ${c.distance.toFixed(1)}mm / ${c.angle.toFixed(1)}°</div>`);
     }
     $('info').innerHTML = info.join('');
+    // The folded course box still shows the gist (#45).
+    const status = course.pieces.length === 0 ? '' : layout.open.length > 0 ? `・未接続の口 ${layout.open.length}` : '・閉じています';
+    $('course-summary').innerHTML = `コース: ${course.pieces.length} ピース<span class="${layout.open.length || layout.problems.length ? 'warn' : 'ok'}">${status}</span>${layout.problems.length ? '<span class="warn">・問題あり</span>' : ''}`;
+
+    // Settings for the selection float over the editor, next to it (#45).
+    $('context').hidden = s === null;
+    this.placeContext();
+  }
+
+  /** Put the selection's settings beside it on screen, keeping them inside the editor. */
+  private placeContext(): void {
+    const box = $('context');
+    const s = this.selection;
+    if (box.hidden || !s) return;
+    const view = this.mode === '3d' ? this.orbit : this.top;
+    const layout = this.layout;
+    // World points that outline what is selected.
+    let pts: [number, number, number][];
+    if (s.kind === 'piece') {
+      const pc = layout.pieces[s.index];
+      const [x0, x1, z0, z1] = footprint(pc);
+      const y = pc.matrix.elements[13];
+      pts = [[x0, y, z0], [x0, y, z1], [x1, y, z0], [x1, y, z1]];
+    } else {
+      const ref = s.kind === 'port' ? s.ref : s.a;
+      const e = layout.pieces[ref.piece].ports[ref.port].elements;
+      pts = [[e[12], e[13], e[14]]];
+    }
+    const screen = pts.map((q) => view.clientOf(...q)).filter((q): q is [number, number] => q !== null);
+    const stage = $('stage').getBoundingClientRect();
+    const margin = 8;
+    const w = box.offsetWidth;
+    const h = box.offsetHeight;
+    let left = stage.width - w - margin;
+    let top = margin;
+    if (screen.length) {
+      const xs = screen.map((q) => q[0] - stage.left);
+      const ys = screen.map((q) => q[1] - stage.top);
+      const [l, r] = [Math.min(...xs), Math.max(...xs)];
+      const gap = 24;
+      // Beside the selection: the right if it fits, else the left, else over it.
+      left = r + gap + w <= stage.width - margin ? r + gap : l - gap - w >= margin ? l - gap - w : left;
+      top = (Math.min(...ys) + Math.max(...ys)) / 2 - h / 2;
+    }
+    box.style.left = `${Math.max(margin, Math.min(left, stage.width - w - margin))}px`;
+    box.style.top = `${Math.max(margin, Math.min(top, stage.height - h - margin))}px`;
   }
 
   private toastTimer = 0;

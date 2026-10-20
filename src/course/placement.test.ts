@@ -1,8 +1,13 @@
 import { Matrix4 } from 'three';
 import { describe, expect, it } from 'vitest';
 import {
+  addFreePiece,
+  addPiece,
   applyMagnet,
+  emptyCourse,
   findMagnet,
+  footprint,
+  freeSpot,
   groupCount,
   joinableNear,
   joinPorts,
@@ -124,5 +129,52 @@ describe('magnet and joining', () => {
     const joined = layoutCourse(joinPorts(c, { piece: 0, port: 0 }, { piece: 2, port: 1 }));
     expect(facingError(joined.pieces[2].ports[1], joined.pieces[0].ports[0]).distance).toBeLessThan(0.2);
     expect(groupCount(joined)).toBe(1);
+  });
+});
+
+describe('adding on its own', () => {
+  const centre = (c: Course, i: number) => {
+    const [x0, x1, z0, z1] = footprint(layoutCourse(c).pieces[i]);
+    return [(x0 + x1) / 2, (z0 + z1) / 2];
+  };
+
+  it('centres the new piece on the point, joined to nothing', () => {
+    const c = addFreePiece(chain(['straight']), 'curve45', 1, 2000, -500);
+    expect(c.pieces[1]).toMatchObject({ part: 'curve45', port: 1, free: null });
+    const [x, z] = centre(c, 1);
+    expect(x).toBeCloseTo(2000, 0);
+    expect(z).toBeCloseTo(-500, 0);
+    expect(groupCount(layoutCourse(c))).toBe(2);
+  });
+
+  it('turns a curve the other way when it lies on its second port', () => {
+    const turn = (port: number) => {
+      const pc = layoutCourse(addFreePiece(emptyCourse(), 'curve45', port, 0, 0)).pieces[0];
+      const out = pc.ports[1 - port];
+      // Heading of the far port's forward direction: + X is left.
+      return out.elements[8];
+    };
+    expect(turn(0)).toBeGreaterThan(0);
+    expect(turn(1)).toBeLessThan(0);
+  });
+
+  it('finds a spot that overlaps nothing, as near as it can', () => {
+    const oval = basicOval();
+    const [x0, x1, z0, z1] = footprint(layoutCourse(oval).pieces[0]);
+    const [x, z] = freeSpot(oval, 'straight', 0, (x0 + x1) / 2, (z0 + z1) / 2);
+    const c = addFreePiece(oval, 'straight', 0, x, z);
+    const layout = layoutCourse(c);
+    const [a0, a1, b0, b1] = footprint(layout.pieces[c.pieces.length - 1]);
+    for (const pc of layout.pieces.slice(0, -1)) {
+      const [p0, p1, q0, q1] = footprint(pc);
+      expect(a1 <= p0 || a0 >= p1 || b1 <= q0 || b0 >= q1).toBe(true);
+    }
+    // An empty floor takes the point itself.
+    expect(freeSpot(emptyCourse(), 'straight', 0, 120, 340)).toEqual([100, 300]);
+  });
+
+  it('starts an empty course on a free piece when the first piece lies on its second port', () => {
+    expect(addPiece(emptyCourse(), 'curve45', null, 1).pieces[0]).toMatchObject({ port: 1, free: null });
+    expect(addPiece(emptyCourse(), 'curve45', null, 0).pieces[0]).toEqual({ part: 'curve45', at: 'origin' });
   });
 });
