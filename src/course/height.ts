@@ -152,8 +152,14 @@ export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTr
       const a = legAt(section.left, -1);
       const b = legAt(section.right, 1);
       if (a === null || b === null) continue;
-      const left = edgeTop(a);
-      const right = edgeTop(b);
+      // Past the road's edge the stand is no higher than the edge itself, so
+      // on a tilted road (a bank) its high end does not rise beside the fence.
+      const cornerTop = (x: number) => {
+        const p = edgeTop(x);
+        return p.setY(Math.min(p.y, edgeTop(Math.min(section.right, Math.max(section.left, x))).y));
+      };
+      const left = cornerTop(a);
+      const right = cornerTop(b);
       // The crossbar must pass over any road between the legs.
       let under = -Infinity;
       for (let x = a; x <= b; x += SCAN_STEP) under = Math.max(under, below(x));

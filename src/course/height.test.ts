@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { Vector3 } from 'three';
+import { Group, Raycaster, Vector3 } from 'three';
 import { GLOBAL_SPEC, getPart } from './catalog';
 import { partGeometry, partStands, pointOnFrame, STAND_BEAM, STAND_DEPTH, STAND_LEG } from './geometry';
 import { emptyCourse, layoutCourse, type Course } from './course';
 import { addPiece, setPose } from './edit';
 import { BRIDGE_HEIGHT } from './profile';
 import { atLevel, pieceHeights, SUPPORT_MIN_GAP, SUPPORT_OVERHANG, SUPPORT_REACH, supports } from './height';
+import { buildCourseMeshes } from './mesh';
 import { basicOval, chain } from './presets';
 
 /** A lone straight with its start port `y` mm off the floor. */
@@ -163,6 +164,28 @@ describe('supports', () => {
     }
   });
 
+  it('keeps stands under a banked U-turn, past the high edge too', () => {
+    // The bank U-turn from the user's report (2026-10-20).
+    const course: Course = {
+      v: 1,
+      catalog: 1,
+      pieces: [
+        { part: 'straight', port: 0, free: null, pose: { pos: [0, 0, 540], rot: [0, 0, 0] } },
+        { part: 'bank-approach-20', port: 0, to: [0, 1] },
+        { part: 'curve45', port: 0, to: [1, 1] },
+        { part: 'curve45', port: 0, to: [2, 1] },
+        { part: 'straight', port: 0, to: [3, 1] },
+        { part: 'curve45', port: 0, to: [4, 1] },
+        { part: 'curve45', port: 0, to: [5, 1] },
+        { part: 'bank-approach-20', port: 1, to: [6, 1] },
+        { part: 'straight', port: 0, to: [7, 0] },
+      ],
+    };
+    const layout = layoutCourse(course);
+    expect(supports(layout).length).toBeGreaterThan(0);
+    expect(highestPoke(layout)).toBeLessThan(0.5);
+  });
+
   it('leaves the road to span road below when the crossbar would not clear it', () => {
     const below = addPiece(emptyCourse(), 'straight', null);
     expect(supports(layoutCourse(raised(60, below)))).toEqual([]);
@@ -202,3 +225,27 @@ describe('supports', () => {
     expect(centre.distanceTo(pointOnFrame(f, -GLOBAL_SPEC.lanePitch / 2, centre.y - f.elements[13]))).toBeLessThan(1e-6);
   });
 });
+
+/** How far (mm) any corner of any stand's top rises above the underside of the road over it. */
+function highestPoke(layout: ReturnType<typeof layoutCourse>): number {
+  const scene = new Group();
+  for (const g of buildCourseMeshes(layout)) scene.add(g);
+  scene.updateMatrixWorld(true);
+  const ray = new Raycaster();
+  let worst = -Infinity;
+  for (const st of supports(layout)) {
+    const across = st.right.clone().sub(st.left).setY(0).normalize();
+    for (const [top, inward] of [[st.left, 1], [st.right, -1]] as const) {
+      for (const w of [0, STAND_LEG]) {
+        for (const d of [-STAND_DEPTH / 2, STAND_DEPTH / 2]) {
+          const q = top.clone().add(across.clone().multiplyScalar(inward * w)).add(st.along.clone().multiplyScalar(d));
+          ray.set(new Vector3(q.x, 10000, q.z), new Vector3(0, -1, 0));
+          const ys = ray.intersectObjects(scene.children, true).map((h) => h.point.y).filter((y) => y > 0);
+          if (ys.length) worst = Math.max(worst, q.y - Math.min(...ys));
+        }
+      }
+    }
+  }
+  return worst;
+}
+
