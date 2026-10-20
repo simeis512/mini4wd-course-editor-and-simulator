@@ -206,6 +206,21 @@ export class OrbitView {
     }
   }
 
+  /** Floor point (course mm, X/Z) the camera looks at. */
+  get centre(): [number, number] {
+    return [this.controls.target.x / MM, this.controls.target.z / MM];
+  }
+
+  /** Floor point (course mm, X/Z) under a point on the page, or null when it is off the view or above the horizon. */
+  groundAt(clientX: number, clientY: number): [number, number] | null {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    if (clientX < r.left || clientY < r.top || clientX > r.right || clientY > r.bottom) return null;
+    const at = this.raycaster({ clientX, clientY }).ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), new THREE.Vector3());
+    if (!at) return null;
+    const p = this.root.worldToLocal(at);
+    return [p.x, p.z];
+  }
+
   /** Aim the camera at the whole course. */
   fit(): void {
     this.root.updateMatrixWorld(true);
@@ -240,7 +255,7 @@ export class OrbitView {
     }
   }
 
-  private raycaster(e: PointerEvent): THREE.Raycaster {
+  private raycaster(e: { clientX: number; clientY: number }): THREE.Raycaster {
     const r = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     const ray = new THREE.Raycaster();

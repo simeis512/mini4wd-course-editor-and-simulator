@@ -87,6 +87,19 @@ export class TopView {
     return this.scale;
   }
 
+  /** World point (mm) at the middle of the view. */
+  get centre(): [number, number] {
+    return [this.cx, this.cz];
+  }
+
+  /** World X/Z (mm) under a point on the page, or null when it is off the view. */
+  worldAt(clientX: number, clientY: number): [number, number] | null {
+    const r = this.canvas.getBoundingClientRect();
+    const [sx, sy] = [clientX - r.left, clientY - r.top];
+    if (sx < 0 || sy < 0 || sx > r.width || sy > r.height) return null;
+    return this.toWorld(sx, sy);
+  }
+
   /** Zoom and pan so the whole course fits. */
   fit(): void {
     const pts = this.outlines.flatMap((o) => o.polygon);

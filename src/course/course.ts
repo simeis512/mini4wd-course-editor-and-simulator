@@ -1,5 +1,5 @@
 import { Matrix4, Vector3 } from 'three';
-import { CATALOG_VERSION, getPart, portLaneOffsets, type PartDef } from './catalog';
+import { CATALOG_VERSION, getPart, GLOBAL_SPEC, portLaneOffsets, type PartDef } from './catalog';
 import { attach, FACE, facingError, IDENTITY_POSE, matrixToPose, partGeometry, poseToMatrix, type FrameError, type Pose } from './geometry';
 
 /** A placed piece. Pieces only refer to pieces before them (spec 5.1). */
@@ -231,12 +231,73 @@ function clone(course: Course): Course {
 /** Place `partId` with its `port` facing the open port `at`, or at the origin. */
 export function addPiece(course: Course, partId: string, at: PortRef | null, port = 0, variant?: number): Course {
   const next = clone(course);
-  const rec: PieceRec = at ? { part: partId, port, to: [at.piece, at.port] } : course.pieces.length === 0
+  const rec: PieceRec = at ? { part: partId, port, to: [at.piece, at.port] } : course.pieces.length === 0 && port === 0
     ? { part: partId, at: 'origin' }
     : { part: partId, port, free: null, pose: IDENTITY_POSE };
   if (variant !== undefined) rec.variant = variant;
   next.pieces.push(rec);
   return next;
+}
+
+/** Room left around a piece's lane centrelines: the outer lane and its fence. */
+const FOOTPRINT_MARGIN = GLOBAL_SPEC.lanePitch * 1.5 + GLOBAL_SPEC.fenceThickness;
+
+/** Rough top-view bounds of a placed piece, world X/Z in mm: [x0, x1, z0, z1]. */
+export function footprint(pc: PlacedPiece): [number, number, number, number] {
+  const p = new Vector3();
+  const xs: number[] = [];
+  const zs: number[] = [];
+  for (const track of partGeometry(pc.part).tracks) {
+    for (const f of track.samples) {
+      p.setFromMatrixPosition(f).applyMatrix4(pc.matrix);
+      xs.push(p.x);
+      zs.push(p.z);
+    }
+  }
+  const m = FOOTPRINT_MARGIN;
+  return [Math.min(...xs) - m, Math.max(...xs) + m, Math.min(...zs) - m, Math.max(...zs) + m];
+}
+
+/**
+ * Add `partId` on its own, joined by nothing: lying on the floor by its
+ * `port`, heading +Z, with the middle of its footprint at (x, z) (spec 8).
+ */
+export function addFreePiece(course: Course, partId: string, port: number, x: number, z: number, variant?: number): Course {
+  const rec: PieceRec = { part: partId, port, free: null, pose: IDENTITY_POSE };
+  const part = getPart(partId);
+  const [x0, x1, z0, z1] = footprint({ rec, part, matrix: attach(new Matrix4(), partGeometry(part).ports[port]), ports: [] });
+  const round = (v: number) => Math.round(v * 10) / 10;
+  rec.pose = { pos: [round(x - (x0 + x1) / 2), 0, round(z - (z0 + z1) / 2)], rot: [0, 0, 0] };
+  if (variant !== undefined) rec.variant = variant;
+  const next = clone(course);
+  next.pieces.push(rec);
+  return next;
+}
+
+/**
+ * The nearest spot to (x, z), on a grid of `step` mm, where `partId` added by
+ * `addFreePiece` overlaps no piece already placed.
+ */
+export function freeSpot(course: Course, partId: string, port: number, x: number, z: number, step = 100): [number, number] {
+  const taken = layoutCourse(course).pieces.map(footprint);
+  // The new piece's bounds when centred on the origin; elsewhere they just shift.
+  const [p0, p1, q0, q1] = footprint(layoutCourse(addFreePiece(emptyCourse(), partId, port, 0, 0)).pieces[0]);
+  const fits = (cx: number, cz: number) =>
+    taken.every(([x0, x1, z0, z1]) => cx + p1 <= x0 || cx + p0 >= x1 || cz + q1 <= z0 || cz + q0 >= z1);
+  const x0 = Math.round(x / step) * step;
+  const z0 = Math.round(z / step) * step;
+  for (let ring = 0; ring <= 60; ring++) {
+    const spots: [number, number][] = [];
+    for (let i = -ring; i <= ring; i++) {
+      for (let j = -ring; j <= ring; j++) {
+        if (Math.max(Math.abs(i), Math.abs(j)) === ring) spots.push([x0 + i * step, z0 + j * step]);
+      }
+    }
+    spots.sort((a, b) => Math.hypot(a[0] - x, a[1] - z) - Math.hypot(b[0] - x, b[1] - z));
+    const spot = spots.find(([cx, cz]) => fits(cx, cz));
+    if (spot) return spot;
+  }
+  return [x0, z0];
 }
 
 /** Re-anchor `rec` (which faced `target`) as a free piece in world space. */

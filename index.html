@@ -35,8 +35,11 @@
       #panel { grid-area: panel; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); padding: 10px 12px; }
       #panel h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 6px; }
       #panel h2:first-child { margin-top: 0; }
-      #palette { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-      #palette button { text-align: left; }
+      #palette { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+      #palette button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; font-size: 12px; line-height: 1.3; text-align: center; touch-action: none; user-select: none; -webkit-user-select: none; }
+      #palette button.dim { opacity: 0.55; }
+      #palette .part-icon { width: 100%; max-width: 64px; aspect-ratio: 1; pointer-events: none; }
+      body.dragging-part, body.dragging-part * { cursor: grabbing !important; }
       #palette small, .muted { color: var(--muted); }
       .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
       .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
