@@ -32,6 +32,8 @@ AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari 
 - ドラッグで移動、ホイール／ピンチで拡大縮小。Ctrl+Z / Ctrl+Y、Delete、F（反転）も使える
 - コースは URL（`#c=...`）に自動で保存される。「URLをコピー」で共有、JSON の書き出し／読み込みも可能
 - 開いた口どうしが 10mm・3° 以内で向かい合うとループが閉じたとみなし、誤差を表示する
+- 2D の左上で「高さで色分け」と、指定の高さ以上のピースだけを表示するフィルターを切り替えられる（ほかのピースは薄く表示され、選べない）
+- 3D では、持ち上がった路面の下に支柱を自動で表示する（見た目だけ。下を別の路面が通る所には立てない）
 
 ## 構成
 
@@ -43,8 +45,9 @@ AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari 
 - `src/course/joining.ts` 連結と分断、ドラッグ中に口を引き寄せる磁石
 - `src/course/add.ts` パーツを口につなぐ・ドロップ先を選ぶ
 - `src/course/codec.ts` コース ⇄ URL ハッシュ（バイナリ → deflate-raw → base64url）
-- `src/course/mesh.ts` 3D メッシュ生成（路面＋フェンスの掃引。シーンは m 単位）
-- `src/editor/app.ts` エディタの状態と操作。`panels.ts` パネル表示、`history.ts` 元に戻す／やり直し
+- `src/course/height.ts` ピースの高さの範囲（階層フィルター）と支柱の位置
+- `src/course/mesh.ts` 3D メッシュ生成（路面＋フェンスの掃引、支柱。シーンは m 単位）
+- `src/editor/app.ts` エディタの状態と操作。`panels.ts` パネル表示、`levels.ts` 2D の高さ表示の設定、`history.ts` 元に戻す／やり直し
 - `src/editor/view2d.ts` / `view3d.ts` 2D 編集ビュー、3D/AR ビュー（共通インターフェースは `view.ts`）
 - `src/physics/` Rapier の物理ワールド（シミュレーター用、未接続）
 
