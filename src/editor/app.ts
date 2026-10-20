@@ -64,7 +64,14 @@ export class EditorApp {
   private writtenHash = '';
   private hashWrite = Promise.resolve();
   /** A piece being dragged in the top view, and the course as it would be if dropped now. */
-  private drag: { index: number; start: Course; group: Set<number>; preview: Course | null } | null = null;
+  private drag: {
+    index: number;
+    start: Course;
+    group: Set<number>;
+    preview: Course | null;
+    /** The pointer is over the side panel: dropping there puts a lone piece away (deletes it). */
+    overPanel: boolean;
+  } | null = null;
   /** A part being dragged out of the parts list, and the course as it would be if dropped now. */
   private paletteDrag: {
     partId: string;
@@ -190,7 +197,7 @@ export class EditorApp {
 
   /**
    * Join `partId` to the open port `at`. `port` fixes which of its ports
-   * joins (the side of a handed part); otherwise the way round that real
+   * joins (the way round chosen in the parts list); otherwise the way round that real
    * parts allow wins (a bank approach's floor end on the level). Null when
    * the part cannot join there.
    */
@@ -330,8 +337,28 @@ export class EditorApp {
   }
 
   private dragStart(index: number): boolean {
-    this.drag = { index, start: this.course, group: movingGroup(this.layout, index, this.moveAlone), preview: null };
+    this.drag = { index, start: this.course, group: movingGroup(this.layout, index, this.moveAlone), preview: null, overPanel: false };
     return true;
+  }
+
+  /** Follow a piece drag onto the side panel, where a lone piece can be put away. */
+  private dragOverPanel(e: PointerEvent): void {
+    const d = this.drag;
+    if (!d?.preview) return;
+    const r = $('panel').getBoundingClientRect();
+    const over = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    if (over !== d.overPanel) {
+      d.overPanel = over;
+      const lone = d.group.size === 1;
+      const zone = $('trash-zone');
+      zone.hidden = !over;
+      zone.classList.toggle('blocked', !lone);
+      zone.textContent = lone
+        ? 'ここで離すとピースを片づけます（削除）'
+        : 'つながっているピースは片づけられません。分断するか「このピースだけ動かす」にしてください';
+    }
+    // Show the course without the piece while it would be put away.
+    if (over && d.group.size === 1) (this.mode === '3d' ? this.orbit : this.top).setData(layoutCourse(deletePiece(d.start, d.index)), null);
   }
 
   private dragMove(dx: number, dz: number, noSnap: boolean): void {
@@ -353,8 +380,13 @@ export class EditorApp {
   private dragEnd(commit: boolean): void {
     const d = this.drag;
     this.drag = null;
+    $('trash-zone').hidden = true;
     if (!d?.preview) return;
-    if (commit) this.commit(tidyCuts(d.preview), { kind: 'piece', index: d.index });
+    if (commit && d.overPanel && d.group.size === 1) {
+      this.commit(deletePiece(d.start, d.index));
+      this.toast('ピースを片づけました（元に戻す で戻せます）');
+    } else if (commit && d.overPanel) this.refresh(false);
+    else if (commit) this.commit(tidyCuts(d.preview), { kind: 'piece', index: d.index });
     else this.refresh(false);
   }
 
@@ -450,8 +482,8 @@ export class EditorApp {
   private buildPalette(): void {
     const palette = $('palette');
     for (const part of PARTS) {
-      // A handed part comes both ways round: left on port 0, right on port 1 (#43).
-      const sides: [number | undefined, string][] = part.handed ? [[0, '左'], [1, '右']] : [[undefined, '']];
+      // A part that differs turned round comes both ways: port 0 first, then port 1 (#43).
+      const sides: [number | undefined, string][] = part.ways ? [[0, part.ways[0]], [1, part.ways[1]]] : [[undefined, '']];
       for (const [port, side] of sides) {
         const b = document.createElement('button');
         b.dataset.part = part.id;
@@ -472,6 +504,8 @@ export class EditorApp {
   }
 
   private bindUi(): void {
+    // Views capture the pointer while dragging, so its moves still bubble up here.
+    window.addEventListener('pointermove', (e) => this.dragOverPanel(e));
     $('mode-2d').addEventListener('click', () => this.setMode('2d'));
     $('mode-3d').addEventListener('click', () => this.setMode('3d'));
     $('undo').addEventListener('click', () => this.undo());

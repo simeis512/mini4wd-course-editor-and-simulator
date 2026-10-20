@@ -22,8 +22,15 @@ export function partIcon(part: PartDef, port: number, variant?: number): SVGSVGE
       const samples = track.samples.map((s) => matrix.clone().multiply(s));
       const edge = (x: number) => samples.map((f) => (pointOnFrame(f, x, 0, p), [-p.x, -p.z] as [number, number]));
       const section = crossSection(track.lanes);
+      const left = edge(section.left);
+      const right = edge(section.right);
       return {
-        polygon: [...edge(section.left), ...edge(section.right).reverse()],
+        polygon: [...left, ...right.slice().reverse()],
+        // Strips across the road between samples, to shade by height.
+        strips: samples.slice(1).map((f, i) => ({
+          points: [left[i], left[i + 1], right[i + 1], right[i]],
+          height: (samples[i].elements[13] + f.elements[13]) / 2,
+        })),
         fences: section.fences.map(edge),
         height: samples.reduce((sum, f) => sum + f.elements[13], 0) / samples.length,
       };
@@ -40,6 +47,10 @@ export function partIcon(part: PartDef, port: number, variant?: number): SVGSVGE
   svg.setAttribute('aria-hidden', 'true');
   svg.classList.add('part-icon');
   const color = variantOf(part, variant).color;
+  // Lower road is drawn darker, so a slope shows which way it climbs.
+  const heights = shapes.flatMap((s) => s.strips.map((q) => q.height));
+  const low = Math.min(...heights);
+  const rise = Math.max(...heights) - low;
   const points = (q: [number, number][]) => q.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
   for (const s of shapes) {
     const road = document.createElementNS(SVG, 'polygon');
@@ -48,6 +59,15 @@ export function partIcon(part: PartDef, port: number, variant?: number): SVGSVGE
     road.setAttribute('stroke', 'rgba(0,0,0,0.55)');
     road.setAttribute('stroke-width', '8');
     svg.appendChild(road);
+    for (const q of rise > 1 ? s.strips : []) {
+      const dark = 0.45 * (1 - (q.height - low) / rise);
+      if (dark < 0.01) continue;
+      const shade = document.createElementNS(SVG, 'polygon');
+      shade.setAttribute('points', points(q.points));
+      shade.setAttribute('fill', '#000');
+      shade.setAttribute('fill-opacity', dark.toFixed(2));
+      svg.appendChild(shade);
+    }
     for (const f of s.fences) {
       const line = document.createElementNS(SVG, 'polyline');
       line.setAttribute('points', points(f));

@@ -49,6 +49,8 @@
       .pose-grid input { width: 100%; min-width: 0; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
       .ok { color: var(--ok); }
       .warn { color: var(--warn); }
+      #trash-zone { grid-area: panel; z-index: 5; pointer-events: none; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 15px; font-weight: 600; color: #fff; background: rgba(216, 50, 58, 0.82); border: 3px dashed #fff; }
+      #trash-zone.blocked { background: rgba(60, 64, 74, 0.9); font-weight: 400; font-size: 13px; }
       #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #000c; padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 10; }
       #toast.show { opacity: 1; }
       [hidden] { display: none !important; }
@@ -122,7 +124,7 @@
           <label><input id="snap" type="checkbox" checked /> スナップ</label>
           <label><input id="move-alone" type="checkbox" /> このピースだけ動かす</label>
         </div>
-        <p class="hint">選んだピースをドラッグで移動（3D ではつかんだ高さの水平面上を動きます）。つながっているピースは一緒に動きます。切り離すには緑のつなぎ目の印を選んで「分断」。スナップは 10mm / 15°、Shift を押している間は解除。開いた口に近づけると吸着してつながります。</p>
+        <p class="hint">選んだピースをドラッグで移動（3D ではつかんだ高さの水平面上を動きます）。つながっているピースは一緒に動きます。切り離すには緑のつなぎ目の印を選んで「分断」。スナップは 10mm / 15°、Shift を押している間は解除。開いた口に近づけると吸着してつながります。つながっていないピースは、右のパネルへドラッグすると片づけ（削除）できます。</p>
       </section>
       <section id="joint-panel" hidden>
         <h2>選択中のつなぎ目</h2>
@@ -142,6 +144,7 @@
       <h2>コース</h2>
       <div id="info"></div>
     </aside>
+    <div id="trash-zone" hidden></div>
     <div id="toast"></div>
     <div id="ar-overlay" hidden>
       <button id="ar-exit">AR終了</button>
