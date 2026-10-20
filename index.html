@@ -47,6 +47,16 @@
       .pose-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
       .pose-grid label { display: flex; gap: 4px; align-items: center; white-space: nowrap; }
       .pose-grid input { width: 100%; min-width: 0; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+      #context { position: absolute; z-index: 4; width: 290px; max-width: calc(100% - 16px); max-height: calc(100% - 16px); overflow-y: auto; padding: 10px 12px; background: rgba(36, 39, 46, 0.97); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 20px #0008; }
+      #context button, #context select { min-height: 30px; padding: 3px 8px; }
+      #context .row { gap: 4px; }
+      #context .title { font-weight: 600; padding-right: 28px; }
+      #context .close { position: absolute; top: 6px; right: 6px; min-height: 0; padding: 2px 8px; border: 0; background: transparent; font-size: 18px; line-height: 1; }
+      #context details { margin-top: 8px; }
+      #context summary, #course-info summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+      #course-info { position: absolute; left: 10px; bottom: 10px; z-index: 3; max-width: min(320px, calc(100% - 150px)); max-height: calc(100% - 20px); overflow-y: auto; padding: 6px 10px; background: rgba(36, 39, 46, 0.92); border: 1px solid var(--line); border-radius: 8px; }
+      #course-info summary { color: var(--text); font-size: 14px; }
+      #course-info[open] summary { margin-bottom: 4px; }
       .ok { color: var(--ok); }
       .warn { color: var(--warn); }
       #trash-zone { grid-area: panel; z-index: 5; pointer-events: none; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 15px; font-weight: 600; color: #fff; background: rgba(216, 50, 58, 0.82); border: 3px dashed #fff; }
@@ -86,63 +96,67 @@
       <canvas id="view2d"></canvas>
       <div id="view3d" hidden></div>
       <button id="fit">全体を表示</button>
+      <div id="context" hidden>
+        <button id="context-close" class="close" title="選択を解除 (Esc)" aria-label="閉じる">×</button>
+        <section id="selection-panel" hidden>
+          <div id="selection-name" class="title"></div>
+          <div class="row">
+            <label for="variant">色</label>
+            <select id="variant"></select>
+            <button id="flip" title="反転 (F)">反転</button>
+            <button id="delete" title="削除 (Delete)">削除</button>
+          </div>
+          <div class="row">
+            <button id="rot-left" title="左に15°回す (Q、Shift で 1°)">⟲15°</button>
+            <button id="rot-right" title="右に15°回す (E、Shift で 1°)">⟳15°</button>
+            <button id="raise" title="10mm 上げる">↑10mm</button>
+            <button id="lower" title="10mm 下げる">↓10mm</button>
+          </div>
+          <div class="row">
+            <label title="10mm / 15°刻みで動かす。Shift を押している間は解除"><input id="snap" type="checkbox" checked /> スナップ</label>
+            <label title="つながっているピースを置いて、このピースだけ動かす"><input id="move-alone" type="checkbox" /> このピースだけ動かす</label>
+          </div>
+          <div id="group-info" class="hint"></div>
+          <details>
+            <summary>詳しく（配置の数値など）</summary>
+            <div id="selection-note" class="hint"></div>
+            <div id="placement-base" class="hint"></div>
+            <div class="pose-grid">
+              <label>前 <input id="pose-z" type="number" step="10" /> mm</label>
+              <label>向き <input id="pose-yaw" type="number" step="15" /> °</label>
+              <label>左 <input id="pose-x" type="number" step="10" /> mm</label>
+              <label>上り <input id="pose-pitch" type="number" step="1" /> °</label>
+              <label>上 <input id="pose-y" type="number" step="10" /> mm</label>
+              <label>傾き <input id="pose-roll" type="number" step="1" /> °</label>
+            </div>
+            <p class="hint">ドラッグで移動（3D ではつかんだ高さの水平面上）。開いた口に近づけると吸着してつながります。つながっていないピースはパーツ一覧へドラッグすると片づけ（削除）できます。</p>
+          </details>
+        </section>
+        <section id="joint-panel" hidden>
+          <div id="joint-name" class="title"></div>
+          <div class="row">
+            <button id="split" title="分断 (Delete)">分断</button>
+          </div>
+          <p class="hint">分断すると、口は向き合ったまま切り離されます（赤い矢印）。ピースを動かすと、それぞれ別に動きます。</p>
+        </section>
+        <section id="port-panel" hidden>
+          <div class="title">開いた口</div>
+          <p class="hint">パーツ一覧のパーツをクリックすると、この口につなぎます。</p>
+          <div id="join-row" class="row">
+            <span id="join-name"></span>
+            <button id="join">とつなぐ</button>
+          </div>
+        </section>
+      </div>
+      <details id="course-info">
+        <summary id="course-summary">コース</summary>
+        <div id="info"></div>
+      </details>
     </main>
     <aside id="panel">
       <h2>パーツ</h2>
       <div id="palette"></div>
       <p id="palette-hint" class="hint"></p>
-      <section id="selection-panel" hidden>
-        <h2>選択中のピース</h2>
-        <div id="selection-name"></div>
-        <div id="selection-note" class="hint"></div>
-        <div class="row">
-          <label for="variant">色</label>
-          <select id="variant"></select>
-        </div>
-        <div class="row">
-          <button id="flip" title="反転 (F)">反転</button>
-          <button id="delete" title="削除 (Delete)">削除</button>
-        </div>
-        <div id="group-info" class="hint"></div>
-        <h2>配置</h2>
-        <div id="placement-base" class="hint"></div>
-        <div class="pose-grid">
-          <label>前 <input id="pose-z" type="number" step="10" /> mm</label>
-          <label>向き <input id="pose-yaw" type="number" step="15" /> °</label>
-          <label>左 <input id="pose-x" type="number" step="10" /> mm</label>
-          <label>上り <input id="pose-pitch" type="number" step="1" /> °</label>
-          <label>上 <input id="pose-y" type="number" step="10" /> mm</label>
-          <label>傾き <input id="pose-roll" type="number" step="1" /> °</label>
-        </div>
-        <div class="row">
-          <button id="rot-left" title="左に15°回す (Q、Shift で 1°)">⟲ 15°</button>
-          <button id="rot-right" title="右に15°回す (E、Shift で 1°)">⟳ 15°</button>
-          <button id="raise" title="10mm 上げる">↑ 10mm</button>
-          <button id="lower" title="10mm 下げる">↓ 10mm</button>
-        </div>
-        <div class="row">
-          <label><input id="snap" type="checkbox" checked /> スナップ</label>
-          <label><input id="move-alone" type="checkbox" /> このピースだけ動かす</label>
-        </div>
-        <p class="hint">選んだピースをドラッグで移動（3D ではつかんだ高さの水平面上を動きます）。つながっているピースは一緒に動きます。切り離すには緑のつなぎ目の印を選んで「分断」。スナップは 10mm / 15°、Shift を押している間は解除。開いた口に近づけると吸着してつながります。つながっていないピースは、右のパネルへドラッグすると片づけ（削除）できます。</p>
-      </section>
-      <section id="joint-panel" hidden>
-        <h2>選択中のつなぎ目</h2>
-        <div id="joint-name"></div>
-        <div class="row">
-          <button id="split" title="分断 (Delete)">分断</button>
-        </div>
-        <p class="hint">分断すると、口は向き合ったまま切り離されます（赤い矢印）。ピースを動かすと、それぞれ別に動きます。</p>
-      </section>
-      <section id="port-panel" hidden>
-        <h2>選択中の口</h2>
-        <div class="row">
-          <span id="join-name"></span>
-          <button id="join">とつなぐ</button>
-        </div>
-      </section>
-      <h2>コース</h2>
-      <div id="info"></div>
     </aside>
     <div id="trash-zone" hidden></div>
     <div id="toast"></div>

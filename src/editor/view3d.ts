@@ -65,6 +65,7 @@ export class OrbitView {
 
     this.camera.position.set(2, 2.5, -2);
     this.controls = new OrbitControls(this.camera, renderer.domElement);
+    this.controls.addEventListener('change', () => this.handlers.onViewChange?.());
 
     // Our own DOM overlay for AR: an exit button and a status line, so
     // problems on the phone are visible instead of a silent black screen.
@@ -206,6 +207,15 @@ export class OrbitView {
     }
   }
 
+  /** Point on the page over the course point (mm), or null when it is behind the camera. */
+  clientOf(x: number, y: number, z: number): [number, number] | null {
+    this.root.updateMatrixWorld();
+    const p = this.root.localToWorld(new THREE.Vector3(x, y, z)).project(this.camera);
+    if (p.z > 1) return null;
+    const r = this.renderer.domElement.getBoundingClientRect();
+    return [r.left + ((p.x + 1) / 2) * r.width, r.top + ((1 - p.y) / 2) * r.height];
+  }
+
   /** Floor point (course mm, X/Z) the camera looks at. */
   get centre(): [number, number] {
     return [this.controls.target.x / MM, this.controls.target.z / MM];
@@ -243,6 +253,7 @@ export class OrbitView {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
+    this.handlers.onViewChange?.();
   }
 
   private render(): void {

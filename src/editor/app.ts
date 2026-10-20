@@ -86,14 +86,17 @@ export class EditorApp {
 
   constructor() {
     const onPick = (s: Selection) => this.select(s);
+    const onViewChange = () => this.placeContext();
     this.top = new TopView($('view2d'), {
       onPick,
+      onViewChange,
       onDragStart: (index) => this.dragStart(index),
       onDragMove: (dx, dz, noSnap) => this.dragMove(dx, dz, noSnap),
       onDragEnd: (commit) => this.dragEnd(commit),
     });
     this.orbit = new OrbitView($('view3d'), {
       onPick,
+      onViewChange,
       onDragStart: (index) => this.dragStart(index),
       onDragMove: (dx, dz, noSnap) => this.dragMove(dx, dz, noSnap),
       onDragEnd: (commit) => this.dragEnd(commit),
@@ -267,6 +270,7 @@ export class EditorApp {
       if (Math.hypot(e.clientX - d.from.x, e.clientY - d.from.y) <= 6) return;
       d.active = true;
       document.body.classList.add('dragging-part');
+      $('context').hidden = true;
     }
     const at = this.mode === '3d' ? this.orbit.groundAt(e.clientX, e.clientY) : this.top.worldAt(e.clientX, e.clientY);
     const preview = at && this.dropCourse(d.partId, d.port, at[0], at[1], e.shiftKey);
@@ -368,6 +372,7 @@ export class EditorApp {
       dx = Math.round(dx / SNAP_STEP) * SNAP_STEP;
       dz = Math.round(dz / SNAP_STEP) * SNAP_STEP;
     }
+    $('context').hidden = true;
     let next = moveGroup(d.start, d.group, new Matrix4().makeTranslation(dx, 0, dz));
     // The 3D view has no single scale, so it uses the plain magnet distance.
     const px = this.mode === '2d' ? MAGNET_PX / this.top.pxPerMm : 0;
@@ -385,8 +390,7 @@ export class EditorApp {
     if (commit && d.overPanel && d.group.size === 1) {
       this.commit(deletePiece(d.start, d.index));
       this.toast('ピースを片づけました（元に戻す で戻せます）');
-    } else if (commit && d.overPanel) this.refresh(false);
-    else if (commit) this.commit(tidyCuts(d.preview), { kind: 'piece', index: d.index });
+    } else if (commit && !d.overPanel) this.commit(tidyCuts(d.preview), { kind: 'piece', index: d.index });
     else this.refresh(false);
   }
 
@@ -506,6 +510,9 @@ export class EditorApp {
   private bindUi(): void {
     // Views capture the pointer while dragging, so its moves still bubble up here.
     window.addEventListener('pointermove', (e) => this.dragOverPanel(e));
+    $<HTMLDetailsElement>('course-info').addEventListener('toggle', () => this.placeContext());
+    $('context').querySelector('details')!.addEventListener('toggle', () => this.placeContext());
+    $('context-close').addEventListener('click', () => this.select(null));
     $('mode-2d').addEventListener('click', () => this.setMode('2d'));
     $('mode-3d').addEventListener('click', () => this.setMode('3d'));
     $('undo').addEventListener('click', () => this.undo());
@@ -626,12 +633,12 @@ export class EditorApp {
       $('joint-name').textContent = `${name(s.a)} と ${name(s.b)} のつなぎ目`;
     }
     const near = s?.kind === 'port' ? joinableNear(layout, s.ref) : null;
-    $('port-panel').hidden = !near;
+    $('port-panel').hidden = s?.kind !== 'port';
+    $('join-row').hidden = !near;
     if (near) $('join-name').textContent = `近くの口（#${near.piece + 1} ${layout.pieces[near.piece].part.name}）`;
 
     // Course summary.
     const info: string[] = [];
-    info.push(`<div>ピース数: ${course.pieces.length}</div>`);
     const islands = groupCount(layout);
     if (islands > 1) info.push(`<div class="muted">つながりのまとまり: ${islands} 個</div>`);
     const counts = [...partCounts(course)].map(([id, n]) => `<li>${getPart(id).name} × ${n}</li>`);
@@ -651,6 +658,52 @@ export class EditorApp {
       info.push(`<div class="muted">ループ閉じ（#${c.a.piece + 1}–#${c.b.piece + 1}）: 誤差 ${c.distance.toFixed(1)}mm / ${c.angle.toFixed(1)}°</div>`);
     }
     $('info').innerHTML = info.join('');
+    // The folded course box still shows the gist (#45).
+    const status = course.pieces.length === 0 ? '' : layout.open.length > 0 ? `・未接続の口 ${layout.open.length}` : '・閉じています';
+    $('course-summary').innerHTML = `コース: ${course.pieces.length} ピース<span class="${layout.open.length || layout.problems.length ? 'warn' : 'ok'}">${status}</span>${layout.problems.length ? '<span class="warn">・問題あり</span>' : ''}`;
+
+    // Settings for the selection float over the editor, next to it (#45).
+    $('context').hidden = s === null;
+    this.placeContext();
+  }
+
+  /** Put the selection's settings beside it on screen, keeping them inside the editor. */
+  private placeContext(): void {
+    const box = $('context');
+    const s = this.selection;
+    if (box.hidden || !s) return;
+    const view = this.mode === '3d' ? this.orbit : this.top;
+    const layout = this.layout;
+    // World points that outline what is selected.
+    let pts: [number, number, number][];
+    if (s.kind === 'piece') {
+      const pc = layout.pieces[s.index];
+      const [x0, x1, z0, z1] = footprint(pc);
+      const y = pc.matrix.elements[13];
+      pts = [[x0, y, z0], [x0, y, z1], [x1, y, z0], [x1, y, z1]];
+    } else {
+      const ref = s.kind === 'port' ? s.ref : s.a;
+      const e = layout.pieces[ref.piece].ports[ref.port].elements;
+      pts = [[e[12], e[13], e[14]]];
+    }
+    const screen = pts.map((q) => view.clientOf(...q)).filter((q): q is [number, number] => q !== null);
+    const stage = $('stage').getBoundingClientRect();
+    const margin = 8;
+    const w = box.offsetWidth;
+    const h = box.offsetHeight;
+    let left = stage.width - w - margin;
+    let top = margin;
+    if (screen.length) {
+      const xs = screen.map((q) => q[0] - stage.left);
+      const ys = screen.map((q) => q[1] - stage.top);
+      const [l, r] = [Math.min(...xs), Math.max(...xs)];
+      const gap = 24;
+      // Beside the selection: the right if it fits, else the left, else over it.
+      left = r + gap + w <= stage.width - margin ? r + gap : l - gap - w >= margin ? l - gap - w : left;
+      top = (Math.min(...ys) + Math.max(...ys)) / 2 - h / 2;
+    }
+    box.style.left = `${Math.max(margin, Math.min(left, stage.width - w - margin))}px`;
+    box.style.top = `${Math.max(margin, Math.min(top, stage.height - h - margin))}px`;
   }
 
   private toastTimer = 0;
