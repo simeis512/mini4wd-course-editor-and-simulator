@@ -5,7 +5,7 @@ import { pointOnFrame } from '../course/geometry';
 import { atLevel, pieceHeights, type HeightRange } from '../course/height';
 import { halfWidth, insidePolygon, roadOutline, trackEdge, worldTracks } from '../course/mesh';
 import { colorRange, heightColor, type HeightView } from './levels';
-import type { DragHandlers, PickHandlers, Selection } from './selection';
+import { JOINT_HIT, PORT_HIT, type DragHandlers, type PickHandlers, type Selection } from './selection';
 import type { EditorView } from './view';
 
 /** One stretch of road of a piece, as seen from above. */
@@ -22,10 +22,6 @@ interface Outline {
 
 /** Pixels a pointer may move and still count as a tap. */
 const TAP_SLOP = 6;
-/** Screen radius for hitting a port, px. */
-const PORT_HIT = 22;
-/** Screen radius for hitting a joint, px: small so pieces stay easy to pick. */
-const JOINT_HIT = 12;
 
 /**
  * Top-down 2D editor view drawn on a canvas. Pointer Events only, so mouse,

@@ -1,5 +1,10 @@
 import type { PortRef } from '../course/course';
 
+/** Screen radius for hitting a port, px. */
+export const PORT_HIT = 22;
+/** Screen radius for hitting a joint, px: small so pieces stay easy to pick. */
+export const JOINT_HIT = 12;
+
 export type Selection =
   | { kind: 'port'; ref: PortRef }
   | { kind: 'piece'; index: number }
