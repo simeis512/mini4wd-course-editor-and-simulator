@@ -11,6 +11,7 @@ import {
   validateCourse,
   type Course,
   type Layout,
+  type PortRef,
 } from '../course/course';
 import {
   addFreePiece,
@@ -33,7 +34,7 @@ import { raiseRun } from '../course/raise';
 import { $, toast } from './dom';
 import { History } from './history';
 import { bindLevelTools, levelMax, renderLevelTools, type HeightView } from './levels';
-import { buildPalette, placeContext, POSE_FIELDS, renderPanels } from './panels';
+import { buildPalette, placeContext, POSE_FIELDS, renderPanels, runMarks } from './panels';
 import type { Selection } from './selection';
 import type { EditorView } from './view';
 import { TopView } from './view2d';
@@ -386,13 +387,32 @@ export class EditorApp {
     this.commit(setBend(course, s.a, s.b, { ...bend, pitch: (deg ?? bend.pitch ?? 0) + by }), s);
   }
 
+  /** The selected joint as the side a raise leaves from and the side it goes into, as chosen (spec 16.3). */
+  private raiseSides(): { from: PortRef; into: PortRef } | null {
+    const s = this.selection;
+    if (s?.kind !== 'joint') return null;
+    const intoA = $<HTMLSelectElement>('raise-dir').value === 'a';
+    return intoA ? { from: s.b, into: s.a } : { from: s.a, into: s.b };
+  }
+
+  private get raiseCount(): number {
+    return Math.max(1, Math.round(Number($<HTMLInputElement>('raise-count').value) || 1));
+  }
+
   /** Raise the pieces on from the selected joint by bending and twisting them (spec 16.3). */
   private raiseFromSelected(): void {
-    const s = this.selection;
-    if (s?.kind !== 'joint') return;
-    const count = Math.max(1, Math.round(Number($<HTMLInputElement>('raise-count').value) || 1));
+    const sides = this.raiseSides();
+    if (!sides) return;
     const rise = Number($<HTMLInputElement>('raise-mm').value) || 0;
-    this.commit(raiseRun(asLink(this.course, s.a, s.b), s.a, s.b, count, rise), s);
+    const course = asLink(this.course, sides.from, sides.into);
+    this.commit(raiseRun(course, sides.from, sides.into, this.raiseCount, rise), this.selection);
+  }
+
+  /** Blink the pieces a raise from the selected joint would move (spec 16.3). */
+  private showRun(): void {
+    const sides = this.raiseSides();
+    const marks = sides && !$('raise-box').hidden ? runMarks(asLink(this.course, sides.from, sides.into), sides.from, sides.into, this.raiseCount) : null;
+    for (const view of [this.top, this.orbit]) view.setRunMarks(marks);
   }
 
   private splitSelected(): void {
@@ -532,6 +552,8 @@ export class EditorApp {
     $('bend-plus').addEventListener('click', (e) => this.bendSelected(null, step(e)));
     $('bend-pitch').addEventListener('change', (e) => this.bendSelected(Number((e.target as HTMLInputElement).value) || 0));
     $('raise-run').addEventListener('click', () => this.raiseFromSelected());
+    $('raise-dir').addEventListener('change', () => this.renderPanel());
+    $('raise-count').addEventListener('input', () => this.renderPanel());
     $('split').addEventListener('click', () => this.splitSelected());
     $('join').addEventListener('click', () => this.joinSelected());
 
@@ -565,6 +587,7 @@ export class EditorApp {
     $<HTMLButtonElement>('undo').disabled = !this.history.canUndo;
     $<HTMLButtonElement>('redo').disabled = !this.history.canRedo;
     renderPanels(this.course, this.layout, this.selection);
+    this.showRun();
     this.placeContext();
   }
 

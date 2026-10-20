@@ -164,11 +164,18 @@
             <button id="bend-plus" title="0.5° 上りへ（Shift で 0.1°）">＋</button>
           </div>
           <div id="bend-warn" class="hint warn" hidden></div>
-          <div id="raise-row" class="row angle">
-            <label title="このつなぎ目から先のピースを、折れ角とねじれで少しずつ持ち上げます（カーブを重ねた螺旋など）">この先</label>
-            <input id="raise-count" type="number" min="1" step="1" value="8" /> ピースで
-            <input id="raise-mm" type="number" step="10" /> mm
-            <button id="raise-run">上げる</button>
+          <div id="raise-box">
+            <div class="row angle">
+              <label for="raise-dir" title="どちら側のピースを持ち上げるか">向き</label>
+              <select id="raise-dir"></select>
+            </div>
+            <div class="row angle">
+              <label title="このつなぎ目から先のピースを、折れ角とねじれで少しずつ持ち上げます（カーブを重ねた螺旋など）">この先</label>
+              <input id="raise-count" type="number" min="1" step="1" value="8" /> ピースで
+              <input id="raise-mm" type="number" step="10" /> mm
+              <button id="raise-run">上げる</button>
+            </div>
+            <div id="raise-note" class="hint"></div>
           </div>
           <p id="bend-closure" class="hint" hidden>ループを閉じたつなぎ目（口が近くで合っているだけ）なので、折れ角は付けられません。</p>
           <div class="row">

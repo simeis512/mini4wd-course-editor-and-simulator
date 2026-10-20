@@ -1,12 +1,13 @@
 import { getPart, PARTS, variantOf } from '../course/catalog';
-import { compatible, groupCount, movingGroup, partCounts, placementOf, type Course, type Layout, type Problem } from '../course/course';
+import { compatible, groupCount, movingGroup, partCounts, placementOf, portKey, type Course, type Layout, type PortRef, type Problem } from '../course/course';
 import { footprint, jointBend } from '../course/edit';
 import { BEND_LIMIT, TWIST_LIMIT } from '../course/flex';
 import { bendable, joinableNear } from '../course/joining';
+import { previewRun } from '../course/raise';
 import { $ } from './dom';
 import { partIcon } from './icons';
 import type { Selection } from './selection';
-import type { EditorView } from './view';
+import type { EditorView, RunMarks } from './view';
 
 export const POSE_FIELDS = ['pose-x', 'pose-y', 'pose-z', 'pose-yaw', 'pose-pitch', 'pose-roll'] as const;
 
@@ -103,7 +104,22 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
     // Only stored links bend (spec 16.1).
     const linked = bendable(course, s.a, s.b);
     $('bend-row').hidden = !linked;
-    $('raise-row').hidden = !linked;
+    $('raise-box').hidden = !linked;
+    // Which way to raise: into either piece, the later one first (spec 16.3).
+    const dir = $<HTMLSelectElement>('raise-dir');
+    const key = `${portKey(s.a)}|${portKey(s.b)}`;
+    if (dir.dataset.joint !== key) {
+      dir.dataset.joint = key;
+      dir.replaceChildren(
+        ...(['a', 'b'] as const).map((side) => {
+          const o = document.createElement('option');
+          o.value = side;
+          o.textContent = `${name(s[side])} の方へ`;
+          return o;
+        }),
+      );
+      dir.value = s.a.piece > s.b.piece ? 'a' : 'b';
+    }
     $('bend-closure').hidden = linked;
     const pitch = linked ? (jointBend(course, s.a, s.b).pitch ?? 0) : 0;
     setAngleField('bend-pitch', pitch);
@@ -118,6 +134,23 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
 
   // Settings for the selection float over the editor, next to it (#45).
   $('context').hidden = s === null;
+}
+
+/**
+ * The pieces a raise from the joint between `from` and `into` would move,
+ * to blink, with a note on how far it reaches (spec 16.3).
+ */
+export function runMarks(course: Course, from: PortRef, into: PortRef, count: number): RunMarks {
+  const { pieces, end } = previewRun(course, from, into, count);
+  const short = pieces.length < count;
+  const note = $('raise-note');
+  note.classList.toggle('warn', short);
+  if (pieces.length === 0) note.textContent = 'この向きには上げられるピースがありません（先頭のピースや、自由に置いたピースは動かせません）';
+  else {
+    const span = pieces.length === 1 ? `#${pieces[0] + 1} の` : `#${pieces[0] + 1} から #${pieces[pieces.length - 1] + 1} までの`;
+    note.textContent = `点滅している ${span} ${pieces.length} ピースを上げます${short ? `（${count} ピースに足りません）` : ''}`;
+  }
+  return { pieces, end, shortAt: short ? pieces.length : 0 };
 }
 
 function setAngleField(id: string, deg: number): void {

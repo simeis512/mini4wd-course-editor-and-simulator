@@ -1,10 +1,29 @@
-import type { Layout } from '../course/course';
+import type { Layout, PortRef } from '../course/course';
 import type { Selection } from './selection';
+
+/** Pieces a raise would move, shown blinking (spec 16.3). */
+export interface RunMarks {
+  pieces: number[];
+  /** The far end of the run. */
+  end: PortRef | null;
+  /** Pieces reached, shown at the end when fewer than asked for; 0 when enough. */
+  shortAt: number;
+}
+
+/** How long one blink of the run takes, ms. */
+const BLINK_MS = 1200;
+
+/** Brightness of the blinking run at time `t` (ms), 0 to 1. */
+export function blink(t: number): number {
+  return 0.5 + 0.5 * Math.sin((t / BLINK_MS) * 2 * Math.PI);
+}
 
 /** What the editor needs from the 2D and 3D views alike. */
 export interface EditorView {
   /** Show this layout with this selection. */
   setData(layout: Layout, selection: Selection): void;
+  /** Blink the pieces a raise would move, or stop with null. */
+  setRunMarks(marks: RunMarks | null): void;
   /** Frame the whole course. */
   fit(): void;
   /** Floor point (mm, X/Z) in the middle of the view. */
@@ -13,4 +32,27 @@ export interface EditorView {
   floorAt(clientX: number, clientY: number): [number, number] | null;
   /** Point on the page over the world point (mm), or null when it cannot be seen. */
   clientOf(x: number, y: number, z: number): [number, number] | null;
+}
+
+/**
+ * A red triangle with a number, over the end of a run that has fewer
+ * pieces than asked for: how many it reaches. Both views draw it.
+ */
+export function drawShortMark(ctx: CanvasRenderingContext2D, x: number, y: number, n: number): void {
+  const r = 16;
+  ctx.beginPath();
+  ctx.moveTo(x, y - r);
+  ctx.lineTo(x + r * 1.05, y + r * 0.75);
+  ctx.lineTo(x - r * 1.05, y + r * 0.75);
+  ctx.closePath();
+  ctx.fillStyle = '#e53935';
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(n), x, y + 2);
 }
