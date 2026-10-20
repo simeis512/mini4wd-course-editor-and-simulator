@@ -324,13 +324,14 @@ export const PARTS: readonly PartDef[] = [
     ],
     ports: [
       { id: 'a', anchor: 'start', lanes: ALL_LANES },
-      { id: 'lower', anchor: 'end', lanes: [0, 1], kind: 'lc-lower', partners: ['lane-change-center'] },
+      // Its lower and upper ends also join ordinary parts, for home-made
+      // lane changes and one-lane jumps (#60).
+      { id: 'lower', anchor: 'end', lanes: [0, 1], kind: 'lc-lower' },
       {
         id: 'upper',
         anchor: { pos: [RIGHT_LANE_X, JOINT_HEIGHT, RAMP_RUN], rot: [0, JOINT_PITCH, 0] },
         lanes: [2],
         kind: 'lc-upper',
-        partners: ['lane-change-center'],
       },
     ],
     laneLinks: [

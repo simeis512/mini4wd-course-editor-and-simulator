@@ -107,7 +107,7 @@ export interface LapCheck {
 const MAX_STEPS = 10000;
 
 /** Follow one lane from the start line until it crosses it again. */
-function runLap(layout: Layout, partner: Map<string, PortRef>, start: PortRef, lane: number): Lap {
+function runLap(layout: Layout, partner: Map<string, PortRef & { shift: number }>, start: PortRef, lane: number): Lap {
   let at: LaneEntry = { ...start, lane };
   const points: Vector3[] = [];
   let length = 0;
@@ -124,9 +124,9 @@ function runLap(layout: Layout, partner: Map<string, PortRef>, start: PortRef, l
     add(out.points);
     const leave = { piece: at.piece, port: out.port };
     const other = partner.get(portKey(leave));
-    const match = other && jointLanes(pc.part, out.port, layout.pieces[other.piece].part, other.port).find(([l]) => l === out.lane);
+    const match = other && jointLanes(pc.part, out.port, layout.pieces[other.piece].part, other.port, other.shift).find(([l]) => l === out.lane);
     if (!other || !match) return { lane, next: null, length, broken: leave, points };
-    at = { ...other, lane: match[1] };
+    at = { piece: other.piece, port: other.port, lane: match[1] };
     if (at.piece === start.piece && at.port === start.port) return { lane, next: at.lane, length, broken: null, points };
   }
   return { lane, next: null, length, broken: null, points };
@@ -157,10 +157,11 @@ function turning(points: readonly Vector3[]): number {
 export function checkLaps(layout: Layout, dir: 1 | -1 = 1): LapCheck | null {
   const first = layout.pieces[0];
   if (!first) return null;
-  const partner = new Map<string, PortRef>();
+  // A shifted joint is shifted the same seen from either side (#60).
+  const partner = new Map<string, PortRef & { shift: number }>();
   for (const j of layout.joints) {
-    partner.set(portKey(j.a), j.b);
-    partner.set(portKey(j.b), j.a);
+    partner.set(portKey(j.a), { ...j.b, shift: j.shift });
+    partner.set(portKey(j.b), { ...j.a, shift: j.shift });
   }
   const start: PortRef = { piece: 0, port: dir === -1 && first.part.ports.length > 1 ? 1 : 0 };
   // Running into the piece is looking back into the port, so its left is the port's right.

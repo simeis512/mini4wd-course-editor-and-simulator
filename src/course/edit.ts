@@ -3,6 +3,7 @@ import { getPart, GLOBAL_SPEC } from './catalog';
 import {
   anchorFrame,
   anchorRef,
+  compatible,
   emptyCourse,
   layoutCourse,
   placementOf,
@@ -321,4 +322,34 @@ export function reverseDirection(course: Course): Course {
   if (course.dir === -1) delete next.dir;
   else next.dir = -1;
   return next;
+}
+
+/** Most lanes a joint is shifted sideways by (#60). */
+export const MAX_SHIFT = 1;
+
+/** The sideways shift of the joint between two linked ports, in lanes (#60); 0 when they are not linked. */
+export function jointShift(course: Course, a: PortRef, b: PortRef): number {
+  const holder = linkHolder(course, a, b);
+  const rec = holder === null ? null : course.pieces[holder];
+  return (rec && 'to' in rec && rec.shift) || 0;
+}
+
+/**
+ * Shift the joint between two linked ports sideways by whole lanes (#60),
+ * + to the right looking out of the port the piece hangs off. The piece
+ * placed from the joint moves, with everything beyond. A shift at which no
+ * lane would meet is not made.
+ */
+export function setShift(course: Course, a: PortRef, b: PortRef, shift: number): Course {
+  const holder = linkHolder(course, a, b);
+  if (holder === null || Math.abs(shift) > MAX_SHIFT) return course;
+  const rec = course.pieces[holder];
+  if (!('to' in rec)) return course;
+  const [j, p] = rec.to;
+  if (!compatible(getPart(course.pieces[j].part), p, getPart(rec.part), rec.port, shift)) return course;
+  const next = clone(course);
+  const out = next.pieces[holder] as typeof rec;
+  if (shift) out.shift = shift;
+  else delete out.shift;
+  return tidyCuts(next);
 }

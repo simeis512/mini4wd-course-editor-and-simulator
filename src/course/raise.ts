@@ -111,6 +111,8 @@ function rootAt(course: Course, piece: number): { course: Course; turned: Set<nu
     const out: PieceRec = { part: up.part, port, to: [child, rec.port], bend: { pitch: turn.rot[1], yaw: turn.rot[0] } };
     if (up.variant !== undefined) out.variant = up.variant;
     if (up.twist) out.twist = up.twist;
+    // A shifted joint is shifted the same seen from either side (#60).
+    if (rec.shift) out.shift = rec.shift;
     next.pieces[parent] = out;
     turned.add(parent);
     rec = up;
