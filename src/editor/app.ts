@@ -26,7 +26,7 @@ import {
   setVariant,
   tidyCuts,
 } from '../course/edit';
-import { applyMagnet, findMagnet, joinableNear, joinPorts, MAGNET_DISTANCE, splitJoint } from '../course/joining';
+import { applyMagnet, asLink, findMagnet, joinableNear, joinPorts, MAGNET_DISTANCE, splitJoint } from '../course/joining';
 import type { Pose } from '../course/geometry';
 import { basicOval } from '../course/presets';
 import { raiseRun } from '../course/raise';
@@ -380,8 +380,10 @@ export class EditorApp {
   private bendSelected(deg: number | null, by = 0): void {
     const s = this.selection;
     if (s?.kind !== 'joint') return;
-    const bend = jointBend(this.course, s.a, s.b);
-    this.commit(setBend(this.course, s.a, s.b, { ...bend, pitch: (deg ?? bend.pitch ?? 0) + by }), s);
+    // A joint that only meets (a piece put back by the magnet) is stored as a link first.
+    const course = asLink(this.course, s.a, s.b);
+    const bend = jointBend(course, s.a, s.b);
+    this.commit(setBend(course, s.a, s.b, { ...bend, pitch: (deg ?? bend.pitch ?? 0) + by }), s);
   }
 
   /** Raise the pieces on from the selected joint by bending and twisting them (spec 16.3). */
@@ -390,7 +392,7 @@ export class EditorApp {
     if (s?.kind !== 'joint') return;
     const count = Math.max(1, Math.round(Number($<HTMLInputElement>('raise-count').value) || 1));
     const rise = Number($<HTMLInputElement>('raise-mm').value) || 0;
-    this.commit(raiseRun(this.course, s.a, s.b, count, rise), s);
+    this.commit(raiseRun(asLink(this.course, s.a, s.b), s.a, s.b, count, rise), s);
   }
 
   private splitSelected(): void {

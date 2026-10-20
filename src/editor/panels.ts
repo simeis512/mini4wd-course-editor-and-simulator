@@ -1,8 +1,8 @@
 import { getPart, PARTS, variantOf } from '../course/catalog';
 import { compatible, groupCount, movingGroup, partCounts, placementOf, type Course, type Layout, type Problem } from '../course/course';
-import { footprint, jointBend, linkHolder } from '../course/edit';
+import { footprint, jointBend } from '../course/edit';
 import { BEND_LIMIT, TWIST_LIMIT } from '../course/flex';
-import { joinableNear } from '../course/joining';
+import { bendable, joinableNear } from '../course/joining';
 import { $ } from './dom';
 import { partIcon } from './icons';
 import type { Selection } from './selection';
@@ -101,7 +101,7 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
     const name = (r: { piece: number }) => `#${r.piece + 1} ${layout.pieces[r.piece].part.name}`;
     $('joint-name').textContent = `${name(s.a)} と ${name(s.b)} のつなぎ目`;
     // Only stored links bend (spec 16.1).
-    const linked = linkHolder(course, s.a, s.b) !== null;
+    const linked = bendable(course, s.a, s.b);
     $('bend-row').hidden = !linked;
     $('raise-row').hidden = !linked;
     $('bend-closure').hidden = linked;

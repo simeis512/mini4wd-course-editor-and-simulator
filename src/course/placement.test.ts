@@ -2,7 +2,7 @@ import { Matrix4 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { emptyCourse, groupCount, layoutCourse, movingGroup, type Course } from './course';
 import { addFreePiece, addPiece, footprint, freeSpot, moveGroup, setPose, tidyCuts } from './edit';
-import { applyMagnet, findMagnet, joinableNear, joinPorts, splitJoint } from './joining';
+import { applyMagnet, asLink, bendable, findMagnet, joinableNear, joinPorts, splitJoint } from './joining';
 import { facingError } from './geometry';
 import { basicOval, chain } from './presets';
 
@@ -106,6 +106,30 @@ describe('magnet and joining', () => {
     const joined = joinPorts(split, { piece: 0, port: 1 }, { piece: 1, port: 0 });
     expect(joined.cuts).toBeUndefined();
     expect(groupCount(layoutCourse(joined))).toBe(1);
+    // Stored as a link again, so the joint can bend (spec 16.1).
+    expect(joined.pieces[1]).toEqual({ part: 'straight', port: 0, to: [0, 1] });
+  });
+
+  it('stores a piece put back by the magnet as a link, so its joints can bend', () => {
+    const c = chain(['straight', 'straight', 'straight']);
+    // Move the middle piece away on its own, then back.
+    const away = moveGroup(c, group(c, 1, true), shift(0, 0, 25));
+    const g = group(away, 1, true);
+    const back = applyMagnet(away, g, findMagnet(away, g)!);
+    expect(back.pieces[1]).toMatchObject({ port: 0, to: [0, 1] });
+    expect(bendable(back, { piece: 0, port: 1 }, { piece: 1, port: 0 })).toBe(true);
+    // The joint on its other side only meets, but can be made a link when bent.
+    const far = [{ piece: 1, port: 1 }, { piece: 2, port: 0 }] as const;
+    expect(bendable(back, ...far)).toBe(true);
+    const linked = asLink(back, ...far);
+    expect(linked.pieces[2]).toMatchObject({ port: 0, to: [1, 1] });
+    expect(layoutCourse(linked).closures).toEqual([]);
+  });
+
+  it('leaves the joint that closes a loop as it is', () => {
+    const ring = chain(Array(8).fill('curve45'));
+    expect(bendable(ring, { piece: 7, port: 1 }, { piece: 0, port: 0 })).toBe(false);
+    expect(asLink(ring, { piece: 7, port: 1 }, { piece: 0, port: 0 })).toBe(ring);
   });
 
   it('pulls a nearby island in when joining', () => {
