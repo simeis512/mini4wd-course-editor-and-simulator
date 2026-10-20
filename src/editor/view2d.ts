@@ -5,7 +5,7 @@ import { pointOnFrame } from '../course/geometry';
 import { atLevel, pieceHeights, type HeightRange } from '../course/height';
 import { halfWidth, insidePolygon, roadOutline, trackEdge, worldTracks } from '../course/mesh';
 import { colorRange, heightColor, type HeightView } from './levels';
-import { JOINT_HIT, PORT_HIT, type DragHandlers, type PickHandlers, type Selection } from './selection';
+import { JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
 import { blink, drawShortMark, type EditorView, type RunMarks } from './view';
 
 /** One stretch of road of a piece, as seen from above. */
@@ -19,9 +19,6 @@ interface Outline {
   /** The road cut at each sample step, with its mean height, for colouring by height. */
   steps: { polygon: [number, number][]; height: number }[];
 }
-
-/** Pixels a pointer may move and still count as a tap. */
-const TAP_SLOP = 6;
 
 /**
  * Top-down 2D editor view drawn on a canvas. Pointer Events only, so mouse,
@@ -289,8 +286,7 @@ export class TopView implements EditorView {
       this.drawPort(ref, selected ? '#3fd0ff' : split.has(portKey(ref)) ? '#ff5a5a' : '#ff9a2e', selected ? 1.3 : 1);
     }
     if (run?.missing && run.end) {
-      const p = pointOnFrame(layout.pieces[run.end.piece].ports[run.end.port], 0, 0, new Vector3());
-      const [sx, sy] = this.toScreen(...xz(p));
+      const [sx, sy] = this.portPoint(run.end);
       drawShortMark(ctx, sx, sy - 26, run.missing);
     }
   }
@@ -314,7 +310,12 @@ export class TopView implements EditorView {
     ctx.moveTo(ax, ay);
     ctx.lineTo(bx, by);
     ctx.stroke();
-    return this.toScreen(...xz(pointOnFrame(frame, 0, 0, p)));
+    return this.portPoint(ref);
+  }
+
+  /** Screen point at the middle of a port. */
+  private portPoint(ref: PortRef): [number, number] {
+    return this.toScreen(...xz(pointOnFrame(this.layout!.pieces[ref.piece].ports[ref.port], 0, 0, new Vector3())));
   }
 
   /** A short bar across the middle of a joint. */
@@ -374,10 +375,9 @@ export class TopView implements EditorView {
     const layout = this.layout;
     if (!layout) return null;
     let best: { ref: PortRef; d: number } | null = null;
-    const p = new Vector3();
     for (const ref of layout.open) {
       if (!this.shown(ref.piece)) continue;
-      const [px, py] = this.toScreen(...xz(pointOnFrame(layout.pieces[ref.piece].ports[ref.port], 0, 0, p)));
+      const [px, py] = this.portPoint(ref);
       const d = Math.hypot(px - sx, py - sy);
       if (d < PORT_HIT && (!best || d < best.d)) best = { ref, d };
     }
@@ -385,7 +385,7 @@ export class TopView implements EditorView {
     let joint: { a: PortRef; b: PortRef; d: number } | null = null;
     for (const j of layout.joints) {
       if (!this.shown(j.a.piece) && !this.shown(j.b.piece)) continue;
-      const [px, py] = this.toScreen(...xz(pointOnFrame(layout.pieces[j.a.piece].ports[j.a.port], 0, 0, p)));
+      const [px, py] = this.portPoint(j.a);
       const d = Math.hypot(px - sx, py - sy);
       if (d < JOINT_HIT && (!joint || d < joint.d)) joint = { a: j.a, b: j.b, d };
     }

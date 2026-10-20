@@ -1,7 +1,7 @@
 import { Matrix4, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { compatible, emptyCourse, layoutCourse, partCounts } from './course';
-import { addPiece, deletePiece, flipPiece, setVariant } from './edit';
+import { addPiece, deletePiece, flipPiece, moveGroup, pieceMiddle, setVariant, turnAboutMiddle } from './edit';
 import { facingError } from './geometry';
 import { basicOval, chain } from './presets';
 
@@ -174,5 +174,25 @@ describe('slopes', () => {
     expect(pos(end).y).toBeCloseTo(0, 6);
     expect(pos(end).z).toBeCloseTo(540 * 4, 6);
     expect(levelAngle(end)).toBeLessThan(1e-9);
+  });
+});
+
+describe('turnAboutMiddle', () => {
+  it('turns a piece about its middle, which stays put', () => {
+    const c = chain(['straight', 'curve45']);
+    const before = layoutCourse(c).pieces[1];
+    const turned = layoutCourse(moveGroup(c, new Set([1]), turnAboutMiddle(before, 15))).pieces[1];
+    // Poses are kept to 0.1 mm and 0.1°, so the middle moves a hair.
+    expect(pieceMiddle(turned).distanceTo(pieceMiddle(before))).toBeLessThan(0.1);
+    // + is to the left: the heading turns anticlockwise seen from above.
+    const heading = (m: Matrix4) => new Vector3(0, 0, 1).transformDirection(m);
+    const a = heading(before.matrix);
+    const b = heading(turned.matrix);
+    expect(Math.atan2(a.x, a.z) * (180 / Math.PI) + 15).toBeCloseTo(Math.atan2(b.x, b.z) * (180 / Math.PI), 1);
+  });
+
+  it('leaves a piece where it is at 0°', () => {
+    const pc = layoutCourse(chain(['straight'])).pieces[0];
+    expect(turnAboutMiddle(pc, 0).equals(new Matrix4())).toBe(true);
   });
 });

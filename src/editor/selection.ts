@@ -1,5 +1,7 @@
 import type { PortRef } from '../course/course';
 
+/** Pixels a pointer may move and still count as a tap, not a drag. */
+export const TAP_SLOP = 6;
 /** Screen radius for hitting a port, px. */
 export const PORT_HIT = 22;
 /** Screen radius for hitting a joint, px: small so pieces stay easy to pick. */

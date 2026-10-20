@@ -5,7 +5,7 @@ import { portKey, sameJoint, type Layout, type PlacedPiece } from '../course/cou
 import { GLOBAL_SPEC } from '../course/catalog';
 import { supports } from '../course/height';
 import { buildCourseMeshes, buildSupportMesh, MM, pieceTracks, roadOutline } from '../course/mesh';
-import { JOINT_HIT, PORT_HIT, type DragHandlers, type PickHandlers, type Selection } from './selection';
+import { JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
 import { blink, drawShortMark, type EditorView, type RunMarks } from './view';
 
 const BACKGROUND = new THREE.Color(0x1b1d22);
@@ -17,7 +17,6 @@ const BACKGROUND = new THREE.Color(0x1b1d22);
 if (typeof XRWebGLBinding !== 'undefined' && 'createProjectionLayer' in XRWebGLBinding.prototype) {
   delete (XRWebGLBinding.prototype as Partial<XRWebGLBinding>).createProjectionLayer;
 }
-const TAP_SLOP = 6;
 
 /**
  * 3D orbit view of the course, with AR (WebXR) for viewing only. Dragging
@@ -281,7 +280,12 @@ export class OrbitView implements EditorView {
   /** Point on the page over the course point (mm), or null when it is behind the camera. */
   clientOf(x: number, y: number, z: number): [number, number] | null {
     this.root.updateMatrixWorld();
-    const p = this.root.localToWorld(new THREE.Vector3(x, y, z)).project(this.camera);
+    return this.toClient(this.root.localToWorld(new THREE.Vector3(x, y, z)));
+  }
+
+  /** Point on the page over a scene point, or null when it is behind the camera. */
+  private toClient(world: THREE.Vector3): [number, number] | null {
+    const p = world.clone().project(this.camera);
     if (p.z > 1) return null;
     const r = this.renderer.domElement.getBoundingClientRect();
     return [r.left + ((p.x + 1) / 2) * r.width, r.top + ((1 - p.y) / 2) * r.height];
@@ -364,7 +368,6 @@ export class OrbitView implements EditorView {
    */
   private markerNear(clientX: number, clientY: number): THREE.Object3D | null {
     this.root.updateMatrixWorld();
-    const r = this.renderer.domElement.getBoundingClientRect();
     const eye = this.camera.getWorldPosition(new THREE.Vector3());
     const ray = new THREE.Raycaster();
     for (const kind of ['port', 'joint'] as const) {
@@ -373,9 +376,9 @@ export class OrbitView implements EditorView {
         const data = m.userData[kind];
         if (!data) continue;
         const centre = m.localToWorld(new THREE.Vector3(0, MARKER_PICK_HEIGHT, 0));
-        const p = centre.clone().project(this.camera);
-        if (p.z > 1) continue;
-        const d = Math.hypot(r.left + ((p.x + 1) / 2) * r.width - clientX, r.top + ((1 - p.y) / 2) * r.height - clientY);
+        const q = this.toClient(centre);
+        if (!q) continue;
+        const d = Math.hypot(q[0] - clientX, q[1] - clientY);
         if (d >= (kind === 'port' ? PORT_HIT : JOINT_HIT) || (best && d >= best.d)) continue;
         const own = kind === 'port' ? [data.piece] : [data.a.piece, data.b.piece];
         const toward = centre.clone().sub(eye);
