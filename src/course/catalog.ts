@@ -81,6 +81,17 @@ export interface PortDef {
  * part ways (the lane change's ramp and bridges). Lane positions are
  * measured from this track's centreline.
  */
+/**
+ * A stand that comes with the part (spec 3.4, #11), as in the support
+ * under the lane change bridge: a leg under each end and a crossbar between.
+ * `left` and `right` are the outer top corners, part-local mm; the stand
+ * faces the part's forward (+Z).
+ */
+export interface PartSupport {
+  left: [number, number, number];
+  right: [number, number, number];
+}
+
 export interface Track {
   /** Where the track's centreline starts, in part-local coordinates. */
   start: Pose;
@@ -136,6 +147,11 @@ export interface PartDef {
   ways?: [string, string];
   /** Parts this part cannot be joined to directly (e.g. two ramps in a row). */
   cannotJoin?: string[];
+  /**
+   * Stands that are part of the part. A part that has them gets no
+   * automatic supports (#11).
+   */
+  supports?: PartSupport[];
   /** Shown in the editor when the geometry is a placeholder. */
   note?: string;
   /**
@@ -189,6 +205,15 @@ const JOINT_HEIGHT = bridgeRise(RAMP_RUN);
 const JOINT_PITCH = (Math.atan(bridgeRiseSlope(RAMP_RUN)) * 180) / Math.PI;
 /** Lateral offset of the right-hand lane, as a part-local X (+ X is left). */
 const RIGHT_LANE_X = -laneOffset(2);
+/**
+ * Half the width the lane change's own bridge support spans, mm: its legs
+ * stand just outside the two lower lanes, which in the middle of the part
+ * lie either side of its centreline (#11, provisional: from product photos,
+ * not measured).
+ */
+const LANE_CHANGE_SUPPORT_HALF = GLOBAL_SPEC.lanePitch + 20;
+/** Top of that support: the underside of the bridge at its highest point. */
+const LANE_CHANGE_SUPPORT_TOP = BRIDGE_HEIGHT - GLOBAL_SPEC.roadThickness;
 const LANE_CHANGE_NOTE = `橋がアプローチ側へ約1/3入り込み、全体で1つのなだらかな山になる形は公式の図・写真どおり。寸法は未計測のため仮（橋の最高点${BRIDGE_HEIGHT}、各ピースの床の長さ${LANE_CHANGE_LENGTH}）`;
 
 export const PARTS: readonly PartDef[] = [
@@ -352,6 +377,14 @@ export const PARTS: readonly PartDef[] = [
       { from: [0, 0], to: [1, 1] },
       { from: [0, 1], to: [1, 2] },
       { from: [2, 2], to: [3, 0] },
+    ],
+    // The set's own support stands across the middle, under the top of the
+    // bridge, with its legs outside the lower lanes (product photos, #11).
+    supports: [
+      {
+        left: [LANE_CHANGE_SUPPORT_HALF, LANE_CHANGE_SUPPORT_TOP, LANE_CHANGE_LENGTH / 2],
+        right: [-LANE_CHANGE_SUPPORT_HALF, LANE_CHANGE_SUPPORT_TOP, LANE_CHANGE_LENGTH / 2],
+      },
     ],
     variants: [PALETTE.white, PALETTE.gray, PALETTE.black],
     defaultVariant: 0,

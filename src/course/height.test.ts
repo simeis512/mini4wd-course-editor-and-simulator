@@ -69,7 +69,22 @@ describe('supports', () => {
     const ramps = layout.pieces.flatMap((pc, i) => (pc.part.id === 'bridge-approach' ? [i] : []));
     for (const i of ramps) expect(s.some((st) => st.piece === i)).toBe(true);
     // No stand under the high middle of the bridge, where the lower lanes run.
+    // The bridge itself has only the set's own support (below).
     const centre = layout.pieces.findIndex((pc) => pc.part.id === 'lane-change-center');
-    for (const st of s.filter((st) => st.piece === centre)) expect(Math.min(st.left.y, st.right.y)).toBeLessThan(90);
+    expect(s.filter((st) => st.piece === centre)).toHaveLength(1);
+  });
+
+  it('stands the lane change support across the middle, outside the lower lanes', () => {
+    const layout = layoutCourse(chain(['bridge-approach', 'lane-change-center']));
+    const [st] = supports(layout).filter((st) => st.piece === 1);
+    const pc = layout.pieces[1];
+    expect(st.left.y).toBeCloseTo(97);
+    expect(st.right.y).toBeCloseTo(97);
+    // Across the part at its middle, just wider than the two lower lanes there.
+    const toLocal = pc.matrix.clone().invert();
+    const [l, r] = [st.left, st.right].map((p) => p.clone().applyMatrix4(toLocal));
+    expect(l.z).toBeCloseTo(270);
+    expect(r.z).toBeCloseTo(270);
+    expect(Math.abs(l.x - r.x)).toBeGreaterThan(2 * (GLOBAL_SPEC.lanePitch + GLOBAL_SPEC.fenceThickness / 2));
   });
 });

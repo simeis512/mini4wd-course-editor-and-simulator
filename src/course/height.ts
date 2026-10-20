@@ -84,7 +84,8 @@ function roadBelow(footprints: readonly Footprint[], own: WorldTrack, x: number,
 }
 
 /**
- * Supports under every stretch of raised road (#11): evenly spaced along
+ * Supports under raised road (#11): a part's own stands, and on other
+ * parts, stands under every stretch of raised road, evenly spaced along
  * each track, at most `SUPPORT_SPACING` apart and none at the joints, so
  * neighbouring pieces never stand two in one place. Where other road runs
  * underneath (a bridge, a stacked level) the stand would block it, so the
@@ -93,7 +94,16 @@ function roadBelow(footprints: readonly Footprint[], own: WorldTrack, x: number,
 export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTracks(layout)): Support[] {
   const footprints = tracks.map(footprintOf);
   const out: Support[] = [];
+  // Parts that come with their own stands get only those.
+  layout.pieces.forEach((pc, piece) => {
+    for (const s of pc.part.supports ?? []) {
+      const along = new Vector3(0, 0, 1).transformDirection(pc.matrix).setY(0).normalize();
+      const [left, right] = [s.left, s.right].map((p) => new Vector3(...p).applyMatrix4(pc.matrix));
+      out.push({ piece, left, right, along });
+    }
+  });
   for (const track of tracks) {
+    if (layout.pieces[track.piece].part.supports) continue;
     const { samples, section } = track;
     const length = samples.reduce(
       (sum, f, i) => (i === 0 ? 0 : sum + new Vector3().setFromMatrixPosition(f).distanceTo(new Vector3().setFromMatrixPosition(samples[i - 1]))),
