@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { dropJoin, joinPart, nextOpenPort } from './add';
-import { addPiece, emptyCourse, footprint, layoutCourse, type Course } from './course';
+import { emptyCourse, layoutCourse, type Course } from './course';
+import { addPiece, footprint } from './edit';
 import { chain } from './presets';
 
 /** Middle of the last piece's footprint, world X/Z. */

@@ -1,6 +1,7 @@
 import { Matrix4, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { addPiece, compatible, deletePiece, emptyCourse, flipPiece, layoutCourse, partCounts, setVariant } from './course';
+import { compatible, emptyCourse, layoutCourse, partCounts } from './course';
+import { addPiece, deletePiece, flipPiece, setVariant } from './edit';
 import { facingError } from './geometry';
 import { basicOval, chain } from './presets';
 

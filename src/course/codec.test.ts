@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { courseFromBytes, courseFromHash, courseToBytes, courseToHash, decodeCourse, encodeCourse } from './codec';
-import { deletePiece, flipPiece, setVariant, splitJoint, type Course } from './course';
+import { type Course } from './course';
+import { deletePiece, flipPiece, setVariant } from './edit';
+import { splitJoint } from './joining';
 import { basicOval } from './presets';
 
 function sample(): Course {
