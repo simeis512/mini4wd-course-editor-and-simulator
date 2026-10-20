@@ -5,6 +5,7 @@ import { BEND_LIMIT, TWIST_LIMIT } from '../course/flex';
 import { bendable, joinableNear } from '../course/joining';
 import { previewRun } from '../course/raise';
 import { $ } from './dom';
+import { floatSpot, rectAround, type Rect } from './float';
 import { partIcon } from './icons';
 import type { Selection } from './selection';
 import type { EditorView, RunMarks } from './view';
@@ -190,38 +191,41 @@ function renderCourseInfo(course: Course, layout: Layout): void {
   $('course-summary').innerHTML = `コース: ${course.pieces.length} ピース<span class="${layout.open.length || layout.problems.length ? 'warn' : 'ok'}">${status}</span>${layout.problems.length ? '<span class="warn">・問題あり</span>' : ''}`;
 }
 
-/** Put the selection's settings beside it on screen, keeping them inside the editor. */
-export function placeContext(view: EditorView, layout: Layout, s: Selection): void {
+/** Where a piece lies on screen, roughly: its footprint between its lowest and highest port. */
+function pieceRect(view: EditorView, layout: Layout, index: number, stage: DOMRect): Rect | null {
+  const pc = layout.pieces[index];
+  const [x0, x1, z0, z1] = footprint(pc);
+  const ys = pc.ports.map((p) => p.elements[13]);
+  const pts: [number, number][] = [];
+  for (const y of [Math.min(...ys), Math.max(...ys)]) {
+    for (const [x, z] of [[x0, z0], [x0, z1], [x1, z0], [x1, z1]]) {
+      const q = view.clientOf(x, y, z);
+      if (q) pts.push([q[0] - stage.left, q[1] - stage.top]);
+    }
+  }
+  return rectAround(pts);
+}
+
+/**
+ * Put the selection's settings beside it on screen, keeping them inside the
+ * editor and off the selection and the pieces `lit` up for it.
+ */
+export function placeContext(view: EditorView, layout: Layout, s: Selection, lit: readonly number[] = []): void {
   const box = $('context');
   if (box.hidden || !s) return;
-  // World points that outline what is selected.
-  let pts: [number, number, number][];
+  const stage = $('stage').getBoundingClientRect();
+  let anchor: Rect | null;
   if (s.kind === 'piece') {
-    const pc = layout.pieces[s.index];
-    const [x0, x1, z0, z1] = footprint(pc);
-    const y = pc.matrix.elements[13];
-    pts = [[x0, y, z0], [x0, y, z1], [x1, y, z0], [x1, y, z1]];
+    anchor = pieceRect(view, layout, s.index, stage);
   } else {
     const ref = s.kind === 'port' ? s.ref : s.a;
     const e = layout.pieces[ref.piece].ports[ref.port].elements;
-    pts = [[e[12], e[13], e[14]]];
+    const q = view.clientOf(e[12], e[13], e[14]);
+    anchor = q && rectAround([[q[0] - stage.left, q[1] - stage.top]]);
   }
-  const screen = pts.map((q) => view.clientOf(...q)).filter((q): q is [number, number] => q !== null);
-  const stage = $('stage').getBoundingClientRect();
-  const margin = 8;
-  const w = box.offsetWidth;
-  const h = box.offsetHeight;
-  let left = stage.width - w - margin;
-  let top = margin;
-  if (screen.length) {
-    const xs = screen.map((q) => q[0] - stage.left);
-    const ys = screen.map((q) => q[1] - stage.top);
-    const [l, r] = [Math.min(...xs), Math.max(...xs)];
-    const gap = 24;
-    // Beside the selection: the right if it fits, else the left, else over it.
-    left = r + gap + w <= stage.width - margin ? r + gap : l - gap - w >= margin ? l - gap - w : left;
-    top = (Math.min(...ys) + Math.max(...ys)) / 2 - h / 2;
-  }
-  box.style.left = `${Math.max(margin, Math.min(left, stage.width - w - margin))}px`;
-  box.style.top = `${Math.max(margin, Math.min(top, stage.height - h - margin))}px`;
+  const avoid = lit.map((i) => pieceRect(view, layout, i, stage)).filter((r): r is Rect => r !== null);
+  if (anchor) avoid.push(anchor);
+  const [left, top] = floatSpot(box.offsetWidth, box.offsetHeight, stage.width, stage.height, anchor, avoid);
+  box.style.left = `${left}px`;
+  box.style.top = `${top}px`;
 }

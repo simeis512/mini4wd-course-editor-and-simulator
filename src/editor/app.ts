@@ -56,6 +56,8 @@ export class EditorApp {
   private course: Course = emptyCourse();
   private layout: Layout = layoutCourse(this.course);
   private selection: Selection = null;
+  /** Pieces lit up for the selection, which its settings keep off. */
+  private lit: number[] = [];
   private history = new History<Course>(HISTORY_LIMIT);
   private mode: '2d' | '3d' = '2d';
   private heightView: HeightView = { colors: false, level: 0 };
@@ -413,6 +415,7 @@ export class EditorApp {
     const sides = this.raiseSides();
     const marks = sides && !$('raise-box').hidden ? runMarks(asLink(this.course, sides.from, sides.into), sides.from, sides.into, this.raiseCount) : null;
     for (const view of [this.top, this.orbit]) view.setRunMarks(marks);
+    this.lit = marks?.pieces ?? [];
   }
 
   private splitSelected(): void {
@@ -596,6 +599,6 @@ export class EditorApp {
   }
 
   private placeContext(): void {
-    placeContext(this.view, this.layout, this.selection);
+    placeContext(this.view, this.layout, this.selection, this.lit);
   }
 }
