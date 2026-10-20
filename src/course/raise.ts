@@ -1,7 +1,8 @@
-import { Matrix4, Vector3 } from 'three';
+import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
 import { getPart } from './catalog';
-import { layoutCourse, movingGroup, type Course, type PortRef } from './course';
-import { jointBend, linkHolder, moveGroup, setBend, setTwist } from './edit';
+import { anchorFrame, anchorRef, layoutCourse, placementOf, type Course, type Layout, type PieceRec, type PortRef } from './course';
+import { clone, freeRec, jointBend, linkHolder, setBend, setTwist } from './edit';
+import { FACE, matrixToPose, type Pose } from './geometry';
 
 // Raising a run of pieces by bending its joints and twisting its pieces
 // (spec 16.3, #54), e.g. a spiral of curves that passes over itself.
@@ -53,42 +54,94 @@ export function runFrom(course: Course, from: PortRef, into: PortRef, count: num
   return run;
 }
 
-/**
- * Up to `count` pieces from the joint between `from` and `into`, the other
- * way: against the stored links, each piece hanging off the next one. The
- * piece where the links stop (the first piece, or one placed freely) stays
- * where it is, so it is not part of the run. Returned in the order the
- * links go, ending at the joint, ready to raise like `runFrom`.
- */
-function runBack(course: Course, from: PortRef, into: PortRef, count: number): Run | null {
-  if (linkHolder(course, from, into) !== from.piece) return null;
-  const pieces: number[] = [];
-  let entered = into;
-  while (pieces.length < count && twoEnded(course, entered.piece)) {
-    const rec = course.pieces[entered.piece];
-    // Each piece in the run hangs by its far port off the next one up.
-    if (!('to' in rec) || rec.port !== 1 - entered.port) break;
-    pieces.push(entered.piece);
-    entered = { piece: rec.to[0], port: rec.to[1] };
+/** The pieces put in another order so each comes after the one it is placed from (spec 5.1); `order[k]` is where piece `k` came from. */
+function reorder(course: Course): { course: Course; order: number[] } {
+  const order: number[] = [];
+  const at = new Map<number, number>();
+  while (order.length < course.pieces.length) {
+    course.pieces.forEach((rec, i) => {
+      const ref = anchorRef(rec);
+      if (at.has(i) || (ref && !at.has(ref[0]))) return;
+      at.set(i, order.length);
+      order.push(i);
+    });
   }
-  if (pieces.length === 0) return null;
-  const top = pieces[pieces.length - 1];
-  const rec = course.pieces[top] as { port: number; to: [number, number] };
-  return runFrom(course, { piece: rec.to[0], port: rec.to[1] }, { piece: top, port: rec.port }, pieces.length);
+  const pieces = order.map((i): PieceRec => {
+    const rec = { ...course.pieces[i] };
+    if ('to' in rec) rec.to = [at.get(rec.to[0])!, rec.to[1]];
+    if ('free' in rec && rec.free) rec.free = [at.get(rec.free[0])!, rec.free[1]];
+    return rec;
+  });
+  return { course: { ...course, pieces, cuts: undefined }, order };
+}
+
+const DEG = 180 / Math.PI;
+
+/** A frame as a pose, unrounded: for working courses that are never stored. */
+function exactPose(m: Matrix4): Pose {
+  const pos = new Vector3();
+  const q = new Quaternion();
+  m.decompose(pos, q, new Vector3());
+  const e = new Euler().setFromQuaternion(q, 'YXZ');
+  return { pos: [pos.x, pos.y, pos.z], rot: [e.y * DEG, -e.x * DEG, e.z * DEG] };
+}
+
+/** Where the piece on `child` sits, as the frame its port faces seen from the port `base` (null: the world). */
+function poseOn(layout: Layout, base: PortRef | null, child: PortRef): Matrix4 {
+  const from = base ? layout.pieces[base.piece].ports[base.port] : new Matrix4();
+  return from.clone().invert().multiply(layout.pieces[child.piece].ports[child.port].clone().multiply(FACE));
+}
+
+/**
+ * The course with `piece` placed where it is, and the stored links from it
+ * up to the first piece of its chain turned round so they hang off `piece`,
+ * each joint bent as before. Also the pieces whose records changed.
+ */
+function rootAt(course: Course, piece: number): { course: Course; turned: Set<number> } {
+  const layout = layoutCourse(course);
+  const next = clone(course);
+  const turned = new Set([piece]);
+  let rec = course.pieces[piece];
+  next.pieces[piece] = freeRec(rec, null, exactPose(anchorFrame(layout, piece)));
+  let child = piece;
+  while ('to' in rec) {
+    const [parent, port] = rec.to;
+    const turn = exactPose(poseOn(layout, { piece: child, port: rec.port }, { piece: parent, port }));
+    const up = course.pieces[parent];
+    const out: PieceRec = { part: up.part, port, to: [child, rec.port], bend: { pitch: turn.rot[1], yaw: turn.rot[0] } };
+    if (up.variant !== undefined) out.variant = up.variant;
+    if (up.twist) out.twist = up.twist;
+    next.pieces[parent] = out;
+    turned.add(parent);
+    rec = up;
+    child = parent;
+  }
+  return { course: next, turned };
+}
+
+/**
+ * The run from the joint between `from` and `into`, in a working course
+ * where it follows the stored links. Going against them, the course is
+ * re-rooted at `from`, so the run can take in the first piece and go on
+ * past it. `order[k]` is the piece `k` of the working course.
+ */
+function workingRun(course: Course, from: PortRef, into: PortRef, count: number) {
+  if (linkHolder(course, from, into) !== from.piece) {
+    return { work: course, order: course.pieces.map((_, i) => i), turned: new Set<number>(), run: runFrom(course, from, into, count) };
+  }
+  const rooted = rootAt(course, from.piece);
+  const { course: work, order } = reorder(rooted.course);
+  const at = new Map(order.map((old, k) => [old, k]));
+  const map = (r: PortRef) => ({ piece: at.get(r.piece)!, port: r.port });
+  return { work, order, turned: rooted.turned, run: runFrom(work, map(from), map(into), count) };
 }
 
 /** Which pieces raising from the joint between `from` and `into` would move, going into `into` (spec 16.3). */
 export function previewRun(course: Course, from: PortRef, into: PortRef, count: number): RunPreview {
-  const forward = runFrom(course, from, into, count);
-  if (forward) {
-    const last = forward.pieces[forward.pieces.length - 1];
-    return { pieces: forward.pieces, end: farPort(course, last) };
-  }
-  const back = runBack(course, from, into, count);
-  if (!back) return { pieces: [], end: null };
-  const pieces = [...back.pieces].reverse();
-  const top = course.pieces[pieces[pieces.length - 1]] as { to: [number, number] };
-  return { pieces, end: { piece: top.to[0], port: top.to[1] } };
+  const { work, order, run } = workingRun(course, from, into, count);
+  if (!run) return { pieces: [], end: null };
+  const end = farPort(work, run.pieces[run.pieces.length - 1]);
+  return { pieces: run.pieces.map((k) => order[k]), end: end && { piece: order[end.piece], port: end.port } };
 }
 
 /** The port of a two-ended piece away from the one it hangs by. */
@@ -96,8 +149,6 @@ function farPort(course: Course, piece: number): PortRef | null {
   const rec = course.pieces[piece];
   return 'port' in rec && twoEnded(course, piece) ? { piece, port: 1 - rec.port } : null;
 }
-
-const DEG = 180 / Math.PI;
 
 /** Gradient of a port frame's forward, deg, + climbs. */
 function pitchOf(frame: Matrix4): number {
@@ -148,20 +199,43 @@ const MAX_GRADE = 20;
  * Raise `count` pieces from the joint between `from` and `into`, going into
  * `into`, so the far end is `rise` mm higher than the joint (spec 16.3).
  * The gradient is found so the far end ends up `rise` higher, and the road
- * leaves the run level again. Going with the stored links, the pieces
- * beyond follow; going against them, the joint stays and everything joined
- * on the far side rises. Returns the course unchanged when the joint is
- * not a stored link.
+ * leaves the run level again. The joint stays where it is and everything
+ * joined on the far side follows. Going against the stored links, the run
+ * may take in the first piece and go on past it. Returns the course
+ * unchanged when the joint is not a stored link.
  */
 export function raiseRun(course: Course, from: PortRef, into: PortRef, count: number, rise: number): Course {
-  const run = runFrom(course, from, into, count);
-  if (run) return climbBy(course, run, rise);
-  const back = runBack(course, from, into, count);
-  if (!back) return course;
-  // Going the links' way the run comes down to the joint; lift everything
-  // joined to it back up so the joint stays where it was.
-  const down = climbBy(course, back, -rise);
-  return moveGroup(down, movingGroup(layoutCourse(down), from.piece), new Matrix4().makeTranslation(0, rise, 0));
+  const { work, order, turned, run } = workingRun(course, from, into, count);
+  if (!run) return course;
+  const raised = climbBy(work, run, rise);
+  return turned.size === 0 ? raised : restore(course, raised, order, turned);
+}
+
+/**
+ * The raised working course stored the way `course` was: pieces in the
+ * same order, on the same links. The turned links get the bend that puts
+ * each piece where it was raised to; the rest keep the working bends.
+ */
+function restore(course: Course, raised: Course, order: number[], turned: Set<number>): Course {
+  const layout = layoutCourse(raised);
+  const at = new Map(order.map((old, k) => [old, k]));
+  const frames: Layout = { ...layout, pieces: course.pieces.map((_, i) => layout.pieces[at.get(i)!]) };
+  let next = clone(course);
+  course.pieces.forEach((rec, i) => {
+    const done = raised.pieces[at.get(i)!];
+    const self = { piece: i, port: 'port' in rec ? rec.port : 0 };
+    if ('to' in rec) {
+      const base = { piece: rec.to[0], port: rec.to[1] };
+      const turn = matrixToPose(poseOn(frames, base, self));
+      const bend = turned.has(i) ? { pitch: turn.rot[1], yaw: turn.rot[0] } : 'to' in done ? (done.bend ?? {}) : {};
+      next = setBend(next, base, self, bend);
+    } else if (turned.has(i)) {
+      const { base } = placementOf(rec);
+      next.pieces[i] = freeRec(rec, base, matrixToPose(poseOn(frames, base, self)));
+    }
+    next = setTwist(next, i, done.twist ?? 0);
+  });
+  return next;
 }
 
 function climbBy(course: Course, run: Run, rise: number): Course {

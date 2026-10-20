@@ -1,6 +1,6 @@
 import { Vector3, type Matrix4 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { layoutCourse } from './course';
+import { layoutCourse, type Course } from './course';
 import { BEND_LIMIT, TWIST_LIMIT } from './flex';
 import { chain } from './presets';
 import { previewRun, raiseRun, runFrom } from './raise';
@@ -69,8 +69,8 @@ describe('which way a run goes', () => {
   it('previews the pieces either way from a joint, and where it ends', () => {
     const [a, b] = joint(1);
     expect(previewRun(five(), a, b, 2)).toEqual({ pieces: [2, 3], end: { piece: 3, port: 1 } });
-    // Back towards the start: the first piece stays put, so only one piece moves.
-    expect(previewRun(five(), b, a, 3)).toEqual({ pieces: [1], end: { piece: 0, port: 1 } });
+    // Back towards the start, taking in the first piece.
+    expect(previewRun(five(), b, a, 3)).toEqual({ pieces: [1, 0], end: { piece: 0, port: 0 } });
     expect(previewRun(five(), ...joint(3), 5).pieces).toEqual([4]);
   });
 
@@ -84,5 +84,38 @@ describe('which way a run goes', () => {
     expect(Math.abs(height(layout.pieces[1].ports[1]) - 60)).toBeLessThan(1.5);
     expect(Math.abs(height(layout.pieces[0].ports[0]) - 60)).toBeLessThan(1.5);
     expect(up(layout.pieces[0].ports[1]).y).toBeGreaterThan(Math.cos((0.2 * Math.PI) / 180));
+  });
+
+  /** A straight placed first, with curves joined on at both ends (user's course, 2026-10-20). */
+  const both = (): Course => ({
+    v: 1,
+    catalog: 1,
+    pieces: [
+      { part: 'straight', at: 'origin' },
+      { part: 'curve45', port: 0, to: [0, 1] },
+      { part: 'curve45', port: 0, to: [0, 0] },
+      { part: 'curve45', port: 0, to: [1, 1] },
+      { part: 'curve45', port: 0, to: [2, 1] },
+    ],
+  });
+
+  it('takes in the first piece and goes on past it', () => {
+    const from = { piece: 1, port: 0 };
+    const into = { piece: 0, port: 1 };
+    expect(previewRun(both(), from, into, 2)).toEqual({ pieces: [0, 2], end: { piece: 2, port: 1 } });
+    const before = layoutCourse(both());
+    const c = raiseRun(both(), from, into, 2, 30);
+    const layout = layoutCourse(c);
+    // Stored the same way, the joint and the side it leaves from stay put.
+    expect(c.pieces.map((r) => ('to' in r ? r.to : null))).toEqual([null, [0, 1], [0, 0], [1, 1], [2, 1]]);
+    for (const i of [1, 3]) {
+      before.pieces[i].matrix.elements.forEach((x, k) => expect(layout.pieces[i].matrix.elements[k]).toBeCloseTo(x, 0));
+    }
+    // The straight and the curve beyond climb, and the last curve is level up there.
+    expect(Math.abs(height(layout.pieces[2].ports[1]) - 30)).toBeLessThan(1.5);
+    expect(height(layout.pieces[0].ports[0])).toBeGreaterThan(10);
+    expect(Math.abs(height(layout.pieces[4].ports[1]) - height(layout.pieces[2].ports[1]))).toBeLessThan(1);
+    expect(up(layout.pieces[4].ports[1]).y).toBeGreaterThan(Math.cos((0.2 * Math.PI) / 180));
+    expect(layout.problems).toEqual([]);
   });
 });
