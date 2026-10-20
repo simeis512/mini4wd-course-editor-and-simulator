@@ -3,22 +3,11 @@ import { variantOf } from '../course/catalog';
 import { portKey, sameJoint, type Layout, type PortRef } from '../course/course';
 import { pointOnFrame } from '../course/geometry';
 import { atLevel, pieceHeights, type HeightRange } from '../course/height';
-import { halfWidth, insidePolygon, roadOutline, trackEdge, worldTracks } from '../course/mesh';
+import { halfWidth, insidePolygon, worldTracks } from '../course/mesh';
 import { colorRange, heightColor, type HeightView } from './levels';
+import { lowestFirst, outlinesOf, xz, type Outline } from './outline2d';
 import { JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
 import { blink, drawShortMark, type EditorView, type RunMarks } from './view';
-
-/** One stretch of road of a piece, as seen from above. */
-interface Outline {
-  piece: number;
-  /** Left edge then right edge reversed: a closed polygon in world X/Z. */
-  polygon: [number, number][];
-  fences: [number, number][][];
-  /** Mean road height, mm; higher pieces are drawn over lower ones. */
-  height: number;
-  /** The road cut at each sample step, with its mean height, for colouring by height. */
-  steps: { polygon: [number, number][]; height: number }[];
-}
 
 /**
  * Top-down 2D editor view drawn on a canvas. Pointer Events only, so mouse,
@@ -65,22 +54,8 @@ export class TopView implements EditorView {
       this.layout = layout;
       const tracks = worldTracks(layout);
       this.heights = pieceHeights(layout, tracks);
-      this.outlines = tracks.map(({ piece, samples, section }) => {
-        const left = trackEdge(samples, section.left).map(xz);
-        const right = trackEdge(samples, section.right).map(xz);
-        return {
-          piece,
-          polygon: roadOutline(samples, section).map(xz),
-          fences: section.fences.map((x) => trackEdge(samples, x).map(xz)),
-          height: samples.reduce((sum, f) => sum + f.elements[13], 0) / samples.length,
-          steps: samples.slice(1).map((f, i) => ({
-            polygon: [left[i], left[i + 1], right[i + 1], right[i]],
-            height: (f.elements[13] + samples[i].elements[13]) / 2,
-          })),
-        };
-      });
-      // Stable sort keeps placing order between pieces at the same height.
-      this.order = this.outlines.map((_, i) => i).sort((a, b) => this.outlines[a].height - this.outlines[b].height);
+      this.outlines = outlinesOf(tracks);
+      this.order = lowestFirst(this.outlines);
     }
     this.selection = selection;
     this.draw();
@@ -491,8 +466,4 @@ export class TopView implements EditorView {
     const [a, b] = [...this.pointers.values()];
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   }
-}
-
-function xz(v: Vector3): [number, number] {
-  return [v.x, v.z];
 }
