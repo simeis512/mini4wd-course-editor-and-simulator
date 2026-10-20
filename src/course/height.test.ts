@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { GLOBAL_SPEC } from './catalog';
+import { Vector3 } from 'three';
+import { GLOBAL_SPEC, getPart } from './catalog';
+import { partGeometry, partStands, pointOnFrame } from './geometry';
 import { emptyCourse, layoutCourse, type Course } from './course';
 import { addPiece, setPose } from './edit';
 import { atLevel, pieceHeights, SUPPORT_MIN_GAP, supports } from './height';
@@ -69,22 +71,27 @@ describe('supports', () => {
     const ramps = layout.pieces.flatMap((pc, i) => (pc.part.id === 'bridge-approach' ? [i] : []));
     for (const i of ramps) expect(s.some((st) => st.piece === i)).toBe(true);
     // No stand under the high middle of the bridge, where the lower lanes run.
-    // The bridge itself has only the set's own support (below).
+    // The bridge gets no automatic stands: the set comes with its own (below).
     const centre = layout.pieces.findIndex((pc) => pc.part.id === 'lane-change-center');
-    expect(s.filter((st) => st.piece === centre)).toHaveLength(1);
+    expect(s.filter((st) => st.piece === centre)).toEqual([]);
   });
 
-  it('stands the lane change support across the middle, outside the lower lanes', () => {
-    const layout = layoutCourse(chain(['bridge-approach', 'lane-change-center']));
-    const [st] = supports(layout).filter((st) => st.piece === 1);
-    const pc = layout.pieces[1];
+  it('stands the lane change support square to the lower lanes, across their middle', () => {
+    const part = getPart('lane-change-center');
+    const [st] = partStands(part);
     expect(st.left.y).toBeCloseTo(97);
     expect(st.right.y).toBeCloseTo(97);
-    // Across the part at its middle, just wider than the two lower lanes there.
-    const toLocal = pc.matrix.clone().invert();
-    const [l, r] = [st.left, st.right].map((p) => p.clone().applyMatrix4(toLocal));
-    expect(l.z).toBeCloseTo(270);
-    expect(r.z).toBeCloseTo(270);
-    expect(Math.abs(l.x - r.x)).toBeGreaterThan(2 * (GLOBAL_SPEC.lanePitch + GLOBAL_SPEC.fenceThickness / 2));
+    // Square to the lower lanes, which swing sideways in the middle.
+    const mid = partGeometry(part).samples;
+    const f = mid[Math.round((mid.length - 1) / 2)];
+    const forward = new Vector3(0, 0, 1).transformDirection(f);
+    expect(Math.abs(st.right.clone().sub(st.left).normalize().dot(forward))).toBeLessThan(1e-6);
+    expect(Math.abs(forward.x)).toBeGreaterThan(0.05);
+    // Centred on the two lower lanes, a little narrower than the course and wider than those lanes.
+    const width = st.left.distanceTo(st.right);
+    expect(width).toBeLessThan(3 * GLOBAL_SPEC.lanePitch + GLOBAL_SPEC.fenceThickness);
+    expect(width).toBeGreaterThan(2 * GLOBAL_SPEC.lanePitch + GLOBAL_SPEC.fenceThickness);
+    const centre = st.left.clone().add(st.right).multiplyScalar(0.5);
+    expect(centre.distanceTo(pointOnFrame(f, -GLOBAL_SPEC.lanePitch / 2, centre.y - f.elements[13]))).toBeLessThan(1e-6);
   });
 });

@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { GLOBAL_SPEC } from './catalog';
 import type { Layout } from './course';
-import { pointOnFrame } from './geometry';
+import { pointOnFrame, type Stand } from './geometry';
 import { insidePolygon, worldTracks, type WorldTrack } from './mesh';
 
 const { roadThickness, fenceThickness } = GLOBAL_SPEC;
@@ -37,16 +37,11 @@ export const SUPPORT_MIN_GAP = 10;
 export const SUPPORT_SPACING = 270;
 
 /**
- * A stand under raised road (spec 3.4, 14): a slab across the road from the
+ * A stand under raised road (spec 3.4, 14): a frame across the road from the
  * floor up to the road's underside, which it follows when the road leans.
  */
-export interface Support {
+export interface Support extends Stand {
   piece: number;
-  /** Underside of the road at its left and right edges, world mm. */
-  left: Vector3;
-  right: Vector3;
-  /** Level direction along the road, unit. */
-  along: Vector3;
 }
 
 /** A track's road seen from above, cut into one quad per sample step, with the highest road surface of each. */
@@ -84,8 +79,7 @@ function roadBelow(footprints: readonly Footprint[], own: WorldTrack, x: number,
 }
 
 /**
- * Supports under raised road (#11): a part's own stands, and on other
- * parts, stands under every stretch of raised road, evenly spaced along
+ * Supports under every stretch of raised road (#11), evenly spaced along
  * each track, at most `SUPPORT_SPACING` apart and none at the joints, so
  * neighbouring pieces never stand two in one place. Where other road runs
  * underneath (a bridge, a stacked level) the stand would block it, so the
@@ -94,15 +88,8 @@ function roadBelow(footprints: readonly Footprint[], own: WorldTrack, x: number,
 export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTracks(layout)): Support[] {
   const footprints = tracks.map(footprintOf);
   const out: Support[] = [];
-  // Parts that come with their own stands get only those.
-  layout.pieces.forEach((pc, piece) => {
-    for (const s of pc.part.supports ?? []) {
-      const along = new Vector3(0, 0, 1).transformDirection(pc.matrix).setY(0).normalize();
-      const [left, right] = [s.left, s.right].map((p) => new Vector3(...p).applyMatrix4(pc.matrix));
-      out.push({ piece, left, right, along });
-    }
-  });
   for (const track of tracks) {
+    // Parts that come with their own stands (`partStands`) get only those.
     if (layout.pieces[track.piece].part.supports) continue;
     const { samples, section } = track;
     const length = samples.reduce(

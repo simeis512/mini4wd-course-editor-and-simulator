@@ -82,14 +82,19 @@ export interface PortDef {
  * measured from this track's centreline.
  */
 /**
- * A stand that comes with the part (spec 3.4, #11), as in the support
- * under the lane change bridge: a leg under each end and a crossbar between.
- * `left` and `right` are the outer top corners, part-local mm; the stand
- * faces the part's forward (+Z).
+ * A stand that comes with the part (spec 3.4, #11), as under the lane
+ * change bridge: a leg under each end and a crossbar between, standing
+ * square to the part's main centreline where it stands.
  */
 export interface PartSupport {
-  left: [number, number, number];
-  right: [number, number, number];
+  /** Where along the main centreline, as a fraction of its length. */
+  at: number;
+  /** Middle of the stand from the centreline, mm, + right. */
+  offset: number;
+  /** Half its width, to the outside of the legs, mm. */
+  halfWidth: number;
+  /** Height of its top above the centreline, mm. */
+  top: number;
 }
 
 export interface Track {
@@ -206,13 +211,11 @@ const JOINT_PITCH = (Math.atan(bridgeRiseSlope(RAMP_RUN)) * 180) / Math.PI;
 /** Lateral offset of the right-hand lane, as a part-local X (+ X is left). */
 const RIGHT_LANE_X = -laneOffset(2);
 /**
- * Half the width the lane change's own bridge support spans, mm: its legs
- * stand just outside the two lower lanes, which in the middle of the part
- * lie either side of its centreline (#11, provisional: from product photos,
- * not measured).
+ * Half the width of the lane change's own bridge support, mm: a little
+ * narrower than the course (user, from the real part, 2026-10-20; the
+ * amount is provisional, #1).
  */
-const LANE_CHANGE_SUPPORT_HALF = GLOBAL_SPEC.lanePitch + 20;
-/** Top of that support: the underside of the bridge at its highest point. */
+const LANE_CHANGE_SUPPORT_HALF = (3 * GLOBAL_SPEC.lanePitch + GLOBAL_SPEC.fenceThickness) / 2 - 10;
 const LANE_CHANGE_SUPPORT_TOP = BRIDGE_HEIGHT - GLOBAL_SPEC.roadThickness;
 const LANE_CHANGE_NOTE = `橋がアプローチ側へ約1/3入り込み、全体で1つのなだらかな山になる形は公式の図・写真どおり。寸法は未計測のため仮（橋の最高点${BRIDGE_HEIGHT}、各ピースの床の長さ${LANE_CHANGE_LENGTH}）`;
 
@@ -379,11 +382,14 @@ export const PARTS: readonly PartDef[] = [
       { from: [2, 2], to: [3, 0] },
     ],
     // The set's own support stands across the middle, under the top of the
-    // bridge, with its legs outside the lower lanes (product photos, #11).
+    // bridge, square to the two lower lanes and centred on them, in the
+    // part's colour (user, from the real part, 2026-10-20).
     supports: [
       {
-        left: [LANE_CHANGE_SUPPORT_HALF, LANE_CHANGE_SUPPORT_TOP, LANE_CHANGE_LENGTH / 2],
-        right: [-LANE_CHANGE_SUPPORT_HALF, LANE_CHANGE_SUPPORT_TOP, LANE_CHANGE_LENGTH / 2],
+        at: 0.5,
+        offset: (laneOffset(0) + laneOffset(1)) / 2,
+        halfWidth: LANE_CHANGE_SUPPORT_HALF,
+        top: LANE_CHANGE_SUPPORT_TOP,
       },
     ],
     variants: [PALETTE.white, PALETTE.gray, PALETTE.black],

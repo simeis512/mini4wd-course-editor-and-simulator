@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import { GLOBAL_SPEC, laneOffset, variantOf, type PartDef } from './catalog';
 import type { Layout, PlacedPiece } from './course';
-import type { Support } from './height';
-import { partGeometry, pointOnFrame } from './geometry';
+import { partGeometry, partStands, pointOnFrame, type Stand } from './geometry';
 
 /** Scene units are metres; course data is in millimetres. */
 export const MM = 0.001;
@@ -147,13 +146,14 @@ export function buildPartGeometry(part: PartDef): { roads: THREE.BufferGeometry[
 const partGeometryCache = new Map<string, ReturnType<typeof buildPartGeometry>>();
 const materialCache = new Map<string, THREE.MeshStandardMaterial>();
 
-function material(color: string, shade: number): THREE.MeshStandardMaterial {
-  const key = `${color}/${shade}`;
+/** `doubleSided` for stands, whose slabs' winding follows the road. */
+function material(color: string, shade: number, doubleSided = false): THREE.MeshStandardMaterial {
+  const key = `${color}/${shade}/${doubleSided}`;
   let m = materialCache.get(key);
   if (!m) {
     const c = new THREE.Color(color);
     c.multiplyScalar(shade);
-    m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 });
+    m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, side: doubleSided ? THREE.DoubleSide : THREE.FrontSide });
     materialCache.set(key, m);
   }
   return m;
@@ -177,6 +177,9 @@ export function buildCourseMeshes(layout: Layout): THREE.Group[] {
     group.userData.piece = i;
     for (const r of geo.roads) group.add(new THREE.Mesh(r, material(color, 1)));
     for (const f of geo.fences) group.add(new THREE.Mesh(f, material(color, 0.85)));
+    // Stands that come with the part are part of the piece, in its colour (#11).
+    const stands = partStands(pc.part);
+    if (stands.length) group.add(buildSupportMesh(stands, material(color, 0.9, true)));
     group.matrixAutoUpdate = false;
     group.matrix.copy(pc.matrix);
     return group;
@@ -187,8 +190,8 @@ export function buildCourseMeshes(layout: Layout): THREE.Group[] {
 const SUPPORT_LEG = 15;
 const SUPPORT_BEAM = 12;
 const SUPPORT_THICKNESS = 20;
-/** Wood-coloured, and drawn from both sides since the slabs' winding follows the road. */
-const SUPPORT_MATERIAL = new THREE.MeshStandardMaterial({ color: '#b89a6e', roughness: 0.8, side: THREE.DoubleSide });
+/** Automatic supports are wood-coloured (#11). */
+const SUPPORT_COLOR = '#b89a6e';
 
 /** Push a slab: the four-cornered face `face`, pushed `half` both ways along `along`. */
 function pushSlab(positions: number[], face: THREE.Vector3[], along: THREE.Vector3, half: number): void {
@@ -208,10 +211,10 @@ function pushSlab(positions: number[], face: THREE.Vector3[], along: THREE.Vecto
 
 /**
  * Each support as a frame: a leg from the floor under either edge of the
- * road and a crossbar under the road between them. All in one geometry,
- * world mm.
+ * road and a crossbar under the road between them, standing on y = 0.
+ * All in one geometry, in the stands' own coordinates.
  */
-export function buildSupportMesh(list: readonly Support[]): THREE.Mesh {
+export function buildSupportMesh(list: readonly Stand[], mat = material(SUPPORT_COLOR, 1, true)): THREE.Mesh {
   const positions: number[] = [];
   const up = new THREE.Vector3(0, 1, 0);
   for (const { left, right, along } of list) {
@@ -229,7 +232,7 @@ export function buildSupportMesh(list: readonly Support[]): THREE.Mesh {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, SUPPORT_MATERIAL);
+  const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'supports';
   return mesh;
 }
