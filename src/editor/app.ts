@@ -1,4 +1,4 @@
-import { Matrix4, Vector3 } from 'three';
+import { Matrix4 } from 'three';
 import { joinPart, nextOpenPort } from '../course/add';
 import { LEVEL_HEIGHT } from '../course/catalog';
 import { courseFromHash } from '../course/codec';
@@ -25,6 +25,7 @@ import {
   setTwist,
   setVariant,
   tidyCuts,
+  turnAboutMiddle,
 } from '../course/edit';
 import { asLink, joinableNear, joinPorts, splitJoint } from '../course/joining';
 import type { Pose } from '../course/geometry';
@@ -247,17 +248,7 @@ export class EditorApp {
   private rotateSelected(deg: number): void {
     const s = this.selection;
     if (s?.kind !== 'piece') return;
-    const pc = this.layout.pieces[s.index];
-    const samples = pc.geometry.samples;
-    const c = samples
-      .reduce((sum, f) => sum.add(new Vector3().setFromMatrixPosition(f)), new Vector3())
-      .divideScalar(samples.length)
-      .applyMatrix4(pc.matrix);
-    const turn = new Matrix4()
-      .makeTranslation(c.x, c.y, c.z)
-      .multiply(new Matrix4().makeRotationY((deg * Math.PI) / 180))
-      .multiply(new Matrix4().makeTranslation(-c.x, -c.y, -c.z));
-    this.moveSelected(turn);
+    this.moveSelected(turnAboutMiddle(this.layout.pieces[s.index], deg));
   }
 
   /** Set the selected piece's twist (spec 16.2), or nudge it by `by`. */

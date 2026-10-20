@@ -1,6 +1,5 @@
-import { hasPart } from '../course/catalog';
-import { courseToHash } from '../course/codec';
-import { validateCourse, type Course } from '../course/course';
+import { courseFromJson, courseToHash } from '../course/codec';
+import type { Course } from '../course/course';
 import { toast } from './dom';
 
 // Handing courses over: the page URL, and course files.
@@ -47,9 +46,5 @@ export function exportJson(course: Course): void {
 
 /** The course in a file saved by `exportJson`; throws when it is not one. */
 export async function readCourseFile(file: File): Promise<Course> {
-  const data = JSON.parse(await file.text()) as Course;
-  if (data?.v !== 1 || !Array.isArray(data.pieces)) throw new Error('コースのファイルではありません');
-  for (const rec of data.pieces) if (!hasPart(rec.part)) throw new Error(`不明なパーツ: ${rec.part}`);
-  validateCourse(data);
-  return data;
+  return courseFromJson(await file.text());
 }

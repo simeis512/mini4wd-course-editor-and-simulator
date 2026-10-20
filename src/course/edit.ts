@@ -240,6 +240,24 @@ export function moveGroup(course: Course, group: Set<number>, delta: Matrix4): C
   return next;
 }
 
+/** The middle of a placed piece's main centreline, world mm. */
+export function pieceMiddle(pc: PlacedPiece): Vector3 {
+  const samples = pc.geometry.samples;
+  return samples
+    .reduce((sum, f) => sum.add(new Vector3().setFromMatrixPosition(f)), new Vector3())
+    .divideScalar(samples.length)
+    .applyMatrix4(pc.matrix);
+}
+
+/** The world transform that turns a piece about its middle, `deg` + to the left (anticlockwise from above). */
+export function turnAboutMiddle(pc: PlacedPiece, deg: number): Matrix4 {
+  const c = pieceMiddle(pc);
+  return new Matrix4()
+    .makeTranslation(c.x, c.y, c.z)
+    .multiply(new Matrix4().makeRotationY((deg * Math.PI) / 180))
+    .multiply(new Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+}
+
 /** Set a piece's pose from its base port, freeing it if it was connected. */
 export function setPose(course: Course, index: number, pose: Pose): Course {
   const next = clone(course);

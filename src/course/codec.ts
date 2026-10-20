@@ -1,4 +1,4 @@
-import { CATALOG_VERSION, PART_CODES } from './catalog';
+import { CATALOG_VERSION, hasPart, PART_CODES } from './catalog';
 import { validateCourse, type Course, type PieceRec } from './course';
 import { isZeroBend } from './flex';
 
@@ -215,4 +215,13 @@ export async function courseToHash(course: Course): Promise<string> {
 export async function courseFromHash(hash: string): Promise<Course | null> {
   const value = new URLSearchParams(hash.replace(/^#/, '')).get(HASH_KEY);
   return value ? decodeCourse(value) : null;
+}
+
+/** The course in a JSON course file (the course itself, pretty-printed); throws when it is not one. */
+export function courseFromJson(text: string): Course {
+  const data = JSON.parse(text) as Course;
+  if (data?.v !== 1 || !Array.isArray(data.pieces)) throw new Error('コースのファイルではありません');
+  for (const rec of data.pieces) if (!hasPart(rec.part)) throw new Error(`不明なパーツ: ${rec.part}`);
+  validateCourse(data);
+  return data;
 }
