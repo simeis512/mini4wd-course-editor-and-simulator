@@ -1,5 +1,6 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
 import { portLaneCentre, type PartDef, type PortDef, type Segment } from './catalog';
+import type { PartModel } from './model';
 import { lateralProfile } from './profile';
 
 /**
@@ -98,6 +99,24 @@ export interface PartGeometry {
 }
 
 const geometryCache = new Map<string, PartGeometry>();
+/** Measured models in use, by part id (spec 15). */
+const models = new Map<string, PartModel>();
+
+/** The measured model a part uses, if one has been loaded (spec 15). */
+export function modelFor(partId: string): PartModel | null {
+  return models.get(partId) ?? null;
+}
+
+/**
+ * Use a measured model's metadata for its part, or go back to the
+ * procedural shape with null: its ports then sit where the model says
+ * (spec 15.1). Pieces placed afterwards follow.
+ */
+export function useModel(partId: string, model: PartModel | null): void {
+  if (model) models.set(partId, model);
+  else models.delete(partId);
+  geometryCache.delete(partId);
+}
 
 function portFrame(port: PortDef, samples: Matrix4[]): Matrix4 {
   if (typeof port.anchor !== 'string') return poseToMatrix(port.anchor);
@@ -116,10 +135,12 @@ export function partGeometry(part: PartDef): PartGeometry {
       const start = poseToMatrix(t.start);
       tracks.push({ samples: sampleCenterline(t.segments).map((f) => start.clone().multiply(f)), lanes: t.lanes });
     }
+    // A measured model's ports sit where they were measured (spec 15.1).
+    const ports = models.get(part.id)?.ports ?? part.ports;
     geo = {
       samples,
       tracks,
-      ports: part.ports.map((p) => portFrame(p, samples)),
+      ports: ports.map((p) => portFrame(p, samples)),
       length: part.segments.reduce((sum, s) => sum + s.length, 0),
     };
     geometryCache.set(part.id, geo);
@@ -204,9 +225,9 @@ export interface Stand {
   depth?: number;
 }
 
-/** The stands that come with a part (#11), in part-local coordinates. */
-export function partStands(part: PartDef): Stand[] {
-  const { samples } = partGeometry(part);
+/** The stands that come with a part (#11), in part-local coordinates; `geo` for a twisted piece. */
+export function partStands(part: PartDef, geo = partGeometry(part)): Stand[] {
+  const { samples } = geo;
   return (part.supports ?? []).map(({ at, offset, halfWidth, top, depth }) => {
     const f = samples[Math.round(at * (samples.length - 1))];
     return {

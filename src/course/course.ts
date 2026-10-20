@@ -1,17 +1,27 @@
 import { Matrix4, Vector3 } from 'three';
 import { CATALOG_VERSION, getPart, portLaneOffsets, type PartDef } from './catalog';
-import { attach, FACE, facingError, IDENTITY_POSE, partGeometry, poseToMatrix, type FrameError, type Pose } from './geometry';
+import { bendAngle, bendMatrix, BEND_LIMIT, pieceGeometry, TWIST_LIMIT, type Bend } from './flex';
+import { attach, FACE, facingError, IDENTITY_POSE, poseToMatrix, type FrameError, type PartGeometry, type Pose } from './geometry';
+
+/** What every piece record has. */
+interface RecBase {
+  part: string;
+  variant?: number;
+  /** Twist of the piece about its centreline, deg, + lowers the right side (spec 16.2). */
+  twist?: number;
+}
 
 /** A placed piece. Pieces only refer to pieces before them (spec 5.1). */
 export type PieceRec =
-  | { part: string; variant?: number; at: 'origin' }
-  | { part: string; variant?: number; port: number; to: [piece: number, port: number] }
+  | (RecBase & { at: 'origin' })
+  /** Joined to a port; the joint may bend a little (spec 16.1). */
+  | (RecBase & { port: number; to: [piece: number, port: number]; bend?: Bend })
   /**
    * Free placement: this piece's `port` faces the frame `pose`, which is
    * relative to the port `free` (or to the world when null). A zero pose
    * relative to a port is the same as connecting to it.
    */
-  | { part: string; variant?: number; port: number; free: [piece: number, port: number] | null; pose: Pose };
+  | (RecBase & { port: number; free: [piece: number, port: number] | null; pose: Pose });
 
 export interface Course {
   v: 1;
@@ -44,6 +54,8 @@ export interface PlacedPiece {
   part: PartDef;
   /** Piece-to-world transform, mm. */
   matrix: Matrix4;
+  /** The part's geometry with the piece's twist, part-local. */
+  geometry: PartGeometry;
   /** Port frames in world coordinates. */
   ports: Matrix4[];
 }
@@ -63,10 +75,11 @@ export interface Joint {
 
 /**
  * Something that can be built in the editor but not with real parts:
- * a floor end that is not level, or two parts that cannot be joined.
+ * a floor end that is not level, two parts that cannot be joined, or a
+ * joint bent or a piece twisted further than real parts give (spec 16.4).
  */
 export interface Problem {
-  kind: 'not-level' | 'cannot-join';
+  kind: 'not-level' | 'cannot-join' | 'bend-limit' | 'twist-limit';
   piece: number;
   port: number;
 }
@@ -167,12 +180,15 @@ export function layoutCourse(course: Course): Layout {
   const problems: Problem[] = [];
   course.pieces.forEach((rec, i) => {
     const part = getPart(rec.part);
-    const geo = partGeometry(part);
+    const geo = pieceGeometry(part, rec.twist);
+    if (Math.abs(rec.twist ?? 0) > TWIST_LIMIT) problems.push({ kind: 'twist-limit', piece: i, port: 'port' in rec ? rec.port : 0 });
     let matrix: Matrix4;
     if ('to' in rec) {
       const [j, p] = rec.to;
-      matrix = attach(pieces[j].ports[p], geo.ports[rec.port]);
+      // A bent joint turns about the joint itself (spec 16.1).
+      matrix = attach(pieces[j].ports[p].clone().multiply(bendMatrix(rec.bend)), geo.ports[rec.port]);
       if (!compatible(pieces[j].part, p, part, rec.port)) problems.push({ kind: 'cannot-join', piece: i, port: rec.port });
+      if (bendAngle(rec.bend) > BEND_LIMIT) problems.push({ kind: 'bend-limit', piece: i, port: rec.port });
       connected.add(portKey({ piece: j, port: p }));
       connected.add(portKey({ piece: i, port: rec.port }));
       links.push({ a: { piece: j, port: p }, b: { piece: i, port: rec.port }, kind: 'link' });
@@ -186,7 +202,7 @@ export function layoutCourse(course: Course): Layout {
     part.ports.forEach((def, p) => {
       if (def.floor && !isLevel(ports[p])) problems.push({ kind: 'not-level', piece: i, port: p });
     });
-    pieces.push({ rec, part, matrix, ports });
+    pieces.push({ rec, part, matrix, geometry: geo, ports });
   });
 
   const loose: PortRef[] = [];

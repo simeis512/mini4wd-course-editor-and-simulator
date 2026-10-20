@@ -1,25 +1,33 @@
 import { CATALOG_VERSION, PART_CODES } from './catalog';
 import { validateCourse, type Course, type PieceRec } from './course';
+import { isZeroBend } from './flex';
 
 /**
  * Course ⇄ URL hash (spec 6): `#c=<format>.<payload>`, where the payload is
  * a compact binary course, deflate-raw compressed and base64url encoded.
  *
- * Format 1, all integers as LEB128 varints (signed ones zigzag encoded):
+ * Format 2, all integers as LEB128 varints (signed ones zigzag encoded):
  *   catalog version
  *   flags: bit0 dir = -1, bit1 has name, bit2 has split marks
  *   [name: byte length, UTF-8]
  *   piece count
  *   per piece:
  *     part code (index into PART_CODES)
- *     head: bits0-1 anchor (0 origin, 1 to, 2 free in world, 3 free from port), bit2 has variant
+ *     head: bits0-1 anchor (0 origin, 1 to, 2 free in world, 3 free from port),
+ *           bit2 has variant, bit3 has bend, bit4 has twist
  *     [variant]
  *     [port]                         unless origin
  *     [piece, port]                  to / free from port
+ *     [pitch, yaw (0.1°)]            bend of a `to` joint (spec 16.5)
  *     [x, y, z (0.1 mm), yaw, pitch, roll (0.1°)]  free
+ *     [twist (0.1°)]                 (spec 16.5)
  *   [split mark count, then piece, port for each]  when flagged
+ *
+ * Format 1 is the same without bends and twists, so it still reads.
  */
-export const FORMAT_VERSION = 1;
+export const FORMAT_VERSION = 2;
+/** Older formats that still read. */
+const READABLE_VERSIONS = [1, FORMAT_VERSION];
 const HASH_KEY = 'c';
 
 class Writer {
@@ -86,12 +94,17 @@ export function courseToBytes(course: Course): Uint8Array {
     if (code < 0) throw new Error(`part has no code: ${rec.part}`);
     w.uint(code);
     const anchor = 'at' in rec ? 0 : 'to' in rec ? 1 : rec.free ? 3 : 2;
-    w.uint(anchor | (rec.variant !== undefined ? 4 : 0));
+    const bend = 'to' in rec && !isZeroBend(rec.bend) ? rec.bend! : null;
+    w.uint(anchor | (rec.variant !== undefined ? 4 : 0) | (bend ? 8 : 0) | (rec.twist ? 16 : 0));
     if (rec.variant !== undefined) w.uint(rec.variant);
     if ('port' in rec) w.uint(rec.port);
     if ('to' in rec) {
       w.uint(rec.to[0]);
       w.uint(rec.to[1]);
+      if (bend) {
+        w.tenths(bend.pitch ?? 0);
+        w.tenths(bend.yaw ?? 0);
+      }
     } else if ('free' in rec) {
       if (rec.free) {
         w.uint(rec.free[0]);
@@ -100,6 +113,7 @@ export function courseToBytes(course: Course): Uint8Array {
       for (const x of rec.pose.pos) w.tenths(x);
       for (const x of rec.pose.rot) w.tenths(x);
     }
+    if (rec.twist) w.tenths(rec.twist);
   }
   if (cuts.length) {
     w.uint(cuts.length);
@@ -133,6 +147,12 @@ export function courseFromBytes(bytes: Uint8Array): Course {
       const port = r.uint();
       if (anchor === 1) {
         rec = { part, port, to: [r.uint(), r.uint()] };
+        if (head & 8) {
+          const [pitch, yaw] = [r.tenths(), r.tenths()];
+          rec.bend = {};
+          if (pitch) rec.bend.pitch = pitch;
+          if (yaw) rec.bend.yaw = yaw;
+        }
       } else {
         const free: [number, number] | null = anchor === 3 ? [r.uint(), r.uint()] : null;
         const pos: [number, number, number] = [r.tenths(), r.tenths(), r.tenths()];
@@ -141,6 +161,7 @@ export function courseFromBytes(bytes: Uint8Array): Course {
       }
     }
     if (variant !== undefined) rec.variant = variant;
+    if (head & 16) rec.twist = r.tenths();
     course.pieces.push(rec);
   }
   if (flags & 4) {
@@ -180,7 +201,7 @@ export async function decodeCourse(value: string): Promise<Course> {
   const dot = value.indexOf('.');
   const version = Number(value.slice(0, dot));
   if (dot < 0 || !Number.isInteger(version)) throw new Error('コースURLの形式が正しくありません');
-  if (version !== FORMAT_VERSION) throw new Error(`未対応のコース形式です（版 ${version}）`);
+  if (!READABLE_VERSIONS.includes(version)) throw new Error(`未対応のコース形式です（版 ${version}）`);
   const bytes = await pipe(fromBase64Url(value.slice(dot + 1)), new DecompressionStream('deflate-raw'));
   return courseFromBytes(bytes);
 }

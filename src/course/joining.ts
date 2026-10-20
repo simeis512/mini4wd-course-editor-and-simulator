@@ -1,6 +1,7 @@
 import { compatible, layoutCourse, movingGroup, portKey, type Course, type Layout, type PortRef } from './course';
-import { clone, freeRec, moveGroup, uncut } from './edit';
-import { FACE, facingError, IDENTITY_POSE } from './geometry';
+import { clone, freeRec, linkHolder, moveGroup, uncut } from './edit';
+import { bendPose } from './flex';
+import { FACE, facingError } from './geometry';
 
 // Joining, splitting and the magnet that pulls ports together (spec 5.2, 5.3, 8).
 
@@ -64,11 +65,11 @@ export function applyMagnet(course: Course, group: Set<number>, magnet: Magnet):
  */
 export function splitJoint(course: Course, a: PortRef, b: PortRef): Course {
   const next = clone(course);
-  for (const [x, y] of [[a, b], [b, a]]) {
-    const rec = course.pieces[y.piece];
-    if ('to' in rec && rec.to[0] === x.piece && rec.to[1] === x.port && rec.port === y.port) {
-      next.pieces[y.piece] = freeRec(rec, x, IDENTITY_POSE);
-    }
+  const holder = linkHolder(course, a, b);
+  if (holder !== null) {
+    const rec = course.pieces[holder];
+    // A bent joint stays bent where it is (spec 16.1).
+    next.pieces[holder] = freeRec(rec, holder === a.piece ? b : a, bendPose('to' in rec ? rec.bend : undefined));
   }
   next.cuts = [...(course.cuts ?? []), [a.piece, a.port], [b.piece, b.port]];
   return next;
