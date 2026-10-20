@@ -1,25 +1,44 @@
+import { Matrix4, Vector3 } from 'three';
 import { getPart, hasPart, PARTS, variantOf } from '../course/catalog';
 import { courseFromHash, courseToHash } from '../course/codec';
 import {
   addPiece,
+  applyMagnet,
   compatible,
   deletePiece,
   emptyCourse,
+  findMagnet,
   flipPiece,
+  groupCount,
+  joinableNear,
+  joinPorts,
   layoutCourse,
+  MAGNET_DISTANCE,
+  moveGroup,
+  movingGroup,
   partCounts,
+  placementOf,
   portKey,
+  setPose,
   setVariant,
+  splitJoint,
+  tidyCuts,
   validateCourse,
   type Course,
   type Layout,
 } from '../course/course';
+import { partGeometry, type Pose } from '../course/geometry';
 import { basicOval } from '../course/presets';
 import type { Selection } from './selection';
 import { TopView } from './view2d';
 import { OrbitView } from './view3d';
 
 const HISTORY_LIMIT = 200;
+/** Ports this many screen pixels apart still pull together while dragging. */
+const MAGNET_PX = 12;
+/** Drag steps with snapping on (spec 8). */
+const SNAP_STEP = 10;
+const POSE_FIELDS = ['pose-x', 'pose-y', 'pose-z', 'pose-yaw', 'pose-pitch', 'pose-roll'] as const;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -35,11 +54,23 @@ export class EditorApp {
   /** The hash we last wrote, so our own updates are not reloaded. */
   private writtenHash = '';
   private hashWrite = Promise.resolve();
+  /** A piece being dragged in the top view, and the course as it would be if dropped now. */
+  private drag: { index: number; start: Course; group: Set<number>; preview: Course | null } | null = null;
 
   constructor() {
     const onPick = (s: Selection) => this.select(s);
-    this.top = new TopView($('view2d'), { onPick });
-    this.orbit = new OrbitView($('view3d'), { onPick });
+    this.top = new TopView($('view2d'), {
+      onPick,
+      onDragStart: (index) => this.dragStart(index),
+      onDragMove: (dx, dz, noSnap) => this.dragMove(dx, dz, noSnap),
+      onDragEnd: (commit) => this.dragEnd(commit),
+    });
+    this.orbit = new OrbitView($('view3d'), {
+      onPick,
+      onDragStart: (index) => this.dragStart(index),
+      onDragMove: (dx, dz, noSnap) => this.dragMove(dx, dz, noSnap),
+      onDragEnd: (commit) => this.dragEnd(commit),
+    });
     this.buildPalette();
     this.bindUi();
   }
@@ -105,6 +136,10 @@ export class EditorApp {
     const s = this.selection;
     if (s?.kind === 'port' && !this.layout.open.some((r) => portKey(r) === portKey(s.ref))) this.selection = null;
     if (s?.kind === 'piece' && s.index >= this.course.pieces.length) this.selection = null;
+    if (s?.kind === 'joint') {
+      const key = [portKey(s.a), portKey(s.b)].sort().join();
+      if (!this.layout.joints.some((j) => [portKey(j.a), portKey(j.b)].sort().join() === key)) this.selection = null;
+    }
     this.top.setData(this.layout, this.selection);
     this.orbit.setData(this.layout, this.selection);
     this.renderPanel();
@@ -170,6 +205,90 @@ export class EditorApp {
     const s = this.selection;
     if (s?.kind !== 'piece') return;
     this.commit(deletePiece(this.course, s.index));
+  }
+
+  // ---- Free placement (spec 5.2, 8)
+
+  private get snapOn(): boolean {
+    return $<HTMLInputElement>('snap').checked;
+  }
+
+  private get moveAlone(): boolean {
+    return $<HTMLInputElement>('move-alone').checked;
+  }
+
+  private dragStart(index: number): boolean {
+    this.drag = { index, start: this.course, group: movingGroup(this.layout, index, this.moveAlone), preview: null };
+    return true;
+  }
+
+  private dragMove(dx: number, dz: number, noSnap: boolean): void {
+    const d = this.drag;
+    if (!d) return;
+    if (this.snapOn && !noSnap) {
+      dx = Math.round(dx / SNAP_STEP) * SNAP_STEP;
+      dz = Math.round(dz / SNAP_STEP) * SNAP_STEP;
+    }
+    let next = moveGroup(d.start, d.group, new Matrix4().makeTranslation(dx, 0, dz));
+    // The 3D view has no single scale, so it uses the plain magnet distance.
+    const px = this.mode === '2d' ? MAGNET_PX / this.top.pxPerMm : 0;
+    const magnet = findMagnet(next, d.group, Math.max(MAGNET_DISTANCE, px));
+    if (magnet) next = applyMagnet(next, d.group, magnet);
+    d.preview = next;
+    (this.mode === '3d' ? this.orbit : this.top).setData(layoutCourse(next), this.selection);
+  }
+
+  private dragEnd(commit: boolean): void {
+    const d = this.drag;
+    this.drag = null;
+    if (!d?.preview) return;
+    if (commit) this.commit(tidyCuts(d.preview), { kind: 'piece', index: d.index });
+    else this.refresh(false);
+  }
+
+  /** Move the selected piece, with the pieces joined to it, by a rigid transform in world space. */
+  private moveSelected(by: Matrix4): void {
+    const s = this.selection;
+    if (s?.kind !== 'piece') return;
+    this.commit(tidyCuts(moveGroup(this.course, movingGroup(this.layout, s.index, this.moveAlone), by)), s);
+  }
+
+  /** Turn the selected piece about its middle, + to the left (anticlockwise from above). */
+  private rotateSelected(deg: number): void {
+    const s = this.selection;
+    if (s?.kind !== 'piece') return;
+    const pc = this.layout.pieces[s.index];
+    const samples = partGeometry(pc.part).samples;
+    const c = samples
+      .reduce((sum, f) => sum.add(new Vector3().setFromMatrixPosition(f)), new Vector3())
+      .divideScalar(samples.length)
+      .applyMatrix4(pc.matrix);
+    const turn = new Matrix4()
+      .makeTranslation(c.x, c.y, c.z)
+      .multiply(new Matrix4().makeRotationY((deg * Math.PI) / 180))
+      .multiply(new Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+    this.moveSelected(turn);
+  }
+
+  private splitSelected(): void {
+    const s = this.selection;
+    if (s?.kind !== 'joint') return;
+    this.commit(splitJoint(this.course, s.a, s.b), { kind: 'port', ref: s.b });
+  }
+
+  private joinSelected(): void {
+    const s = this.selection;
+    if (s?.kind !== 'port') return;
+    const other = joinableNear(this.layout, s.ref);
+    if (other) this.commit(joinPorts(this.course, s.ref, other), { kind: 'joint', a: s.ref, b: other });
+  }
+
+  private setPoseFromFields(): void {
+    const s = this.selection;
+    if (s?.kind !== 'piece') return;
+    const [x, y, z, yaw, pitch, roll] = POSE_FIELDS.map((id) => Number($<HTMLInputElement>(id).value) || 0);
+    const pose: Pose = { pos: [x, y, z], rot: [yaw, pitch, roll] };
+    this.commit(setPose(this.course, s.index, pose), s);
   }
 
   private async copyUrl(): Promise<void> {
@@ -253,6 +372,13 @@ export class EditorApp {
       if (s?.kind !== 'piece') return;
       this.commit(setVariant(this.course, s.index, Number((e.target as HTMLSelectElement).value)), s);
     });
+    $('rot-left').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? 1 : 15));
+    $('rot-right').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? -1 : -15));
+    $('raise').addEventListener('click', () => this.moveSelected(new Matrix4().makeTranslation(0, 10, 0)));
+    $('lower').addEventListener('click', () => this.moveSelected(new Matrix4().makeTranslation(0, -10, 0)));
+    for (const id of POSE_FIELDS) $(id).addEventListener('change', () => this.setPoseFromFields());
+    $('split').addEventListener('click', () => this.splitSelected());
+    $('join').addEventListener('click', () => this.joinSelected());
 
     window.addEventListener('keydown', (e) => {
       const t = e.target as HTMLElement;
@@ -266,9 +392,14 @@ export class EditorApp {
         e.preventDefault();
         this.redo();
       } else if (!mod && (e.key === 'Delete' || e.key === 'Backspace')) {
-        this.deleteSelected();
+        if (this.selection?.kind === 'joint') this.splitSelected();
+        else this.deleteSelected();
       } else if (!mod && e.key.toLowerCase() === 'f') {
         this.flipSelected();
+      } else if (!mod && e.key.toLowerCase() === 'q') {
+        this.rotateSelected(e.shiftKey ? 1 : 15);
+      } else if (!mod && e.key.toLowerCase() === 'e') {
+        this.rotateSelected(e.shiftKey ? -1 : -15);
       } else if (e.key === 'Escape') {
         this.select(null);
       }
@@ -312,11 +443,37 @@ export class EditorApp {
       );
       select.value = String(pc.part.variants.indexOf(variantOf(pc.part, pc.rec.variant)));
       $<HTMLButtonElement>('flip').disabled = pc.part.ports.length !== 2;
+
+      const group = movingGroup(layout, s.index);
+      $('group-info').textContent =
+        group.size > 1
+          ? `点線のピースとつながっています。ドラッグするとつながった ${group.size} 個が一緒に動きます`
+          : 'ほかのピースとつながっていません';
+      const { base, pose } = placementOf(pc.rec);
+      const from = base ? `#${base.piece + 1} ${layout.pieces[base.piece].part.name} の口から` : 'ワールド原点から';
+      $('placement-base').textContent = 'free' in pc.rec ? `自由配置（${from}）` : base ? `連結（${from}）` : '先頭（原点）';
+      const values = [...pose.pos, ...pose.rot];
+      POSE_FIELDS.forEach((id, i) => {
+        const input = $<HTMLInputElement>(id);
+        if (document.activeElement !== input) input.value = String(values[i]);
+      });
     }
+
+    // Selected joint, or an open port that could be joined.
+    $('joint-panel').hidden = s?.kind !== 'joint';
+    if (s?.kind === 'joint') {
+      const name = (r: { piece: number }) => `#${r.piece + 1} ${layout.pieces[r.piece].part.name}`;
+      $('joint-name').textContent = `${name(s.a)} と ${name(s.b)} のつなぎ目`;
+    }
+    const near = s?.kind === 'port' ? joinableNear(layout, s.ref) : null;
+    $('port-panel').hidden = !near;
+    if (near) $('join-name').textContent = `近くの口（#${near.piece + 1} ${layout.pieces[near.piece].part.name}）`;
 
     // Course summary.
     const info: string[] = [];
     info.push(`<div>ピース数: ${course.pieces.length}</div>`);
+    const islands = groupCount(layout);
+    if (islands > 1) info.push(`<div class="muted">つながりのまとまり: ${islands} 個</div>`);
     const counts = [...partCounts(course)].map(([id, n]) => `<li>${getPart(id).name} × ${n}</li>`);
     if (counts.length) info.push(`<ul>${counts.join('')}</ul>`);
     if (layout.open.length > 0) {
@@ -329,7 +486,8 @@ export class EditorApp {
       info.push(`<div class="warn">#${pr.piece + 1} ${layout.pieces[pr.piece].part.name}: ${what}</div>`);
     }
     for (const c of layout.closures) {
-      if (layout.pieces[c.a.piece].part.ports[c.a.port].kind === 'lc-upper') continue;
+      // Ports placed exactly together are simply joined; only real gaps are worth showing.
+      if (c.distance < 0.05 && c.angle < 0.05) continue;
       info.push(`<div class="muted">ループ閉じ（#${c.a.piece + 1}–#${c.b.piece + 1}）: 誤差 ${c.distance.toFixed(1)}mm / ${c.angle.toFixed(1)}°</div>`);
     }
     $('info').innerHTML = info.join('');

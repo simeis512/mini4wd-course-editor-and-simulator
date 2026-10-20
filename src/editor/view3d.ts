@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
-import { portKey, type Layout } from '../course/course';
+import { portKey, type Layout, type PortRef } from '../course/course';
 import { buildCourseMeshes, MM } from '../course/mesh';
-import type { PickHandlers, Selection } from './selection';
+import type { DragHandlers, PickHandlers, Selection } from './selection';
 
 const BACKGROUND = new THREE.Color(0x1b1d22);
 
@@ -16,7 +16,11 @@ if (typeof XRWebGLBinding !== 'undefined' && 'createProjectionLayer' in XRWebGLB
 }
 const TAP_SLOP = 6;
 
-/** 3D orbit view of the course, with AR (WebXR) for viewing only. */
+/**
+ * 3D orbit view of the course, with AR (WebXR) for viewing only. Dragging
+ * the selected piece moves it across the level it was grabbed at; any other
+ * drag orbits the camera.
+ */
 export class OrbitView {
   readonly renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -30,11 +34,14 @@ export class OrbitView {
   private layout: Layout | null = null;
   private active = false;
   private downAt: { x: number; y: number } | null = null;
+  /** A piece being dragged: the level plane it moves on and where it was grabbed (course mm). */
+  private moving: { plane: THREE.Plane; from: THREE.Vector3; dragged: boolean } | null = null;
+  private selection: Selection = null;
   private arStatus: HTMLElement;
 
   constructor(
     private container: HTMLElement,
-    private handlers: PickHandlers,
+    private handlers: PickHandlers & DragHandlers,
   ) {
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -93,9 +100,27 @@ export class OrbitView {
     });
 
     const el = renderer.domElement;
-    el.addEventListener('pointerdown', (e) => (this.downAt = { x: e.clientX, y: e.clientY }));
+    // Capture on the container so a drag on the selected piece starts before
+    // the orbit controls see the pointer.
+    container.addEventListener('pointerdown', (e) => this.onDown(e), { capture: true });
+    el.addEventListener('pointermove', (e) => this.onMove(e));
     el.addEventListener('pointerup', (e) => {
-      if (this.downAt && Math.hypot(e.clientX - this.downAt.x, e.clientY - this.downAt.y) <= TAP_SLOP) this.pick(e);
+      const tap = this.downAt !== null && Math.hypot(e.clientX - this.downAt.x, e.clientY - this.downAt.y) <= TAP_SLOP;
+      if (this.moving) {
+        const dragged = this.moving.dragged;
+        this.moving = null;
+        this.handlers.onDragEnd(dragged);
+        if (dragged) {
+          this.downAt = null;
+          return;
+        }
+      }
+      if (tap) this.pick(e);
+      this.downAt = null;
+    });
+    el.addEventListener('pointercancel', () => {
+      if (this.moving) this.handlers.onDragEnd(false);
+      this.moving = null;
       this.downAt = null;
     });
     new ResizeObserver(() => this.resize()).observe(container);
@@ -119,25 +144,64 @@ export class OrbitView {
     this.root.position.set(-centre.x, -1.2, -1.5 - centre.z);
   }
 
+  private onDown(e: PointerEvent): void {
+    if (e.target !== this.renderer.domElement || this.renderer.xr.isPresenting) return;
+    this.downAt = { x: e.clientX, y: e.clientY };
+    const sel = this.selection;
+    if (sel?.kind !== 'piece' || !e.isPrimary) return;
+    const hit = this.raycaster(e).intersectObjects(this.pieces, true)[0];
+    if (!hit || pieceOf(hit.object) !== sel.index || !this.handlers.onDragStart(sel.index)) return;
+    e.stopPropagation();
+    this.renderer.domElement.setPointerCapture(e.pointerId);
+    this.moving = {
+      plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), -hit.point.y),
+      from: this.root.worldToLocal(hit.point.clone()),
+      dragged: false,
+    };
+  }
+
+  private onMove(e: PointerEvent): void {
+    const m = this.moving;
+    if (!m || !this.downAt) return;
+    if (!m.dragged && Math.hypot(e.clientX - this.downAt.x, e.clientY - this.downAt.y) <= TAP_SLOP) return;
+    const at = this.raycaster(e).ray.intersectPlane(m.plane, new THREE.Vector3());
+    if (!at) return;
+    m.dragged = true;
+    const p = this.root.worldToLocal(at);
+    this.handlers.onDragMove(p.x - m.from.x, p.z - m.from.z, e.shiftKey);
+  }
+
   setData(layout: Layout, selection: Selection): void {
+    this.selection = selection;
     if (layout !== this.layout) {
       this.layout = layout;
       for (const p of this.pieces) this.root.remove(p);
       this.pieces = buildCourseMeshes(layout);
       for (const p of this.pieces) this.root.add(p);
     }
+    // The selected piece glows; the pieces joined to it (which move with it) glow faintly.
+    const group = selection?.kind === 'piece' ? layout.group[selection.index] : -1;
     this.pieces.forEach((g, i) => {
-      const on = selection?.kind === 'piece' && selection.index === i;
+      const level = selection?.kind === 'piece' && selection.index === i ? 2 : layout.group[i] === group ? 1 : 0;
       g.traverse((o) => {
-        if (o instanceof THREE.Mesh) o.material = on ? highlighted(o.material) : unhighlighted(o.material);
+        if (o instanceof THREE.Mesh) o.material = level ? highlighted(o.material, level) : unhighlighted(o.material);
       });
     });
     this.markers.clear();
+    const split = new Set(layout.split.map(portKey));
     for (const ref of layout.open) {
       const selected = selection?.kind === 'port' && portKey(selection.ref) === portKey(ref);
-      const m = new THREE.Mesh(MARKER_GEOMETRY, selected ? MARKER_SELECTED : MARKER_OPEN);
+      const m = new THREE.Mesh(MARKER_GEOMETRY, selected ? MARKER_SELECTED : split.has(portKey(ref)) ? MARKER_SPLIT : MARKER_OPEN);
       m.applyMatrix4(layout.pieces[ref.piece].ports[ref.port]);
       m.userData.port = ref;
+      this.markers.add(m);
+    }
+    const key = (a: PortRef, b: PortRef) => [portKey(a), portKey(b)].sort().join();
+    const selectedJoint = selection?.kind === 'joint' ? key(selection.a, selection.b) : null;
+    for (const j of layout.joints) {
+      const m = new THREE.Mesh(JOINT_GEOMETRY, key(j.a, j.b) === selectedJoint ? MARKER_SELECTED : MARKER_JOINT);
+      m.applyMatrix4(layout.pieces[j.a.piece].ports[j.a.port]);
+      m.userData.joint = { a: j.a, b: j.b };
       this.markers.add(m);
     }
   }
@@ -176,34 +240,50 @@ export class OrbitView {
     }
   }
 
-  private pick(e: PointerEvent): void {
+  private raycaster(e: PointerEvent): THREE.Raycaster {
     const r = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     const ray = new THREE.Raycaster();
     ray.setFromCamera(ndc, this.camera);
-    const hit = ray.intersectObjects([this.markers, ...this.pieces], true)[0];
+    return ray;
+  }
+
+  private pick(e: PointerEvent): void {
+    const hit = this.raycaster(e).intersectObjects([this.markers, ...this.pieces], true)[0];
     if (!hit) return this.handlers.onPick(null);
     if (hit.object.userData.port) return this.handlers.onPick({ kind: 'port', ref: hit.object.userData.port });
-    let o: THREE.Object3D | null = hit.object;
-    while (o && o.userData.piece === undefined) o = o.parent;
-    this.handlers.onPick(o ? { kind: 'piece', index: o.userData.piece } : null);
+    if (hit.object.userData.joint) return this.handlers.onPick({ kind: 'joint', ...hit.object.userData.joint });
+    const piece = pieceOf(hit.object);
+    this.handlers.onPick(piece === null ? null : { kind: 'piece', index: piece });
   }
+}
+
+function pieceOf(object: THREE.Object3D): number | null {
+  let o: THREE.Object3D | null = object;
+  while (o && o.userData.piece === undefined) o = o.parent;
+  return o ? o.userData.piece : null;
 }
 
 const MARKER_GEOMETRY = new THREE.ConeGeometry(45, 90, 16).rotateX(Math.PI / 2).translate(0, 30, 30);
 const MARKER_OPEN = new THREE.MeshStandardMaterial({ color: 0xff9a2e, emissive: 0x552200 });
 const MARKER_SELECTED = new THREE.MeshStandardMaterial({ color: 0x3fd0ff, emissive: 0x114455 });
+const MARKER_SPLIT = new THREE.MeshStandardMaterial({ color: 0xff5a5a, emissive: 0x551111 });
+const MARKER_JOINT = new THREE.MeshStandardMaterial({ color: 0x39c26b, emissive: 0x0d3d1f });
+/** A flat bar across the middle of a joint, standing just above the road. */
+const JOINT_GEOMETRY = new THREE.BoxGeometry(90, 12, 24).translate(0, 8, 0);
 
-const highlightCache = new WeakMap<THREE.Material, THREE.Material>();
+const HIGHLIGHT = [0, 0x0a2a35, 0x1a6680];
+const highlightCache = [0, 1, 2].map(() => new WeakMap<THREE.Material, THREE.Material>());
 const baseOf = new WeakMap<THREE.Material, THREE.Material>();
 
-function highlighted(m: THREE.Material | THREE.Material[]): THREE.Material {
+/** `level` 2: the selection; 1: joined to it. */
+function highlighted(m: THREE.Material | THREE.Material[], level: number): THREE.Material {
   const base = unhighlighted(m);
-  let h = highlightCache.get(base);
+  let h = highlightCache[level].get(base);
   if (!h) {
     const c = (base as THREE.MeshStandardMaterial).clone();
-    c.emissive = new THREE.Color(0x1a6680);
-    highlightCache.set(base, c);
+    c.emissive = new THREE.Color(HIGHLIGHT[level]);
+    highlightCache[level].set(base, c);
     baseOf.set(c, base);
     h = c;
   }

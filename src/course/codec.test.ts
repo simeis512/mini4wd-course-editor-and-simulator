@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { courseFromBytes, courseFromHash, courseToBytes, courseToHash, decodeCourse, encodeCourse } from './codec';
-import { deletePiece, flipPiece, setVariant, type Course } from './course';
+import { deletePiece, flipPiece, setVariant, splitJoint, type Course } from './course';
 import { basicOval } from './presets';
 
 function sample(): Course {
@@ -8,6 +8,7 @@ function sample(): Course {
   c = setVariant(c, 4, 1);
   c = flipPiece(c, 2);
   c = deletePiece(c, 6);
+  c = splitJoint(c, { piece: 0, port: 1 }, { piece: 1, port: 0 });
   return { ...c, name: 'テストコース', dir: -1 };
 }
 

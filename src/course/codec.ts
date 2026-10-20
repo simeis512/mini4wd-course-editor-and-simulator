@@ -7,7 +7,7 @@ import { validateCourse, type Course, type PieceRec } from './course';
  *
  * Format 1, all integers as LEB128 varints (signed ones zigzag encoded):
  *   catalog version
- *   flags: bit0 dir = -1, bit1 has name
+ *   flags: bit0 dir = -1, bit1 has name, bit2 has split marks
  *   [name: byte length, UTF-8]
  *   piece count
  *   per piece:
@@ -17,6 +17,7 @@ import { validateCourse, type Course, type PieceRec } from './course';
  *     [port]                         unless origin
  *     [piece, port]                  to / free from port
  *     [x, y, z (0.1 mm), yaw, pitch, roll (0.1°)]  free
+ *   [split mark count, then piece, port for each]  when flagged
  */
 export const FORMAT_VERSION = 1;
 const HASH_KEY = 'c';
@@ -72,7 +73,8 @@ class Reader {
 export function courseToBytes(course: Course): Uint8Array {
   const w = new Writer();
   w.uint(course.catalog);
-  w.uint((course.dir === -1 ? 1 : 0) | (course.name ? 2 : 0));
+  const cuts = course.cuts ?? [];
+  w.uint((course.dir === -1 ? 1 : 0) | (course.name ? 2 : 0) | (cuts.length ? 4 : 0));
   if (course.name) {
     const name = new TextEncoder().encode(course.name);
     w.uint(name.length);
@@ -97,6 +99,13 @@ export function courseToBytes(course: Course): Uint8Array {
       }
       for (const x of rec.pose.pos) w.tenths(x);
       for (const x of rec.pose.rot) w.tenths(x);
+    }
+  }
+  if (cuts.length) {
+    w.uint(cuts.length);
+    for (const [piece, port] of cuts) {
+      w.uint(piece);
+      w.uint(port);
     }
   }
   return new Uint8Array(w.bytes);
@@ -133,6 +142,11 @@ export function courseFromBytes(bytes: Uint8Array): Course {
     }
     if (variant !== undefined) rec.variant = variant;
     course.pieces.push(rec);
+  }
+  if (flags & 4) {
+    const n = r.uint();
+    course.cuts = [];
+    for (let i = 0; i < n; i++) course.cuts.push([r.uint(), r.uint()]);
   }
   if (r.pos !== bytes.length) throw new Error('unexpected data after course');
   validateCourse(course);
