@@ -5,8 +5,8 @@ import { portKey, sameJoint, type Layout, type PlacedPiece } from '../course/cou
 import { GLOBAL_SPEC } from '../course/catalog';
 import { supports } from '../course/height';
 import { buildCourseMeshes, buildSupportMesh, MM, pieceTracks, roadOutline } from '../course/mesh';
-import type { DragHandlers, PickHandlers, Selection } from './selection';
-import type { EditorView } from './view';
+import { JOINT_HIT, PORT_HIT, type DragHandlers, type PickHandlers, type Selection } from './selection';
+import { blink, drawShortMark, type EditorView, type RunMarks } from './view';
 
 const BACKGROUND = new THREE.Color(0x1b1d22);
 
@@ -45,6 +45,11 @@ export class OrbitView implements EditorView {
   private moving: { plane: THREE.Plane; from: THREE.Vector3; dragged: boolean } | null = null;
   private selection: Selection = null;
   private arStatus: HTMLElement;
+  private runMarks: RunMarks | null = null;
+  /** Materials of the pieces a raise would move, which blink. */
+  private runMaterials = new Set<THREE.MeshStandardMaterial>();
+  /** The count shown at the end of a short run. */
+  private shortMark: THREE.Sprite | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -204,6 +209,7 @@ export class OrbitView implements EditorView {
         if (o instanceof THREE.Mesh) o.material = level ? highlighted(o.material, level) : unhighlighted(o.material);
       });
     });
+    this.markRun();
     this.outlines.clear();
     if (selection?.kind === 'piece') {
       layout.pieces.forEach((pc, i) => {
@@ -226,6 +232,49 @@ export class OrbitView implements EditorView {
       m.applyMatrix4(layout.pieces[j.a.piece].ports[j.a.port]);
       m.userData.joint = { a: j.a, b: j.b };
       this.markers.add(m);
+    }
+  }
+
+  setRunMarks(marks: RunMarks | null): void {
+    this.runMarks = marks?.pieces.length ? marks : null;
+    if (this.layout) this.setData(this.layout, this.selection);
+  }
+
+  /** Blink the pieces a raise would move, and show the count at the end of a short run. */
+  private markRun(): void {
+    const run = this.runMarks;
+    this.runMaterials.clear();
+    if (run) {
+      for (const i of run.pieces) {
+        this.pieces[i]?.traverse((o) => {
+          if (!(o instanceof THREE.Mesh)) return;
+          o.material = highlighted(o.material, RUN_LEVEL);
+          this.runMaterials.add(o.material as THREE.MeshStandardMaterial);
+        });
+      }
+    }
+    if (this.shortMark) {
+      this.scene.remove(this.shortMark);
+      (this.shortMark.material as THREE.SpriteMaterial).map?.dispose();
+      this.shortMark.material.dispose();
+      this.shortMark = null;
+    }
+    if (run?.missing && run.end && this.layout) {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 64;
+      const ctx = canvas.getContext('2d')!;
+      ctx.scale(2, 2);
+      drawShortMark(ctx, 16, 17, run.missing);
+      const map = new THREE.CanvasTexture(canvas);
+      map.colorSpace = THREE.SRGBColorSpace;
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, depthTest: false, sizeAttenuation: false }));
+      sprite.scale.setScalar(0.07);
+      sprite.renderOrder = 10;
+      const e = this.layout.pieces[run.end.piece].ports[run.end.port].elements;
+      this.root.updateMatrixWorld();
+      sprite.position.copy(this.root.localToWorld(new THREE.Vector3(e[12], e[13] + 90, e[14])));
+      this.scene.add(sprite);
+      this.shortMark = sprite;
     }
   }
 
@@ -281,6 +330,8 @@ export class OrbitView implements EditorView {
   private render(): void {
     try {
       if (!this.renderer.xr.isPresenting) this.controls.update();
+      const glow = blink(performance.now());
+      for (const m of this.runMaterials) m.emissiveIntensity = 0.3 + 1.2 * glow;
       this.renderer.render(this.scene, this.camera);
     } catch (e) {
       this.arStatus.textContent = `描画エラー: ${(e as Error).message}`;
@@ -297,12 +348,45 @@ export class OrbitView implements EditorView {
   }
 
   private pick(e: PointerEvent): void {
-    const hit = this.raycaster(e).intersectObjects([this.markers, ...this.pieces], true)[0];
-    if (!hit) return this.handlers.onPick(null);
-    if (hit.object.userData.port) return this.handlers.onPick({ kind: 'port', ref: hit.object.userData.port });
-    if (hit.object.userData.joint) return this.handlers.onPick({ kind: 'joint', ...hit.object.userData.joint });
-    const piece = pieceOf(hit.object);
+    const marker = this.markerNear(e.clientX, e.clientY);
+    if (marker?.userData.port) return this.handlers.onPick({ kind: 'port', ref: marker.userData.port });
+    if (marker?.userData.joint) return this.handlers.onPick({ kind: 'joint', ...marker.userData.joint });
+    const hit = this.raycaster(e).intersectObjects(this.pieces, true)[0];
+    const piece = hit ? pieceOf(hit.object) : null;
     this.handlers.onPick(piece === null ? null : { kind: 'piece', index: piece });
+  }
+
+  /**
+   * The port or joint marker nearest a point on the page, within the same
+   * screen radius as the top view, so the small joint bars are as easy to
+   * hit as in 2D. Ports come first. Fences of the marker's own pieces may
+   * hide it; any other road in front does.
+   */
+  private markerNear(clientX: number, clientY: number): THREE.Object3D | null {
+    this.root.updateMatrixWorld();
+    const r = this.renderer.domElement.getBoundingClientRect();
+    const eye = this.camera.getWorldPosition(new THREE.Vector3());
+    const ray = new THREE.Raycaster();
+    for (const kind of ['port', 'joint'] as const) {
+      let best: { m: THREE.Object3D; d: number } | null = null;
+      for (const m of this.markers.children) {
+        const data = m.userData[kind];
+        if (!data) continue;
+        const centre = m.localToWorld(new THREE.Vector3(0, MARKER_PICK_HEIGHT, 0));
+        const p = centre.clone().project(this.camera);
+        if (p.z > 1) continue;
+        const d = Math.hypot(r.left + ((p.x + 1) / 2) * r.width - clientX, r.top + ((1 - p.y) / 2) * r.height - clientY);
+        if (d >= (kind === 'port' ? PORT_HIT : JOINT_HIT) || (best && d >= best.d)) continue;
+        const own = kind === 'port' ? [data.piece] : [data.a.piece, data.b.piece];
+        const toward = centre.clone().sub(eye);
+        ray.set(eye, toward.clone().normalize());
+        ray.far = toward.length();
+        const front = ray.intersectObjects(this.pieces, true).some((h) => !own.includes(pieceOf(h.object)));
+        if (!front) best = { m, d };
+      }
+      if (best) return best.m;
+    }
+    return null;
   }
 }
 
@@ -331,14 +415,18 @@ const MARKER_OPEN = new THREE.MeshStandardMaterial({ color: 0xff9a2e, emissive: 
 const MARKER_SELECTED = new THREE.MeshStandardMaterial({ color: 0x3fd0ff, emissive: 0x114455 });
 const MARKER_SPLIT = new THREE.MeshStandardMaterial({ color: 0xff5a5a, emissive: 0x551111 });
 const MARKER_JOINT = new THREE.MeshStandardMaterial({ color: 0x39c26b, emissive: 0x0d3d1f });
+/** Height of a marker's middle above its port, mm, where picking aims. */
+const MARKER_PICK_HEIGHT = 10;
 /** A flat bar across the middle of a joint, standing just above the road. */
 const JOINT_GEOMETRY = new THREE.BoxGeometry(90, 12, 24).translate(0, 8, 0);
 
-const HIGHLIGHT = [0, 0x0a2a35, 0x1a6680];
-const highlightCache = [0, 1, 2].map(() => new WeakMap<THREE.Material, THREE.Material>());
+/** Highlight level of the pieces a raise would move. */
+const RUN_LEVEL = 3;
+const HIGHLIGHT = [0, 0x0a2a35, 0x1a6680, 0x664400];
+const highlightCache = [0, 1, 2, 3].map(() => new WeakMap<THREE.Material, THREE.Material>());
 const baseOf = new WeakMap<THREE.Material, THREE.Material>();
 
-/** `level` 2: the selection; 1: joined to it. */
+/** `level` 2: the selection; 1: joined to it; 3: a run about to be raised. */
 function highlighted(m: THREE.Material | THREE.Material[], level: number): THREE.Material {
   const base = unhighlighted(m);
   let h = highlightCache[level].get(base);

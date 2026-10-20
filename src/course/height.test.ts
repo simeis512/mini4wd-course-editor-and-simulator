@@ -6,8 +6,9 @@ import { emptyCourse, layoutCourse, type Course } from './course';
 import { addPiece, setPose } from './edit';
 import { BRIDGE_HEIGHT } from './profile';
 import { atLevel, pieceHeights, SUPPORT_MIN_GAP, SUPPORT_OVERHANG, SUPPORT_REACH, supports } from './height';
-import { buildCourseMeshes } from './mesh';
+import { buildCourseMeshes, halfWidth } from './mesh';
 import { basicOval, chain } from './presets';
+import { raiseRun } from './raise';
 
 /** A lone straight with its start port `y` mm off the floor. */
 const raised = (y: number, course: Course = emptyCourse()): Course => {
@@ -249,3 +250,30 @@ function highestPoke(layout: ReturnType<typeof layoutCourse>): number {
   return worst;
 }
 
+
+describe('supports under a spiral', () => {
+  // Two laps of curves, the second one level (110 mm) above the first.
+  const spiral = () => raiseRun(chain(['straight', ...Array(16).fill('curve45'), 'straight']), { piece: 0, port: 1 }, { piece: 1, port: 0 }, 16, 220);
+
+  it('holds up the upper lap too, straddling the lap below', () => {
+    const layout = layoutCourse(spiral());
+    const list = supports(layout);
+    for (let piece = 2; piece <= 16; piece++) expect(list.some((s) => s.piece === piece)).toBe(true);
+    const upper = list.filter((s) => s.piece >= 10 && s.piece <= 16);
+    const lower = list.filter((s) => s.piece <= 8);
+    expect(upper.length).toBeGreaterThan(0);
+    for (const u of upper) {
+      // Wider than the road, so its legs stand outside the lap below.
+      expect(Math.hypot(u.right.x - u.left.x, u.right.z - u.left.z)).toBeGreaterThan(2 * halfWidth(3) + 2 * STAND_LEG);
+      const across = u.right.clone().sub(u.left).setY(0).normalize();
+      // Neither leg stands on a stand of the lap below.
+      for (const l of lower) {
+        const ahead = l.left.clone().add(l.right).multiplyScalar(0.5).sub(u.left).setY(0).dot(u.along);
+        if (Math.abs(ahead) >= STAND_DEPTH) continue;
+        const [l0, l1] = [l.left, l.right].map((p) => p.clone().sub(u.left).setY(0).dot(across)).sort((p, q) => p - q);
+        const span = u.right.clone().sub(u.left).setY(0).dot(across);
+        for (const [leg0, leg1] of [[0, STAND_LEG], [span - STAND_LEG, span]]) expect(leg1 <= l0 || leg0 >= l1).toBe(true);
+      }
+    }
+  });
+});

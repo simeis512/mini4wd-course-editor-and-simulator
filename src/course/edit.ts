@@ -13,6 +13,7 @@ import {
   type PlacedPiece,
   type PortRef,
 } from './course';
+import { isZeroBend, type Bend } from './flex';
 import { attach, IDENTITY_POSE, matrixToPose, partGeometry, type Pose } from './geometry';
 
 // Editing. Each operation returns a new course and leaves the input alone.
@@ -41,7 +42,7 @@ export function footprint(pc: PlacedPiece): [number, number, number, number] {
   const p = new Vector3();
   const xs: number[] = [];
   const zs: number[] = [];
-  for (const track of partGeometry(pc.part).tracks) {
+  for (const track of pc.geometry.tracks) {
     for (const f of track.samples) {
       p.setFromMatrixPosition(f).applyMatrix4(pc.matrix);
       xs.push(p.x);
@@ -59,7 +60,8 @@ export function footprint(pc: PlacedPiece): [number, number, number, number] {
 export function addFreePiece(course: Course, partId: string, port: number, x: number, z: number, variant?: number): Course {
   const rec: PieceRec = { part: partId, port, free: null, pose: IDENTITY_POSE };
   const part = getPart(partId);
-  const [x0, x1, z0, z1] = footprint({ rec, part, matrix: attach(new Matrix4(), partGeometry(part).ports[port]), ports: [] });
+  const geometry = partGeometry(part);
+  const [x0, x1, z0, z1] = footprint({ rec, part, geometry, matrix: attach(new Matrix4(), geometry.ports[port]), ports: [] });
   const round = (v: number) => Math.round(v * 10) / 10;
   rec.pose = { pos: [round(x - (x0 + x1) / 2), 0, round(z - (z0 + z1) / 2)], rot: [0, 0, 0] };
   if (variant !== undefined) rec.variant = variant;
@@ -98,6 +100,7 @@ export function freeSpot(course: Course, partId: string, port: number, x: number
 export function freeRec(rec: PieceRec, base: PortRef | null, pose: Pose): PieceRec {
   const out: PieceRec = { part: rec.part, port: 'port' in rec ? rec.port : 0, free: base && [base.piece, base.port], pose };
   if (rec.variant !== undefined) out.variant = rec.variant;
+  if (rec.twist) out.twist = rec.twist;
   return out;
 }
 
@@ -139,8 +142,7 @@ export function flipPiece(course: Course, index: number): Course {
   const oldPort = 'port' in rec ? rec.port : 0;
   const newPort = 1 - oldPort;
   if ('at' in rec) {
-    next.pieces[index] = { part: rec.part, port: newPort, free: null, pose: IDENTITY_POSE };
-    if (rec.variant !== undefined) next.pieces[index].variant = rec.variant;
+    next.pieces[index] = freeRec({ ...rec, port: newPort, free: null, pose: IDENTITY_POSE }, null, IDENTITY_POSE);
   } else {
     rec.port = newPort;
   }
@@ -161,6 +163,56 @@ export function setVariant(course: Course, index: number, variant: number): Cour
   if (variant === getPart(rec.part).defaultVariant) delete rec.variant;
   else rec.variant = variant;
   return next;
+}
+
+/** Round an angle to the 0.1° kept in URLs. */
+const tenth = (deg: number) => Math.round(deg * 10) / 10;
+
+/**
+ * Set a piece's twist (spec 16.2), deg, + lowers the right side. Pieces
+ * beyond its far ports follow it.
+ */
+export function setTwist(course: Course, index: number, twist: number): Course {
+  const next = clone(course);
+  const rec = next.pieces[index];
+  if (tenth(twist)) rec.twist = tenth(twist);
+  else delete rec.twist;
+  return next;
+}
+
+/** The piece that holds the stored link between two ports, if they are linked (spec 5.1). */
+export function linkHolder(course: Course, a: PortRef, b: PortRef): number | null {
+  for (const [x, y] of [[a, b], [b, a]]) {
+    const rec = course.pieces[y.piece];
+    if (rec && 'to' in rec && rec.to[0] === x.piece && rec.to[1] === x.port && rec.port === y.port) return y.piece;
+  }
+  return null;
+}
+
+/** The bend of the joint between two linked ports (spec 16.1); none when they are not linked. */
+export function jointBend(course: Course, a: PortRef, b: PortRef): Bend {
+  const holder = linkHolder(course, a, b);
+  const rec = holder === null ? null : course.pieces[holder];
+  return (rec && 'to' in rec && rec.bend) || {};
+}
+
+/**
+ * Bend the joint between two linked ports (spec 16.1). The piece placed
+ * from the joint turns about it, with everything beyond. Only stored links
+ * bend: two ports that just meet are left as they are.
+ */
+export function setBend(course: Course, a: PortRef, b: PortRef, bend: Bend): Course {
+  const holder = linkHolder(course, a, b);
+  if (holder === null) return course;
+  const next = clone(course);
+  const rec = next.pieces[holder];
+  if (!('to' in rec)) return course;
+  const out: Bend = {};
+  if (tenth(bend.pitch ?? 0)) out.pitch = tenth(bend.pitch!);
+  if (tenth(bend.yaw ?? 0)) out.yaw = tenth(bend.yaw!);
+  if (isZeroBend(out)) delete rec.bend;
+  else rec.bend = out;
+  return tidyCuts(next);
 }
 
 function baseFrame(layout: Layout, base: PortRef | null): Matrix4 {

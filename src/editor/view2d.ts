@@ -5,8 +5,8 @@ import { pointOnFrame } from '../course/geometry';
 import { atLevel, pieceHeights, type HeightRange } from '../course/height';
 import { halfWidth, insidePolygon, roadOutline, trackEdge, worldTracks } from '../course/mesh';
 import { colorRange, heightColor, type HeightView } from './levels';
-import type { DragHandlers, PickHandlers, Selection } from './selection';
-import type { EditorView } from './view';
+import { JOINT_HIT, PORT_HIT, type DragHandlers, type PickHandlers, type Selection } from './selection';
+import { blink, drawShortMark, type EditorView, type RunMarks } from './view';
 
 /** One stretch of road of a piece, as seen from above. */
 interface Outline {
@@ -22,10 +22,6 @@ interface Outline {
 
 /** Pixels a pointer may move and still count as a tap. */
 const TAP_SLOP = 6;
-/** Screen radius for hitting a port, px. */
-const PORT_HIT = 22;
-/** Screen radius for hitting a joint, px: small so pieces stay easy to pick. */
-const JOINT_HIT = 12;
 
 /**
  * Top-down 2D editor view drawn on a canvas. Pointer Events only, so mouse,
@@ -51,6 +47,8 @@ export class TopView implements EditorView {
   private pinch: { dist: number; scale: number } | null = null;
   /** A piece is being dragged instead of the view being panned. */
   private moving = false;
+  private runMarks: RunMarks | null = null;
+  private blinking = false;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -89,6 +87,23 @@ export class TopView implements EditorView {
     }
     this.selection = selection;
     this.draw();
+  }
+
+  setRunMarks(marks: RunMarks | null): void {
+    this.runMarks = marks?.pieces.length ? marks : null;
+    this.draw();
+    if (this.runMarks && !this.blinking) {
+      this.blinking = true;
+      const tick = () => {
+        if (!this.runMarks) {
+          this.blinking = false;
+          return;
+        }
+        this.paint();
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
   }
 
   /** Colour by height and show only the pieces from a level up (spec 8). */
@@ -247,6 +262,21 @@ export class TopView implements EditorView {
       }
     }
 
+    const run = this.runMarks;
+    if (run) {
+      const pieces = new Set(run.pieces);
+      const b = blink(performance.now());
+      for (const o of this.outlines) {
+        if (!pieces.has(o.piece)) continue;
+        path(o.polygon, true);
+        ctx.fillStyle = `rgba(255,200,40,${0.12 + 0.3 * b})`;
+        ctx.fill();
+        ctx.strokeStyle = '#ffc828';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+
     for (const j of layout.joints) {
       if (!this.shown(j.a.piece) && !this.shown(j.b.piece)) continue;
       const selected = sel?.kind === 'joint' && sameJoint(sel, j);
@@ -257,6 +287,11 @@ export class TopView implements EditorView {
       if (!this.shown(ref.piece)) continue;
       const selected = sel?.kind === 'port' && portKey(sel.ref) === portKey(ref);
       this.drawPort(ref, selected ? '#3fd0ff' : split.has(portKey(ref)) ? '#ff5a5a' : '#ff9a2e', selected ? 1.3 : 1);
+    }
+    if (run?.missing && run.end) {
+      const p = pointOnFrame(layout.pieces[run.end.piece].ports[run.end.port], 0, 0, new Vector3());
+      const [sx, sy] = this.toScreen(...xz(p));
+      drawShortMark(ctx, sx, sy - 26, run.missing);
     }
   }
 

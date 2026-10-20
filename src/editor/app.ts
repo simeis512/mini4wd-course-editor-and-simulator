@@ -1,6 +1,6 @@
 import { Matrix4, Vector3 } from 'three';
 import { dropJoin, joinPart, nextOpenPort } from '../course/add';
-import { hasPart } from '../course/catalog';
+import { hasPart, LEVEL_HEIGHT } from '../course/catalog';
 import { courseFromHash, courseToHash } from '../course/codec';
 import {
   emptyCourse,
@@ -11,6 +11,7 @@ import {
   validateCourse,
   type Course,
   type Layout,
+  type PortRef,
 } from '../course/course';
 import {
   addFreePiece,
@@ -18,18 +19,22 @@ import {
   deletePiece,
   flipPiece,
   freeSpot,
+  jointBend,
   moveGroup,
+  setBend,
   setPose,
+  setTwist,
   setVariant,
   tidyCuts,
 } from '../course/edit';
-import { applyMagnet, findMagnet, joinableNear, joinPorts, MAGNET_DISTANCE, splitJoint } from '../course/joining';
-import { partGeometry, type Pose } from '../course/geometry';
+import { applyMagnet, asLink, findMagnet, joinableNear, joinPorts, MAGNET_DISTANCE, splitJoint } from '../course/joining';
+import type { Pose } from '../course/geometry';
 import { basicOval } from '../course/presets';
+import { raiseRun } from '../course/raise';
 import { $, toast } from './dom';
 import { History } from './history';
 import { bindLevelTools, levelMax, renderLevelTools, type HeightView } from './levels';
-import { buildPalette, placeContext, POSE_FIELDS, renderPanels } from './panels';
+import { buildPalette, placeContext, POSE_FIELDS, renderPanels, runMarks } from './panels';
 import type { Selection } from './selection';
 import type { EditorView } from './view';
 import { TopView } from './view2d';
@@ -51,6 +56,8 @@ export class EditorApp {
   private course: Course = emptyCourse();
   private layout: Layout = layoutCourse(this.course);
   private selection: Selection = null;
+  /** Pieces lit up for the selection, which its settings keep off. */
+  private lit: number[] = [];
   private history = new History<Course>(HISTORY_LIMIT);
   private mode: '2d' | '3d' = '2d';
   private heightView: HeightView = { colors: false, level: 0 };
@@ -352,7 +359,7 @@ export class EditorApp {
     const s = this.selection;
     if (s?.kind !== 'piece') return;
     const pc = this.layout.pieces[s.index];
-    const samples = partGeometry(pc.part).samples;
+    const samples = pc.geometry.samples;
     const c = samples
       .reduce((sum, f) => sum.add(new Vector3().setFromMatrixPosition(f)), new Vector3())
       .divideScalar(samples.length)
@@ -362,6 +369,53 @@ export class EditorApp {
       .multiply(new Matrix4().makeRotationY((deg * Math.PI) / 180))
       .multiply(new Matrix4().makeTranslation(-c.x, -c.y, -c.z));
     this.moveSelected(turn);
+  }
+
+  /** Set the selected piece's twist (spec 16.2), or nudge it by `by`. */
+  private twistSelected(deg: number | null, by = 0): void {
+    const s = this.selection;
+    if (s?.kind !== 'piece') return;
+    const twist = (deg ?? this.course.pieces[s.index].twist ?? 0) + by;
+    this.commit(setTwist(this.course, s.index, twist), s);
+  }
+
+  /** Set the selected joint's bend up or down (spec 16.1), or nudge it by `by`. */
+  private bendSelected(deg: number | null, by = 0): void {
+    const s = this.selection;
+    if (s?.kind !== 'joint') return;
+    // A joint that only meets (a piece put back by the magnet) is stored as a link first.
+    const course = asLink(this.course, s.a, s.b);
+    const bend = jointBend(course, s.a, s.b);
+    this.commit(setBend(course, s.a, s.b, { ...bend, pitch: (deg ?? bend.pitch ?? 0) + by }), s);
+  }
+
+  /** The selected joint as the side a raise leaves from and the side it goes into, as chosen (spec 16.3). */
+  private raiseSides(): { from: PortRef; into: PortRef } | null {
+    const s = this.selection;
+    if (s?.kind !== 'joint') return null;
+    const intoA = $('raise-dir').dataset.side === 'a';
+    return intoA ? { from: s.b, into: s.a } : { from: s.a, into: s.b };
+  }
+
+  private get raiseCount(): number {
+    return Math.max(1, Math.round(Number($<HTMLInputElement>('raise-count').value) || 1));
+  }
+
+  /** Raise the pieces on from the selected joint by bending and twisting them (spec 16.3). */
+  private raiseFromSelected(): void {
+    const sides = this.raiseSides();
+    if (!sides) return;
+    const rise = Number($<HTMLInputElement>('raise-mm').value) || 0;
+    const course = asLink(this.course, sides.from, sides.into);
+    this.commit(raiseRun(course, sides.from, sides.into, this.raiseCount, rise), this.selection);
+  }
+
+  /** Blink the pieces a raise from the selected joint would move (spec 16.3). */
+  private showRun(): void {
+    const sides = this.raiseSides();
+    const marks = sides && !$('raise-box').hidden ? runMarks(asLink(this.course, sides.from, sides.into), sides.from, sides.into, this.raiseCount) : null;
+    for (const view of [this.top, this.orbit]) view.setRunMarks(marks);
+    this.lit = marks?.pieces ?? [];
   }
 
   private splitSelected(): void {
@@ -482,9 +536,31 @@ export class EditorApp {
     });
     $('rot-left').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? 1 : 15));
     $('rot-right').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? -1 : -15));
-    $('raise').addEventListener('click', () => this.moveSelected(new Matrix4().makeTranslation(0, 10, 0)));
-    $('lower').addEventListener('click', () => this.moveSelected(new Matrix4().makeTranslation(0, -10, 0)));
+    // Up and down by one level, a slope's height; Shift for a fine step.
+    $('raise').textContent = `↑${LEVEL_HEIGHT}mm`;
+    $('lower').textContent = `↓${LEVEL_HEIGHT}mm`;
+    $('raise').title = `${LEVEL_HEIGHT}mm（スロープ 1 段）上げる。Shift で ${SNAP_STEP}mm`;
+    $('lower').title = `${LEVEL_HEIGHT}mm（スロープ 1 段）下げる。Shift で ${SNAP_STEP}mm`;
+    const lift = (e: MouseEvent) => (e.shiftKey ? SNAP_STEP : LEVEL_HEIGHT);
+    $('raise').addEventListener('click', (e) => this.moveSelected(new Matrix4().makeTranslation(0, lift(e), 0)));
+    $('lower').addEventListener('click', (e) => this.moveSelected(new Matrix4().makeTranslation(0, -lift(e), 0)));
+    $<HTMLInputElement>('raise-mm').value = String(LEVEL_HEIGHT);
     for (const id of POSE_FIELDS) $(id).addEventListener('change', () => this.setPoseFromFields());
+    // Angles step 0.5°, or 0.1° with Shift (spec 16.3).
+    const step = (e: MouseEvent) => (e.shiftKey ? 0.1 : 0.5);
+    $('twist-minus').addEventListener('click', (e) => this.twistSelected(null, -step(e)));
+    $('twist-plus').addEventListener('click', (e) => this.twistSelected(null, step(e)));
+    $('twist').addEventListener('change', (e) => this.twistSelected(Number((e.target as HTMLInputElement).value) || 0));
+    $('bend-minus').addEventListener('click', (e) => this.bendSelected(null, -step(e)));
+    $('bend-plus').addEventListener('click', (e) => this.bendSelected(null, step(e)));
+    $('bend-pitch').addEventListener('change', (e) => this.bendSelected(Number((e.target as HTMLInputElement).value) || 0));
+    $('raise-run').addEventListener('click', () => this.raiseFromSelected());
+    $('raise-flip').addEventListener('click', () => {
+      const dir = $('raise-dir');
+      dir.dataset.side = dir.dataset.side === 'a' ? 'b' : 'a';
+      this.renderPanel();
+    });
+    $('raise-count').addEventListener('input', () => this.renderPanel());
     $('split').addEventListener('click', () => this.splitSelected());
     $('join').addEventListener('click', () => this.joinSelected());
 
@@ -518,10 +594,11 @@ export class EditorApp {
     $<HTMLButtonElement>('undo').disabled = !this.history.canUndo;
     $<HTMLButtonElement>('redo').disabled = !this.history.canRedo;
     renderPanels(this.course, this.layout, this.selection);
+    this.showRun();
     this.placeContext();
   }
 
   private placeContext(): void {
-    placeContext(this.view, this.layout, this.selection);
+    placeContext(this.view, this.layout, this.selection, this.lit);
   }
 }

@@ -23,8 +23,14 @@ describe('codec', () => {
   it('round-trips through the URL hash', async () => {
     const c = sample();
     const hash = await courseToHash(c);
-    expect(hash).toMatch(/^#c=1\.[A-Za-z0-9_-]+$/);
+    expect(hash).toMatch(/^#c=2\.[A-Za-z0-9_-]+$/);
     expect(await courseFromHash(hash)).toEqual(c);
+  });
+
+  it('still reads format 1 links', async () => {
+    // Format 1 is format 2 without bends and twists.
+    const payload = (await encodeCourse(basicOval())).split('.')[1];
+    expect(await decodeCourse(`1.${payload}`)).toEqual(basicOval());
   });
 
   it('keeps the basic oval short', async () => {

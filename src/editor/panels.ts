@@ -1,11 +1,14 @@
 import { getPart, PARTS, variantOf } from '../course/catalog';
-import { compatible, groupCount, movingGroup, partCounts, placementOf, type Course, type Layout } from '../course/course';
-import { footprint } from '../course/edit';
-import { joinableNear } from '../course/joining';
+import { compatible, groupCount, movingGroup, partCounts, placementOf, portKey, type Course, type Layout, type PortRef, type Problem } from '../course/course';
+import { footprint, jointBend } from '../course/edit';
+import { BEND_LIMIT, TWIST_LIMIT } from '../course/flex';
+import { bendable, joinableNear } from '../course/joining';
+import { previewRun } from '../course/raise';
 import { $ } from './dom';
+import { floatSpot, rectAround, type Rect } from './float';
 import { partIcon } from './icons';
 import type { Selection } from './selection';
-import type { EditorView } from './view';
+import type { EditorView, RunMarks } from './view';
 
 export const POSE_FIELDS = ['pose-x', 'pose-y', 'pose-z', 'pose-yaw', 'pose-pitch', 'pose-roll'] as const;
 
@@ -75,6 +78,9 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
     );
     select.value = String(pc.part.variants.indexOf(variantOf(pc.part, pc.rec.variant)));
     $<HTMLButtonElement>('flip').disabled = pc.part.ports.length !== 2;
+    const twist = pc.rec.twist ?? 0;
+    setAngleField('twist', twist);
+    showLimit('twist-warn', twist, TWIST_LIMIT, 'ねじれ');
 
     const group = movingGroup(layout, s.index);
     $('group-info').textContent =
@@ -96,6 +102,22 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
   if (s?.kind === 'joint') {
     const name = (r: { piece: number }) => `#${r.piece + 1} ${layout.pieces[r.piece].part.name}`;
     $('joint-name').textContent = `${name(s.a)} と ${name(s.b)} のつなぎ目`;
+    // Only stored links bend (spec 16.1).
+    const linked = bendable(course, s.a, s.b);
+    $('bend-row').hidden = !linked;
+    $('raise-box').hidden = !linked;
+    // Which way to raise: into either piece, the later one first (spec 16.3).
+    const dir = $('raise-dir');
+    const key = `${portKey(s.a)}|${portKey(s.b)}`;
+    if (dir.dataset.joint !== key) {
+      dir.dataset.joint = key;
+      dir.dataset.side = s.a.piece > s.b.piece ? 'a' : 'b';
+    }
+    dir.textContent = `${name(s[dir.dataset.side === 'a' ? 'a' : 'b'])} の方へ`;
+    $('bend-closure').hidden = linked;
+    const pitch = linked ? (jointBend(course, s.a, s.b).pitch ?? 0) : 0;
+    setAngleField('bend-pitch', pitch);
+    showLimit('bend-warn', pitch, BEND_LIMIT, '折れ角');
   }
   const near = s?.kind === 'port' ? joinableNear(layout, s.ref) : null;
   $('port-panel').hidden = s?.kind !== 'port';
@@ -107,6 +129,42 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
   // Settings for the selection float over the editor, next to it (#45).
   $('context').hidden = s === null;
 }
+
+/**
+ * The pieces a raise from the joint between `from` and `into` would move,
+ * to blink, with a note on how far it reaches (spec 16.3).
+ */
+export function runMarks(course: Course, from: PortRef, into: PortRef, count: number): RunMarks {
+  const { pieces, end } = previewRun(course, from, into, count);
+  const short = pieces.length < count;
+  const note = $('raise-note');
+  note.classList.toggle('warn', short);
+  if (pieces.length === 0) note.textContent = 'この向きには上げられるピースがありません（先頭のピースや、自由に置いたピースは動かせません）';
+  else {
+    const span = pieces.length === 1 ? `#${pieces[0] + 1} の` : `#${pieces[0] + 1} から #${pieces[pieces.length - 1] + 1} までの`;
+    note.textContent = `点滅している ${span} ${pieces.length} ピースを上げます${short ? `（${count} ピースにあと ${count - pieces.length} ピース足りません。足りなくても上げられます）` : ''}`;
+  }
+  return { pieces, end, missing: count - pieces.length };
+}
+
+function setAngleField(id: string, deg: number): void {
+  const input = $<HTMLInputElement>(id);
+  if (document.activeElement !== input) input.value = String(deg);
+}
+
+/** Warn when an angle is past what real parts give (spec 16.4); it is still allowed. */
+function showLimit(id: string, deg: number, limit: number, what: string): void {
+  const warn = $(id);
+  warn.hidden = Math.abs(deg) <= limit;
+  warn.textContent = `${what}が上限の目安 ${limit}° を超えています（目安は実測待ちの仮の値です）`;
+}
+
+const PROBLEM_TEXT: Record<Problem['kind'], string> = {
+  'not-level': '床側の端が水平ではありません（向きが逆かもしれません）',
+  'cannot-join': 'このパーツ同士はつなげません',
+  'bend-limit': `つなぎ目の折れ角が上限の目安 ${BEND_LIMIT}° を超えています`,
+  'twist-limit': `ねじれが上限の目安 ${TWIST_LIMIT}° を超えています`,
+};
 
 function renderCourseInfo(course: Course, layout: Layout): void {
   const info: string[] = [];
@@ -120,8 +178,7 @@ function renderCourseInfo(course: Course, layout: Layout): void {
     info.push('<div class="ok">コースは閉じています</div>');
   }
   for (const pr of layout.problems) {
-    const what = pr.kind === 'not-level' ? '床側の端が水平ではありません（向きが逆かもしれません）' : 'このパーツ同士はつなげません';
-    info.push(`<div class="warn">#${pr.piece + 1} ${layout.pieces[pr.piece].part.name}: ${what}</div>`);
+    info.push(`<div class="warn">#${pr.piece + 1} ${layout.pieces[pr.piece].part.name}: ${PROBLEM_TEXT[pr.kind]}</div>`);
   }
   for (const c of layout.closures) {
     // Ports placed exactly together are simply joined; only real gaps are worth showing.
@@ -134,38 +191,41 @@ function renderCourseInfo(course: Course, layout: Layout): void {
   $('course-summary').innerHTML = `コース: ${course.pieces.length} ピース<span class="${layout.open.length || layout.problems.length ? 'warn' : 'ok'}">${status}</span>${layout.problems.length ? '<span class="warn">・問題あり</span>' : ''}`;
 }
 
-/** Put the selection's settings beside it on screen, keeping them inside the editor. */
-export function placeContext(view: EditorView, layout: Layout, s: Selection): void {
+/** Where a piece lies on screen, roughly: its footprint between its lowest and highest port. */
+function pieceRect(view: EditorView, layout: Layout, index: number, stage: DOMRect): Rect | null {
+  const pc = layout.pieces[index];
+  const [x0, x1, z0, z1] = footprint(pc);
+  const ys = pc.ports.map((p) => p.elements[13]);
+  const pts: [number, number][] = [];
+  for (const y of [Math.min(...ys), Math.max(...ys)]) {
+    for (const [x, z] of [[x0, z0], [x0, z1], [x1, z0], [x1, z1]]) {
+      const q = view.clientOf(x, y, z);
+      if (q) pts.push([q[0] - stage.left, q[1] - stage.top]);
+    }
+  }
+  return rectAround(pts);
+}
+
+/**
+ * Put the selection's settings beside it on screen, keeping them inside the
+ * editor and off the selection and the pieces `lit` up for it.
+ */
+export function placeContext(view: EditorView, layout: Layout, s: Selection, lit: readonly number[] = []): void {
   const box = $('context');
   if (box.hidden || !s) return;
-  // World points that outline what is selected.
-  let pts: [number, number, number][];
+  const stage = $('stage').getBoundingClientRect();
+  let anchor: Rect | null;
   if (s.kind === 'piece') {
-    const pc = layout.pieces[s.index];
-    const [x0, x1, z0, z1] = footprint(pc);
-    const y = pc.matrix.elements[13];
-    pts = [[x0, y, z0], [x0, y, z1], [x1, y, z0], [x1, y, z1]];
+    anchor = pieceRect(view, layout, s.index, stage);
   } else {
     const ref = s.kind === 'port' ? s.ref : s.a;
     const e = layout.pieces[ref.piece].ports[ref.port].elements;
-    pts = [[e[12], e[13], e[14]]];
+    const q = view.clientOf(e[12], e[13], e[14]);
+    anchor = q && rectAround([[q[0] - stage.left, q[1] - stage.top]]);
   }
-  const screen = pts.map((q) => view.clientOf(...q)).filter((q): q is [number, number] => q !== null);
-  const stage = $('stage').getBoundingClientRect();
-  const margin = 8;
-  const w = box.offsetWidth;
-  const h = box.offsetHeight;
-  let left = stage.width - w - margin;
-  let top = margin;
-  if (screen.length) {
-    const xs = screen.map((q) => q[0] - stage.left);
-    const ys = screen.map((q) => q[1] - stage.top);
-    const [l, r] = [Math.min(...xs), Math.max(...xs)];
-    const gap = 24;
-    // Beside the selection: the right if it fits, else the left, else over it.
-    left = r + gap + w <= stage.width - margin ? r + gap : l - gap - w >= margin ? l - gap - w : left;
-    top = (Math.min(...ys) + Math.max(...ys)) / 2 - h / 2;
-  }
-  box.style.left = `${Math.max(margin, Math.min(left, stage.width - w - margin))}px`;
-  box.style.top = `${Math.max(margin, Math.min(top, stage.height - h - margin))}px`;
+  const avoid = lit.map((i) => pieceRect(view, layout, i, stage)).filter((r): r is Rect => r !== null);
+  if (anchor) avoid.push(anchor);
+  const [left, top] = floatSpot(box.offsetWidth, box.offsetHeight, stage.width, stage.height, anchor, avoid);
+  box.style.left = `${left}px`;
+  box.style.top = `${top}px`;
 }

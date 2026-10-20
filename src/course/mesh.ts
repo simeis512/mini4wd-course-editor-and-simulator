@@ -1,7 +1,9 @@
 import * as THREE from 'three';
-import { GLOBAL_SPEC, laneOffset, variantOf, type PartDef } from './catalog';
+import { GLOBAL_SPEC, laneOffset, variantOf } from './catalog';
 import type { Layout, PlacedPiece } from './course';
-import { partGeometry, partStands, pointOnFrame, STAND_BEAM, STAND_DEPTH, STAND_LEG, type Stand } from './geometry';
+import { Twist } from './flex';
+import { partGeometry, partStands, pointOnFrame, STAND_BEAM, STAND_DEPTH, STAND_LEG, type PartGeometry, type Stand } from './geometry';
+import { shapeSource } from './model';
 
 /** Scene units are metres; course data is in millimetres. */
 export const MM = 0.001;
@@ -53,7 +55,7 @@ export interface WorldTrack {
 
 /** Every stretch of road of a piece, placed in the world. */
 export function pieceTracks(pc: PlacedPiece, piece: number): WorldTrack[] {
-  return partGeometry(pc.part).tracks.map((track, index) => ({
+  return pc.geometry.tracks.map((track, index) => ({
     piece,
     index,
     samples: track.samples.map((s) => pc.matrix.clone().multiply(s)),
@@ -132,11 +134,11 @@ function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y
   return geo;
 }
 
-/** Road and fence geometry of a part in part-local millimetres. */
-export function buildPartGeometry(part: PartDef): { roads: THREE.BufferGeometry[]; fences: THREE.BufferGeometry[] } {
+/** Road and fence meshes swept along a part's (or twisted piece's) geometry, in part-local millimetres. */
+export function buildPartGeometry(geo: PartGeometry): { roads: THREE.BufferGeometry[]; fences: THREE.BufferGeometry[] } {
   const roads: THREE.BufferGeometry[] = [];
   const fences: THREE.BufferGeometry[] = [];
-  for (const { samples, lanes } of partGeometry(part).tracks) {
+  for (const { samples, lanes } of geo.tracks) {
     const section = crossSection(lanes);
     roads.push(sweepBox(samples, section.left, section.right, -roadThickness, 0));
     for (const x of section.fences) {
@@ -146,7 +148,7 @@ export function buildPartGeometry(part: PartDef): { roads: THREE.BufferGeometry[
   return { roads, fences };
 }
 
-const partGeometryCache = new Map<string, ReturnType<typeof buildPartGeometry>>();
+const partGeometryCache = new WeakMap<PartGeometry, ReturnType<typeof buildPartGeometry>>();
 const materialCache = new Map<string, THREE.MeshStandardMaterial>();
 
 /** `doubleSided` for stands, whose slabs' winding follows the road. */
@@ -162,26 +164,54 @@ function material(color: string, shade: number, doubleSided = false): THREE.Mesh
   return m;
 }
 
+/**
+ * Display meshes of measured models (spec 15), by part id, in part-local
+ * millimetres. Loading them comes with the first measured model (#23).
+ */
+export type ModelVisuals = ReadonlyMap<string, THREE.Object3D>;
+
+/** A measured model's display mesh for a piece, twisted with it (spec 16.2). */
+function modelMesh(visual: THREE.Object3D, pc: PlacedPiece): THREE.Object3D {
+  const twist = pc.rec.twist ?? 0;
+  const out = visual.clone();
+  if (!twist) return out;
+  const t = new Twist(partGeometry(pc.part).samples, twist);
+  out.updateMatrixWorld(true);
+  out.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    // Bend the vertices in model coordinates, then put the mesh back in its own.
+    const geo = (o.geometry as THREE.BufferGeometry).clone().applyMatrix4(o.matrixWorld);
+    t.deform(geo.getAttribute('position') as THREE.BufferAttribute);
+    geo.applyMatrix4(o.matrixWorld.clone().invert());
+    geo.computeVertexNormals();
+    o.geometry = geo;
+  });
+  return out;
+}
+
 /** One group per piece, placed in world millimetres; the caller scales to metres. */
-export function buildCourseMeshes(layout: Layout): THREE.Group[] {
+export function buildCourseMeshes(layout: Layout, visuals: ModelVisuals = new Map()): THREE.Group[] {
   return layout.pieces.map((pc, i) => {
-    if (pc.part.model) {
-      // Measured models (spec 15) are not loaded yet; fall back to the sweep.
-      console.warn(`model for ${pc.part.id} not loaded yet: ${pc.part.model}`);
-    }
-    let geo = partGeometryCache.get(pc.part.id);
-    if (!geo) {
-      geo = buildPartGeometry(pc.part);
-      partGeometryCache.set(pc.part.id, geo);
-    }
     const color = variantOf(pc.part, pc.rec.variant).color;
     const group = new THREE.Group();
     group.name = `piece-${i}`;
     group.userData.piece = i;
-    for (const r of geo.roads) group.add(new THREE.Mesh(r, material(color, 1)));
-    for (const f of geo.fences) group.add(new THREE.Mesh(f, material(color, 0.85)));
+    const source = shapeSource(pc.part);
+    const visual = source.kind === 'model' && source.model ? visuals.get(pc.part.id) : undefined;
+    if (visual) {
+      group.add(modelMesh(visual, pc));
+    } else {
+      // Procedural, also while a measured model is not loaded (spec 15.1).
+      let geo = partGeometryCache.get(pc.geometry);
+      if (!geo) {
+        geo = buildPartGeometry(pc.geometry);
+        partGeometryCache.set(pc.geometry, geo);
+      }
+      for (const r of geo.roads) group.add(new THREE.Mesh(r, material(color, 1)));
+      for (const f of geo.fences) group.add(new THREE.Mesh(f, material(color, 0.85)));
+    }
     // Stands that come with the part are part of the piece, in its colour (#11).
-    const stands = partStands(pc.part);
+    const stands = partStands(pc.part, pc.geometry);
     if (stands.length) group.add(buildSupportMesh(stands, material(color, 0.9, true)));
     group.matrixAutoUpdate = false;
     group.matrix.copy(pc.matrix);

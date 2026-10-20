@@ -101,7 +101,10 @@ function roadBelow(footprints: readonly Footprint[], own: WorldTrack, x: number,
 export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTracks(layout)): Support[] {
   const footprints = tracks.map(footprintOf);
   const out: Support[] = [];
-  for (const track of tracks) {
+  // Lowest road first, so stands under a stacked level are in place before
+  // the stands that straddle that level are fitted round them.
+  const heights = new Map(tracks.map((t) => [t, Math.min(...t.samples.map((f) => f.elements[13]))]));
+  for (const track of [...tracks].sort((p, q) => heights.get(p)! - heights.get(q)!)) {
     // Parts that come with their own stands (`partStands`) stand on them;
     // only their main road is held up when the whole piece is raised.
     if (layout.pieces[track.piece].part.supports && track.index !== 0) continue;
@@ -133,9 +136,16 @@ export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTr
         }
         return y;
       };
+      // Whether a stand already placed stands at `x` across the road, anywhere along the stand's depth.
+      const onStand = (x: number) => {
+        const p = pointOnFrame(f, x, 0);
+        return [-STAND_DEPTH / 2, 0, STAND_DEPTH / 2].some((d) => out.some((o) => standContains(o, p.x + along.x * d, p.z + along.z * d)));
+      };
       // A leg from `outer` inwards (side −1 left, +1 right) needs clear floor around it.
       const clear = (outer: number, side: -1 | 1) => {
-        for (let d = -SUPPORT_CLEARANCE; d <= STAND_LEG + SUPPORT_CLEARANCE; d += SCAN_STEP) if (below(outer - side * d) > -Infinity) return false;
+        for (let d = -SUPPORT_CLEARANCE; d <= STAND_LEG + SUPPORT_CLEARANCE; d += SCAN_STEP) {
+          if (below(outer - side * d) > -Infinity || onStand(outer - side * d)) return false;
+        }
         return true;
       };
       const legAt = (edge: number, side: -1 | 1): number | null => {
@@ -171,7 +181,17 @@ export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTr
       out.push(stand);
     }
   }
-  return out;
+  return out.sort((p, q) => p.piece - q.piece);
+}
+
+/** The corners of a stand seen from above, X/Z. */
+function standCorners(s: Stand): [number, number][] {
+  const d = s.along.clone().multiplyScalar((s.depth ?? STAND_DEPTH) / 2);
+  return [s.left.clone().sub(d), s.right.clone().sub(d), s.right.clone().add(d), s.left.clone().add(d)].map((v): [number, number] => [v.x, v.z]);
+}
+
+function standContains(s: Stand, x: number, z: number): boolean {
+  return insidePolygon(x, z, standCorners(s));
 }
 
 /** Whether two stands' footprints overlap, seen from above. */
@@ -186,5 +206,10 @@ function overlaps(a: Stand, b: Stand): boolean {
   };
   const [a0, a1] = span(a);
   const [b0, b1] = span(b);
+  // A stand under a stacked level fits between the legs of the stand over
+  // it, below its crossbar.
+  const nested = (inner: Stand, [i0, i1]: number[], outer: Stand, [o0, o1]: number[]) =>
+    i0 >= o0 + STAND_LEG && i1 <= o1 - STAND_LEG && Math.max(inner.left.y, inner.right.y) < Math.min(outer.left.y, outer.right.y) - STAND_BEAM;
+  if (nested(a, [a0, a1], b, [b0, b1]) || nested(b, [b0, b1], a, [a0, a1])) return false;
   return a0 < b1 && b0 < a1;
 }

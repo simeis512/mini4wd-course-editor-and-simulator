@@ -1,6 +1,7 @@
-import { compatible, layoutCourse, movingGroup, portKey, type Course, type Layout, type PortRef } from './course';
-import { clone, freeRec, moveGroup, uncut } from './edit';
-import { FACE, facingError, IDENTITY_POSE } from './geometry';
+import { compatible, layoutCourse, movingGroup, portKey, sameJoint, type Course, type Layout, type PieceRec, type PortRef } from './course';
+import { clone, freeRec, linkHolder, moveGroup, uncut } from './edit';
+import { bendPose } from './flex';
+import { FACE, facingError } from './geometry';
 
 // Joining, splitting and the magnet that pulls ports together (spec 5.2, 5.3, 8).
 
@@ -55,7 +56,44 @@ export function applyMagnet(course: Course, group: Set<number>, magnet: Magnet):
   const f = layout.pieces[magnet.fixed.piece].ports[magnet.fixed.port];
   // The rigid move that turns the moving port onto the fixed one.
   const pull = f.clone().multiply(FACE).multiply(m.clone().invert());
-  return uncut(moveGroup(course, group, pull), [magnet.moving, magnet.fixed]);
+  return asLink(uncut(moveGroup(course, group, pull), [magnet.moving, magnet.fixed]), magnet.moving, magnet.fixed);
+}
+
+/**
+ * The piece that two meeting ports can be stored as a link on: the later
+ * of the two, when it is placed freely. Null when the joint is already a
+ * link or can only stay a loop closure (the later piece hangs off something
+ * else).
+ */
+function linkable(course: Course, a: PortRef, b: PortRef): PortRef | null {
+  if (linkHolder(course, a, b) !== null) return null;
+  const later = a.piece > b.piece ? a : b;
+  return 'free' in course.pieces[later.piece] ? later : null;
+}
+
+/** Whether the joint between two ports can bend (spec 16.1): it is a link, or can be made one. */
+export function bendable(course: Course, a: PortRef, b: PortRef): boolean {
+  return linkHolder(course, a, b) !== null || linkable(course, a, b) !== null;
+}
+
+/**
+ * Store two ports that meet as a link, so the joint can bend (spec 16.1):
+ * a piece put back where it was, or dragged onto a port, joins the same
+ * way as one added there. The later piece is re-anchored on the earlier
+ * one's port; it hardly moves, as the ports already meet.
+ */
+export function asLink(course: Course, a: PortRef, b: PortRef): Course {
+  const later = linkable(course, a, b);
+  if (!later) return course;
+  const earlier = later === a ? b : a;
+  if (!layoutCourse(course).closures.some((c) => sameJoint(c, { a, b }))) return course;
+  const rec = course.pieces[later.piece];
+  const next = clone(course);
+  const out: PieceRec = { part: rec.part, port: later.port, to: [earlier.piece, earlier.port] };
+  if (rec.variant !== undefined) out.variant = rec.variant;
+  if (rec.twist) out.twist = rec.twist;
+  next.pieces[later.piece] = out;
+  return next;
 }
 
 /**
@@ -64,11 +102,11 @@ export function applyMagnet(course: Course, group: Set<number>, magnet: Magnet):
  */
 export function splitJoint(course: Course, a: PortRef, b: PortRef): Course {
   const next = clone(course);
-  for (const [x, y] of [[a, b], [b, a]]) {
-    const rec = course.pieces[y.piece];
-    if ('to' in rec && rec.to[0] === x.piece && rec.to[1] === x.port && rec.port === y.port) {
-      next.pieces[y.piece] = freeRec(rec, x, IDENTITY_POSE);
-    }
+  const holder = linkHolder(course, a, b);
+  if (holder !== null) {
+    const rec = course.pieces[holder];
+    // A bent joint stays bent where it is (spec 16.1).
+    next.pieces[holder] = freeRec(rec, holder === a.piece ? b : a, bendPose('to' in rec ? rec.bend : undefined));
   }
   next.cuts = [...(course.cuts ?? []), [a.piece, a.port], [b.piece, b.port]];
   return next;
@@ -79,7 +117,7 @@ export function joinPorts(course: Course, a: PortRef, b: PortRef): Course {
   const later = a.piece > b.piece ? a : b;
   const earlier = later === a ? b : a;
   const layout = layoutCourse(uncut(course, [a, b]));
-  if (layout.group[a.piece] === layout.group[b.piece]) return uncut(course, [a, b]);
+  if (layout.group[a.piece] === layout.group[b.piece]) return asLink(uncut(course, [a, b]), a, b);
   return applyMagnet(course, movingGroup(layout, later.piece), { moving: later, fixed: earlier });
 }
 
