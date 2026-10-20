@@ -70,6 +70,8 @@ export class OrbitView {
 
     this.camera.position.set(2, 2.5, -2);
     this.controls = new OrbitControls(this.camera, renderer.domElement);
+    // Middle drag moves the camera (as in most 3D tools); the wheel still zooms.
+    this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
     this.controls.addEventListener('change', () => this.handlers.onViewChange?.());
 
     // Our own DOM overlay for AR: an exit button and a status line, so
@@ -154,7 +156,7 @@ export class OrbitView {
     if (e.target !== this.renderer.domElement || this.renderer.xr.isPresenting) return;
     this.downAt = { x: e.clientX, y: e.clientY };
     const sel = this.selection;
-    if (sel?.kind !== 'piece' || !e.isPrimary) return;
+    if (sel?.kind !== 'piece' || !e.isPrimary || e.button !== 0) return;
     const hit = this.raycaster(e).intersectObjects(this.pieces, true)[0];
     if (!hit || pieceOf(hit.object) !== sel.index || !this.handlers.onDragStart(sel.index)) return;
     e.stopPropagation();
