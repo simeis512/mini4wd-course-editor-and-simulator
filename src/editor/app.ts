@@ -391,7 +391,7 @@ export class EditorApp {
   private raiseSides(): { from: PortRef; into: PortRef } | null {
     const s = this.selection;
     if (s?.kind !== 'joint') return null;
-    const intoA = $<HTMLSelectElement>('raise-dir').value === 'a';
+    const intoA = $('raise-dir').dataset.side === 'a';
     return intoA ? { from: s.b, into: s.a } : { from: s.a, into: s.b };
   }
 
@@ -552,7 +552,11 @@ export class EditorApp {
     $('bend-plus').addEventListener('click', (e) => this.bendSelected(null, step(e)));
     $('bend-pitch').addEventListener('change', (e) => this.bendSelected(Number((e.target as HTMLInputElement).value) || 0));
     $('raise-run').addEventListener('click', () => this.raiseFromSelected());
-    $('raise-dir').addEventListener('change', () => this.renderPanel());
+    $('raise-flip').addEventListener('click', () => {
+      const dir = $('raise-dir');
+      dir.dataset.side = dir.dataset.side === 'a' ? 'b' : 'a';
+      this.renderPanel();
+    });
     $('raise-count').addEventListener('input', () => this.renderPanel());
     $('split').addEventListener('click', () => this.splitSelected());
     $('join').addEventListener('click', () => this.joinSelected());

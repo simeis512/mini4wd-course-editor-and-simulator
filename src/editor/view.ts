@@ -55,5 +55,5 @@ export function drawShortMark(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.font = 'bold 13px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(`−${n}`, x, y + 3);
+  ctx.fillText(String(n), x, y + 3);
 }

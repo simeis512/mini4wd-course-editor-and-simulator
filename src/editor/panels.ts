@@ -106,20 +106,13 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
     $('bend-row').hidden = !linked;
     $('raise-box').hidden = !linked;
     // Which way to raise: into either piece, the later one first (spec 16.3).
-    const dir = $<HTMLSelectElement>('raise-dir');
+    const dir = $('raise-dir');
     const key = `${portKey(s.a)}|${portKey(s.b)}`;
     if (dir.dataset.joint !== key) {
       dir.dataset.joint = key;
-      dir.replaceChildren(
-        ...(['a', 'b'] as const).map((side) => {
-          const o = document.createElement('option');
-          o.value = side;
-          o.textContent = `${name(s[side])} の方へ`;
-          return o;
-        }),
-      );
-      dir.value = s.a.piece > s.b.piece ? 'a' : 'b';
+      dir.dataset.side = s.a.piece > s.b.piece ? 'a' : 'b';
     }
+    dir.textContent = `${name(s[dir.dataset.side === 'a' ? 'a' : 'b'])} の方へ`;
     $('bend-closure').hidden = linked;
     const pitch = linked ? (jointBend(course, s.a, s.b).pitch ?? 0) : 0;
     setAngleField('bend-pitch', pitch);
