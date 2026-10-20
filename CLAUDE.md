@@ -1,5 +1,17 @@
 # CLAUDE.md
 
+## コードの置き場所と実装の進め方
+
+[CONTRIBUTING.md](CONTRIBUTING.md) の「コードの置き場所」「ファイルの分け方」「書き方の約束」「実装の進め方」に従うこと。要点：
+
+- コースについての計算は `src/course` に純粋関数で書いてテストを付ける。`src/course` は DOM と `editor` に依存しない
+- `src/editor` は状態と表示だけ。2D/3D 共通の機能は `EditorView` に足し、`app.ts` で 2D/3D を分岐しない
+- 1 ファイル 500 行を超えたら分割を考え、800 行の前に分ける。移動だけのコミットと中身の変更は分ける
+- 同じ処理を 2 か所に書かない
+- 仮の値は名前付き定数にして `provisional` と出どころ（spec の節や issue）をコメントに書く
+- `PART_CODES` と `variants` は末尾に追加するだけ。URL 形式を変えるなら `FORMAT_VERSION` を上げる
+- `npm test` と `npm run build` を通し、画面の変更はブラウザで確かめてから PR を出す
+
 ## ブランチ・コミット・PR
 
 [CONTRIBUTING.md](CONTRIBUTING.md) のルールに従うこと。要点：
