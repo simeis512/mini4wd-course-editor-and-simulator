@@ -155,8 +155,8 @@ export interface PartDef {
   /** Parts this part cannot be joined to directly (e.g. two ramps in a row). */
   cannotJoin?: string[];
   /**
-   * Stands that are part of the part. A part that has them gets no
-   * automatic supports (#11).
+   * Stands that are part of the part. A part that has them gets automatic
+   * supports only under its main road, and only when it is raised (#11).
    */
   supports?: PartSupport[];
   /** Shown in the editor when the geometry is a placeholder. */

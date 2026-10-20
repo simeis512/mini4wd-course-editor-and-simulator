@@ -44,6 +44,8 @@ export function roadOutline(frames: readonly THREE.Matrix4[], section: CrossSect
 /** One stretch of road of a placed piece, in world millimetres. */
 export interface WorldTrack {
   piece: number;
+  /** Which of the part's tracks: 0 is its main centreline. */
+  index: number;
   /** Centreline samples, world frames. */
   samples: THREE.Matrix4[];
   section: CrossSection;
@@ -51,8 +53,9 @@ export interface WorldTrack {
 
 /** Every stretch of road of a piece, placed in the world. */
 export function pieceTracks(pc: PlacedPiece, piece: number): WorldTrack[] {
-  return partGeometry(pc.part).tracks.map((track) => ({
+  return partGeometry(pc.part).tracks.map((track, index) => ({
     piece,
+    index,
     samples: track.samples.map((s) => pc.matrix.clone().multiply(s)),
     section: crossSection(track.lanes),
   }));

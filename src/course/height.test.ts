@@ -136,6 +136,33 @@ describe('supports', () => {
     expect(s.some((st) => st.left.distanceTo(st.right) < usual - 1)).toBe(true);
   });
 
+  it('holds up a raised lane change without doubling stands, its own support riding on top', () => {
+    // A lane change raised 110 over straights on the floor (user's course, 2026-10-20).
+    const course: Course = {
+      v: 1,
+      catalog: 1,
+      pieces: [
+        { part: 'straight', at: 'origin' },
+        { part: 'straight', port: 0, to: [0, 1] },
+        { part: 'bridge-approach', port: 0, free: null, pose: { pos: [0, 110, -540], rot: [0, 0, 0] } },
+        { part: 'lane-change-center', port: 0, to: [2, 1] },
+        { part: 'bridge-approach', port: 1, to: [3, 1] },
+        { part: 'straight', port: 0, to: [0, 0] },
+      ],
+    };
+    const s = supports(layoutCourse(course));
+    // The centre is held up under its lower lanes.
+    expect(s.some((st) => st.piece === 3)).toBe(true);
+    // No two stands overlap: a ramp and the lanes beside it share theirs.
+    for (const [i, a] of s.entries()) {
+      for (const b of s.slice(i + 1)) {
+        const mid = (st: typeof a) => st.left.clone().add(st.right).multiplyScalar(0.5);
+        const apart = Math.abs(mid(a).sub(mid(b)).dot(b.along));
+        expect(apart >= STAND_DEPTH || mid(a).distanceTo(mid(b)) > a.left.distanceTo(a.right)).toBe(true);
+      }
+    }
+  });
+
   it('leaves the road to span road below when the crossbar would not clear it', () => {
     const below = addPiece(emptyCourse(), 'straight', null);
     expect(supports(layoutCourse(raised(60, below)))).toEqual([]);

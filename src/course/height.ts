@@ -102,8 +102,9 @@ export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTr
   const footprints = tracks.map(footprintOf);
   const out: Support[] = [];
   for (const track of tracks) {
-    // Parts that come with their own stands (`partStands`) get only those.
-    if (layout.pieces[track.piece].part.supports) continue;
+    // Parts that come with their own stands (`partStands`) stand on them;
+    // only their main road is held up when the whole piece is raised.
+    if (layout.pieces[track.piece].part.supports && track.index !== 0) continue;
     const { samples, section } = track;
     const length = samples.reduce(
       (sum, f, i) => (i === 0 ? 0 : sum + new Vector3().setFromMatrixPosition(f).distanceTo(new Vector3().setFromMatrixPosition(samples[i - 1]))),
@@ -157,8 +158,27 @@ export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTr
       let under = -Infinity;
       for (let x = a; x <= b; x += SCAN_STEP) under = Math.max(under, below(x));
       if (under > -Infinity && Math.min(left.y, right.y) - STAND_BEAM < under + fenceHeight + SUPPORT_CLEARANCE) continue;
-      out.push({ piece: track.piece, left, right, along });
+      const stand = { piece: track.piece, left, right, along };
+      // Tracks side by side (a ramp beside its lower lanes) can ask for
+      // stands in the same place: keep the first.
+      if (out.some((o) => overlaps(o, stand))) continue;
+      out.push(stand);
     }
   }
   return out;
+}
+
+/** Whether two stands' footprints overlap, seen from above. */
+function overlaps(a: Stand, b: Stand): boolean {
+  const mid = (s: Stand) => s.left.clone().add(s.right).multiplyScalar(0.5).setY(0);
+  const across = b.right.clone().sub(b.left).setY(0).normalize();
+  const offset = mid(a).sub(mid(b));
+  if (Math.abs(offset.dot(b.along)) >= ((a.depth ?? STAND_DEPTH) + (b.depth ?? STAND_DEPTH)) / 2) return false;
+  const span = (s: Stand) => {
+    const [l, r] = [s.left, s.right].map((p) => p.clone().sub(mid(b)).setY(0).dot(across));
+    return [Math.min(l, r), Math.max(l, r)];
+  };
+  const [a0, a1] = span(a);
+  const [b0, b1] = span(b);
+  return a0 < b1 && b0 < a1;
 }
