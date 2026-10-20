@@ -1,5 +1,6 @@
 import { getPart } from './catalog';
-import { addPiece, compatible, footprint, layoutCourse, portKey, type Course, type PortRef } from './course';
+import { compatible, layoutCourse, portKey, type Course, type PortRef } from './course';
+import { addPiece, footprint } from './edit';
 
 /**
  * Join `partId` to the open port `at`. `port` fixes which of its ports

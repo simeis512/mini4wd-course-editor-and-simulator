@@ -38,7 +38,9 @@ AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari 
 - `src/course/catalog.ts` パーツカタログ（中心線の区間・接続口・色バリエーション、URL 用のパーツ番号表）。寸法は mm、多くは推定値
 - `src/course/geometry.ts` 中心線のサンプリングと接続口のフレーム計算
 - `src/course/profile.ts` ウェーブの横うねりやブリッジの高さなどの形の関数
-- `src/course/course.ts` コース（連結グラフ）、配置計算、ループ閉じ判定、編集操作
+- `src/course/course.ts` コースのデータ（連結グラフ）、配置計算、ループ閉じ判定
+- `src/course/edit.ts` 編集操作（追加・削除・反転・移動など）
+- `src/course/joining.ts` 連結と分断、ドラッグ中に口を引き寄せる磁石
 - `src/course/add.ts` パーツを口につなぐ・ドロップ先を選ぶ
 - `src/course/codec.ts` コース ⇄ URL ハッシュ（バイナリ → deflate-raw → base64url）
 - `src/course/mesh.ts` 3D メッシュ生成（路面＋フェンスの掃引。シーンは m 単位）

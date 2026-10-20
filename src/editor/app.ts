@@ -3,30 +3,27 @@ import { dropJoin, joinPart, nextOpenPort } from '../course/add';
 import { hasPart } from '../course/catalog';
 import { courseFromHash, courseToHash } from '../course/codec';
 import {
-  addFreePiece,
-  addPiece,
-  applyMagnet,
-  deletePiece,
   emptyCourse,
-  findMagnet,
-  flipPiece,
-  freeSpot,
-  joinableNear,
-  joinPorts,
   layoutCourse,
-  MAGNET_DISTANCE,
-  moveGroup,
   movingGroup,
   portKey,
   sameJoint,
-  setPose,
-  setVariant,
-  splitJoint,
-  tidyCuts,
   validateCourse,
   type Course,
   type Layout,
 } from '../course/course';
+import {
+  addFreePiece,
+  addPiece,
+  deletePiece,
+  flipPiece,
+  freeSpot,
+  moveGroup,
+  setPose,
+  setVariant,
+  tidyCuts,
+} from '../course/edit';
+import { applyMagnet, findMagnet, joinableNear, joinPorts, MAGNET_DISTANCE, splitJoint } from '../course/joining';
 import { partGeometry, type Pose } from '../course/geometry';
 import { basicOval } from '../course/presets';
 import { $, toast } from './dom';

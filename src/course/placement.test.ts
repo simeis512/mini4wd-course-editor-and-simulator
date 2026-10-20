@@ -1,24 +1,8 @@
 import { Matrix4 } from 'three';
 import { describe, expect, it } from 'vitest';
-import {
-  addFreePiece,
-  addPiece,
-  applyMagnet,
-  emptyCourse,
-  findMagnet,
-  footprint,
-  freeSpot,
-  groupCount,
-  joinableNear,
-  joinPorts,
-  layoutCourse,
-  moveGroup,
-  movingGroup,
-  setPose,
-  splitJoint,
-  tidyCuts,
-  type Course,
-} from './course';
+import { emptyCourse, groupCount, layoutCourse, movingGroup, type Course } from './course';
+import { addFreePiece, addPiece, footprint, freeSpot, moveGroup, setPose, tidyCuts } from './edit';
+import { applyMagnet, findMagnet, joinableNear, joinPorts, splitJoint } from './joining';
 import { facingError } from './geometry';
 import { basicOval, chain } from './presets';
 

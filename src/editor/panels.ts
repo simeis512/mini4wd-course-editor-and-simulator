@@ -1,15 +1,7 @@
 import { getPart, PARTS, variantOf } from '../course/catalog';
-import {
-  compatible,
-  footprint,
-  groupCount,
-  joinableNear,
-  movingGroup,
-  partCounts,
-  placementOf,
-  type Course,
-  type Layout,
-} from '../course/course';
+import { compatible, groupCount, movingGroup, partCounts, placementOf, type Course, type Layout } from '../course/course';
+import { footprint } from '../course/edit';
+import { joinableNear } from '../course/joining';
 import { $ } from './dom';
 import { partIcon } from './icons';
 import type { Selection } from './selection';
