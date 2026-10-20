@@ -217,7 +217,7 @@ function pushSlab(positions: number[], face: THREE.Vector3[], along: THREE.Vecto
 export function buildSupportMesh(list: readonly Stand[], mat = material(SUPPORT_COLOR, 1, true)): THREE.Mesh {
   const positions: number[] = [];
   const up = new THREE.Vector3(0, 1, 0);
-  for (const { left, right, along } of list) {
+  for (const { left, right, along, depth = SUPPORT_THICKNESS } of list) {
     // Across the road, level, from the left edge to the right.
     const across = right.clone().sub(left).setY(0).normalize();
     const floor = (v: THREE.Vector3) => new THREE.Vector3(v.x, 0, v.z);
@@ -225,9 +225,9 @@ export function buildSupportMesh(list: readonly Stand[], mat = material(SUPPORT_
     const beam = up.clone().multiplyScalar(SUPPORT_BEAM);
     const l2 = left.clone().add(leg);
     const r2 = right.clone().sub(leg);
-    pushSlab(positions, [floor(left), floor(l2), l2, left], along, SUPPORT_THICKNESS / 2);
-    pushSlab(positions, [floor(r2), floor(right), right, r2], along, SUPPORT_THICKNESS / 2);
-    pushSlab(positions, [l2.clone().sub(beam), r2.clone().sub(beam), r2, l2], along, SUPPORT_THICKNESS / 2);
+    pushSlab(positions, [floor(left), floor(l2), l2, left], along, depth / 2);
+    pushSlab(positions, [floor(r2), floor(right), right, r2], along, depth / 2);
+    pushSlab(positions, [l2.clone().sub(beam), r2.clone().sub(beam), r2, l2], along, depth / 2);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));

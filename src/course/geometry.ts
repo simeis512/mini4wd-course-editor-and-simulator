@@ -191,17 +191,20 @@ export interface Stand {
   left: Vector3;
   right: Vector3;
   along: Vector3;
+  /** Depth along `along`, mm, when not the usual. */
+  depth?: number;
 }
 
 /** The stands that come with a part (#11), in part-local coordinates. */
 export function partStands(part: PartDef): Stand[] {
   const { samples } = partGeometry(part);
-  return (part.supports ?? []).map(({ at, offset, halfWidth, top }) => {
+  return (part.supports ?? []).map(({ at, offset, halfWidth, top, depth }) => {
     const f = samples[Math.round(at * (samples.length - 1))];
     return {
       left: pointOnFrame(f, offset - halfWidth, top),
       right: pointOnFrame(f, offset + halfWidth, top),
       along: new Vector3(0, 0, 1).transformDirection(f).setY(0).normalize(),
+      depth,
     };
   });
 }

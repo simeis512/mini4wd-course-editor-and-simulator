@@ -95,6 +95,8 @@ export interface PartSupport {
   halfWidth: number;
   /** Height of its top above the centreline, mm. */
   top: number;
+  /** How deep it is along the centreline, mm. */
+  depth: number;
 }
 
 export interface Track {
@@ -211,11 +213,12 @@ const JOINT_PITCH = (Math.atan(bridgeRiseSlope(RAMP_RUN)) * 180) / Math.PI;
 /** Lateral offset of the right-hand lane, as a part-local X (+ X is left). */
 const RIGHT_LANE_X = -laneOffset(2);
 /**
- * Half the width of the lane change's own bridge support, mm: a little
- * narrower than the course (user, from the real part, 2026-10-20; the
- * amount is provisional, #1).
+ * Size of the lane change's own bridge support, mm: a little wider than the
+ * two lower lanes and about one lane deep (user, from the real part,
+ * 2026-10-20; the exact sizes are provisional, #1).
  */
-const LANE_CHANGE_SUPPORT_HALF = (3 * GLOBAL_SPEC.lanePitch + GLOBAL_SPEC.fenceThickness) / 2 - 10;
+const LANE_CHANGE_SUPPORT_HALF = (2 * GLOBAL_SPEC.lanePitch + GLOBAL_SPEC.fenceThickness) / 2 + 10;
+const LANE_CHANGE_SUPPORT_DEPTH = GLOBAL_SPEC.lanePitch;
 const LANE_CHANGE_SUPPORT_TOP = BRIDGE_HEIGHT - GLOBAL_SPEC.roadThickness;
 const LANE_CHANGE_NOTE = `橋がアプローチ側へ約1/3入り込み、全体で1つのなだらかな山になる形は公式の図・写真どおり。寸法は未計測のため仮（橋の最高点${BRIDGE_HEIGHT}、各ピースの床の長さ${LANE_CHANGE_LENGTH}）`;
 
@@ -390,6 +393,7 @@ export const PARTS: readonly PartDef[] = [
         offset: (laneOffset(0) + laneOffset(1)) / 2,
         halfWidth: LANE_CHANGE_SUPPORT_HALF,
         top: LANE_CHANGE_SUPPORT_TOP,
+        depth: LANE_CHANGE_SUPPORT_DEPTH,
       },
     ],
     variants: [PALETTE.white, PALETTE.gray, PALETTE.black],

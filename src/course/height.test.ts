@@ -87,10 +87,11 @@ describe('supports', () => {
     const forward = new Vector3(0, 0, 1).transformDirection(f);
     expect(Math.abs(st.right.clone().sub(st.left).normalize().dot(forward))).toBeLessThan(1e-6);
     expect(Math.abs(forward.x)).toBeGreaterThan(0.05);
-    // Centred on the two lower lanes, a little narrower than the course and wider than those lanes.
+    // Centred on the two lower lanes, a little wider than them and about a lane deep.
     const width = st.left.distanceTo(st.right);
-    expect(width).toBeLessThan(3 * GLOBAL_SPEC.lanePitch + GLOBAL_SPEC.fenceThickness);
     expect(width).toBeGreaterThan(2 * GLOBAL_SPEC.lanePitch + GLOBAL_SPEC.fenceThickness);
+    expect(width).toBeLessThan(3 * GLOBAL_SPEC.lanePitch);
+    expect(st.depth).toBe(GLOBAL_SPEC.lanePitch);
     const centre = st.left.clone().add(st.right).multiplyScalar(0.5);
     expect(centre.distanceTo(pointOnFrame(f, -GLOBAL_SPEC.lanePitch / 2, centre.y - f.elements[13]))).toBeLessThan(1e-6);
   });
