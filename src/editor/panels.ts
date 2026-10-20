@@ -148,9 +148,9 @@ export function runMarks(course: Course, from: PortRef, into: PortRef, count: nu
   if (pieces.length === 0) note.textContent = 'この向きには上げられるピースがありません（先頭のピースや、自由に置いたピースは動かせません）';
   else {
     const span = pieces.length === 1 ? `#${pieces[0] + 1} の` : `#${pieces[0] + 1} から #${pieces[pieces.length - 1] + 1} までの`;
-    note.textContent = `点滅している ${span} ${pieces.length} ピースを上げます${short ? `（${count} ピースに足りません）` : ''}`;
+    note.textContent = `点滅している ${span} ${pieces.length} ピースを上げます${short ? `（${count} ピースにあと ${count - pieces.length} ピース足りません。足りなくても上げられます）` : ''}`;
   }
-  return { pieces, end, shortAt: short ? pieces.length : 0 };
+  return { pieces, end, missing: count - pieces.length };
 }
 
 function setAngleField(id: string, deg: number): void {

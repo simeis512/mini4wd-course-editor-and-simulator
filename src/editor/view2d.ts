@@ -288,10 +288,10 @@ export class TopView implements EditorView {
       const selected = sel?.kind === 'port' && portKey(sel.ref) === portKey(ref);
       this.drawPort(ref, selected ? '#3fd0ff' : split.has(portKey(ref)) ? '#ff5a5a' : '#ff9a2e', selected ? 1.3 : 1);
     }
-    if (run?.shortAt && run.end) {
+    if (run?.missing && run.end) {
       const p = pointOnFrame(layout.pieces[run.end.piece].ports[run.end.port], 0, 0, new Vector3());
       const [sx, sy] = this.toScreen(...xz(p));
-      drawShortMark(ctx, sx, sy - 26, run.shortAt);
+      drawShortMark(ctx, sx, sy - 26, run.missing);
     }
   }
 

@@ -6,8 +6,8 @@ export interface RunMarks {
   pieces: number[];
   /** The far end of the run. */
   end: PortRef | null;
-  /** Pieces reached, shown at the end when fewer than asked for; 0 when enough. */
-  shortAt: number;
+  /** Pieces fewer than asked for, shown at the end; 0 when enough. The run still rises. */
+  missing: number;
 }
 
 /** How long one blink of the run takes, ms. */
@@ -35,8 +35,9 @@ export interface EditorView {
 }
 
 /**
- * A red triangle with a number, over the end of a run that has fewer
- * pieces than asked for: how many it reaches. Both views draw it.
+ * A yellow triangle with a number, over the end of a run that has fewer
+ * pieces than asked for: how many are missing. Yellow, as the run can
+ * still be raised (user, 2026-10-20). Both views draw it.
  */
 export function drawShortMark(ctx: CanvasRenderingContext2D, x: number, y: number, n: number): void {
   const r = 16;
@@ -45,14 +46,14 @@ export function drawShortMark(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.lineTo(x + r * 1.05, y + r * 0.75);
   ctx.lineTo(x - r * 1.05, y + r * 0.75);
   ctx.closePath();
-  ctx.fillStyle = '#e53935';
+  ctx.fillStyle = '#ffc828';
   ctx.fill();
-  ctx.strokeStyle = '#fff';
+  ctx.strokeStyle = '#3a2a00';
   ctx.lineWidth = 1.5;
   ctx.stroke();
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = '#2a1e00';
   ctx.font = 'bold 13px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(String(n), x, y + 2);
+  ctx.fillText(`−${n}`, x, y + 3);
 }

@@ -259,12 +259,12 @@ export class OrbitView implements EditorView {
       this.shortMark.material.dispose();
       this.shortMark = null;
     }
-    if (run?.shortAt && run.end && this.layout) {
+    if (run?.missing && run.end && this.layout) {
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 64;
       const ctx = canvas.getContext('2d')!;
       ctx.scale(2, 2);
-      drawShortMark(ctx, 16, 17, run.shortAt);
+      drawShortMark(ctx, 16, 17, run.missing);
       const map = new THREE.CanvasTexture(canvas);
       map.colorSpace = THREE.SRGBColorSpace;
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, depthTest: false, sizeAttenuation: false }));
