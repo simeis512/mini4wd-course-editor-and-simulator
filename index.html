@@ -64,6 +64,7 @@
       #course-info[open] summary { margin-bottom: 4px; }
       .ok { color: var(--ok); }
       .warn { color: var(--warn); }
+      .angle input { width: 64px; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
       #trash-zone { grid-area: panel; z-index: 5; pointer-events: none; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 15px; font-weight: 600; color: #fff; background: rgba(216, 50, 58, 0.82); border: 3px dashed #fff; }
       #trash-zone.blocked { background: rgba(60, 64, 74, 0.9); font-weight: 400; font-size: 13px; }
       #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #000c; padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 10; }
@@ -126,6 +127,13 @@
             <button id="raise" title="10mm 上げる">↑10mm</button>
             <button id="lower" title="10mm 下げる">↓10mm</button>
           </div>
+          <div class="row angle">
+            <label for="twist" title="入口に対して出口が中心線まわりに回る角度（右下がり+）。ピース全体に均等にねじります">ねじれ</label>
+            <button id="twist-minus" title="0.5° 左下がりへ（Shift で 0.1°）">−</button>
+            <input id="twist" type="number" step="0.1" /> °
+            <button id="twist-plus" title="0.5° 右下がりへ（Shift で 0.1°）">＋</button>
+          </div>
+          <div id="twist-warn" class="hint warn" hidden></div>
           <div class="row">
             <label title="10mm / 15°刻みで動かす。Shift を押している間は解除"><input id="snap" type="checkbox" checked /> スナップ</label>
             <label title="つながっているピースを置いて、このピースだけ動かす"><input id="move-alone" type="checkbox" /> このピースだけ動かす</label>
@@ -148,6 +156,14 @@
         </section>
         <section id="joint-panel" hidden>
           <div id="joint-name" class="title"></div>
+          <div id="bend-row" class="row angle">
+            <label for="bend-pitch" title="ジョイントのしなりで折れる角度（上り+）。つないだ先のピースがジョイントを中心に回ります">折れ角</label>
+            <button id="bend-minus" title="0.5° 下りへ（Shift で 0.1°）">−</button>
+            <input id="bend-pitch" type="number" step="0.1" /> °
+            <button id="bend-plus" title="0.5° 上りへ（Shift で 0.1°）">＋</button>
+          </div>
+          <div id="bend-warn" class="hint warn" hidden></div>
+          <p id="bend-closure" class="hint" hidden>ループを閉じたつなぎ目（口が近くで合っているだけ）なので、折れ角は付けられません。</p>
           <div class="row">
             <button id="split" title="分断 (Delete)">分断</button>
           </div>

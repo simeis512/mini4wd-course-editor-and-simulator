@@ -18,13 +18,16 @@ import {
   deletePiece,
   flipPiece,
   freeSpot,
+  jointBend,
   moveGroup,
+  setBend,
   setPose,
+  setTwist,
   setVariant,
   tidyCuts,
 } from '../course/edit';
 import { applyMagnet, findMagnet, joinableNear, joinPorts, MAGNET_DISTANCE, splitJoint } from '../course/joining';
-import { partGeometry, type Pose } from '../course/geometry';
+import type { Pose } from '../course/geometry';
 import { basicOval } from '../course/presets';
 import { $, toast } from './dom';
 import { History } from './history';
@@ -352,7 +355,7 @@ export class EditorApp {
     const s = this.selection;
     if (s?.kind !== 'piece') return;
     const pc = this.layout.pieces[s.index];
-    const samples = partGeometry(pc.part).samples;
+    const samples = pc.geometry.samples;
     const c = samples
       .reduce((sum, f) => sum.add(new Vector3().setFromMatrixPosition(f)), new Vector3())
       .divideScalar(samples.length)
@@ -362,6 +365,22 @@ export class EditorApp {
       .multiply(new Matrix4().makeRotationY((deg * Math.PI) / 180))
       .multiply(new Matrix4().makeTranslation(-c.x, -c.y, -c.z));
     this.moveSelected(turn);
+  }
+
+  /** Set the selected piece's twist (spec 16.2), or nudge it by `by`. */
+  private twistSelected(deg: number | null, by = 0): void {
+    const s = this.selection;
+    if (s?.kind !== 'piece') return;
+    const twist = (deg ?? this.course.pieces[s.index].twist ?? 0) + by;
+    this.commit(setTwist(this.course, s.index, twist), s);
+  }
+
+  /** Set the selected joint's bend up or down (spec 16.1), or nudge it by `by`. */
+  private bendSelected(deg: number | null, by = 0): void {
+    const s = this.selection;
+    if (s?.kind !== 'joint') return;
+    const bend = jointBend(this.course, s.a, s.b);
+    this.commit(setBend(this.course, s.a, s.b, { ...bend, pitch: (deg ?? bend.pitch ?? 0) + by }), s);
   }
 
   private splitSelected(): void {
@@ -485,6 +504,14 @@ export class EditorApp {
     $('raise').addEventListener('click', () => this.moveSelected(new Matrix4().makeTranslation(0, 10, 0)));
     $('lower').addEventListener('click', () => this.moveSelected(new Matrix4().makeTranslation(0, -10, 0)));
     for (const id of POSE_FIELDS) $(id).addEventListener('change', () => this.setPoseFromFields());
+    // Angles step 0.5°, or 0.1° with Shift (spec 16.3).
+    const step = (e: MouseEvent) => (e.shiftKey ? 0.1 : 0.5);
+    $('twist-minus').addEventListener('click', (e) => this.twistSelected(null, -step(e)));
+    $('twist-plus').addEventListener('click', (e) => this.twistSelected(null, step(e)));
+    $('twist').addEventListener('change', (e) => this.twistSelected(Number((e.target as HTMLInputElement).value) || 0));
+    $('bend-minus').addEventListener('click', (e) => this.bendSelected(null, -step(e)));
+    $('bend-plus').addEventListener('click', (e) => this.bendSelected(null, step(e)));
+    $('bend-pitch').addEventListener('change', (e) => this.bendSelected(Number((e.target as HTMLInputElement).value) || 0));
     $('split').addEventListener('click', () => this.splitSelected());
     $('join').addEventListener('click', () => this.joinSelected());
 

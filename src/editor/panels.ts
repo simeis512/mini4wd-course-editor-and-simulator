@@ -1,6 +1,7 @@
 import { getPart, PARTS, variantOf } from '../course/catalog';
-import { compatible, groupCount, movingGroup, partCounts, placementOf, type Course, type Layout } from '../course/course';
-import { footprint } from '../course/edit';
+import { compatible, groupCount, movingGroup, partCounts, placementOf, type Course, type Layout, type Problem } from '../course/course';
+import { footprint, jointBend, linkHolder } from '../course/edit';
+import { BEND_LIMIT, TWIST_LIMIT } from '../course/flex';
 import { joinableNear } from '../course/joining';
 import { $ } from './dom';
 import { partIcon } from './icons';
@@ -75,6 +76,9 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
     );
     select.value = String(pc.part.variants.indexOf(variantOf(pc.part, pc.rec.variant)));
     $<HTMLButtonElement>('flip').disabled = pc.part.ports.length !== 2;
+    const twist = pc.rec.twist ?? 0;
+    setAngleField('twist', twist);
+    showLimit('twist-warn', twist, TWIST_LIMIT, 'ねじれ');
 
     const group = movingGroup(layout, s.index);
     $('group-info').textContent =
@@ -96,6 +100,13 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
   if (s?.kind === 'joint') {
     const name = (r: { piece: number }) => `#${r.piece + 1} ${layout.pieces[r.piece].part.name}`;
     $('joint-name').textContent = `${name(s.a)} と ${name(s.b)} のつなぎ目`;
+    // Only stored links bend (spec 16.1).
+    const linked = linkHolder(course, s.a, s.b) !== null;
+    $('bend-row').hidden = !linked;
+    $('bend-closure').hidden = linked;
+    const pitch = linked ? (jointBend(course, s.a, s.b).pitch ?? 0) : 0;
+    setAngleField('bend-pitch', pitch);
+    showLimit('bend-warn', pitch, BEND_LIMIT, '折れ角');
   }
   const near = s?.kind === 'port' ? joinableNear(layout, s.ref) : null;
   $('port-panel').hidden = s?.kind !== 'port';
@@ -107,6 +118,25 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
   // Settings for the selection float over the editor, next to it (#45).
   $('context').hidden = s === null;
 }
+
+function setAngleField(id: string, deg: number): void {
+  const input = $<HTMLInputElement>(id);
+  if (document.activeElement !== input) input.value = String(deg);
+}
+
+/** Warn when an angle is past what real parts give (spec 16.4); it is still allowed. */
+function showLimit(id: string, deg: number, limit: number, what: string): void {
+  const warn = $(id);
+  warn.hidden = Math.abs(deg) <= limit;
+  warn.textContent = `${what}が上限の目安 ${limit}° を超えています（目安は実測待ちの仮の値です）`;
+}
+
+const PROBLEM_TEXT: Record<Problem['kind'], string> = {
+  'not-level': '床側の端が水平ではありません（向きが逆かもしれません）',
+  'cannot-join': 'このパーツ同士はつなげません',
+  'bend-limit': `つなぎ目の折れ角が上限の目安 ${BEND_LIMIT}° を超えています`,
+  'twist-limit': `ねじれが上限の目安 ${TWIST_LIMIT}° を超えています`,
+};
 
 function renderCourseInfo(course: Course, layout: Layout): void {
   const info: string[] = [];
@@ -120,8 +150,7 @@ function renderCourseInfo(course: Course, layout: Layout): void {
     info.push('<div class="ok">コースは閉じています</div>');
   }
   for (const pr of layout.problems) {
-    const what = pr.kind === 'not-level' ? '床側の端が水平ではありません（向きが逆かもしれません）' : 'このパーツ同士はつなげません';
-    info.push(`<div class="warn">#${pr.piece + 1} ${layout.pieces[pr.piece].part.name}: ${what}</div>`);
+    info.push(`<div class="warn">#${pr.piece + 1} ${layout.pieces[pr.piece].part.name}: ${PROBLEM_TEXT[pr.kind]}</div>`);
   }
   for (const c of layout.closures) {
     // Ports placed exactly together are simply joined; only real gaps are worth showing.
