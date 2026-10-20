@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { layoutCourse } from './course';
 import { BEND_LIMIT, TWIST_LIMIT } from './flex';
 import { chain } from './presets';
-import { raiseRun, runFrom } from './raise';
+import { previewRun, raiseRun, runFrom } from './raise';
 
 const up = (m: Matrix4) => new Vector3(0, 1, 0).transformDirection(m);
 const height = (m: Matrix4) => m.elements[13];
@@ -60,5 +60,29 @@ describe('raiseRun (spec 16.3)', () => {
   it('lowers with a negative rise', () => {
     const layout = layoutCourse(raiseRun(spiral(), ...joint(0), 8, -40));
     expect(Math.abs(height(layout.pieces[8].ports[1]) + 40)).toBeLessThan(1.5);
+  });
+});
+
+describe('which way a run goes', () => {
+  const five = () => chain(['straight', 'straight', 'straight', 'straight', 'straight']);
+
+  it('previews the pieces either way from a joint, and where it ends', () => {
+    const [a, b] = joint(1);
+    expect(previewRun(five(), a, b, 2)).toEqual({ pieces: [2, 3], end: { piece: 3, port: 1 } });
+    // Back towards the start: the first piece stays put, so only one piece moves.
+    expect(previewRun(five(), b, a, 3)).toEqual({ pieces: [1], end: { piece: 0, port: 1 } });
+    expect(previewRun(five(), ...joint(3), 5).pieces).toEqual([4]);
+  });
+
+  it('raises the far side when going against the links, keeping the joint put', () => {
+    const [a, b] = joint(3);
+    const c = raiseRun(five(), b, a, 2, 60);
+    const layout = layoutCourse(c);
+    // The joint and what lies beyond it stay on the floor; the run climbs back from it.
+    expect(height(layout.pieces[3].ports[1])).toBeCloseTo(0, 0);
+    expect(height(layout.pieces[4].ports[1])).toBeCloseTo(0, 0);
+    expect(Math.abs(height(layout.pieces[1].ports[1]) - 60)).toBeLessThan(1.5);
+    expect(Math.abs(height(layout.pieces[0].ports[0]) - 60)).toBeLessThan(1.5);
+    expect(up(layout.pieces[0].ports[1]).y).toBeGreaterThan(Math.cos((0.2 * Math.PI) / 180));
   });
 });

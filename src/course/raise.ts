@@ -1,7 +1,7 @@
-import { Vector3, type Matrix4 } from 'three';
+import { Matrix4, Vector3 } from 'three';
 import { getPart } from './catalog';
-import { layoutCourse, type Course, type PortRef } from './course';
-import { jointBend, linkHolder, setBend, setTwist } from './edit';
+import { layoutCourse, movingGroup, type Course, type PortRef } from './course';
+import { jointBend, linkHolder, moveGroup, setBend, setTwist } from './edit';
 
 // Raising a run of pieces by bending its joints and twisting its pieces
 // (spec 16.3, #54), e.g. a spiral of curves that passes over itself.
@@ -14,30 +14,87 @@ export interface Run {
   joints: [PortRef, PortRef][];
 }
 
+/** The way a run goes from a joint: which pieces, and where it ends (for the editor to show). */
+export interface RunPreview {
+  /** The pieces, going away from the joint. */
+  pieces: number[];
+  /** The far port of the last piece. */
+  end: PortRef | null;
+}
+
+/** The piece hanging by a stored link off a port, with the port it hangs by. */
+function childAt(course: Course, ref: PortRef): PortRef | null {
+  const piece = course.pieces.findIndex((r) => 'to' in r && r.to[0] === ref.piece && r.to[1] === ref.port);
+  return piece < 0 ? null : { piece, port: (course.pieces[piece] as { port: number }).port };
+}
+
+const twoEnded = (course: Course, piece: number) => getPart(course.pieces[piece].part).ports.length === 2;
+
 /**
- * Up to `count` pieces running on from the joint between `a` and `b`, the
- * way the stored links go: each piece hangs off the far port of the one
- * before. Stops early at a piece with more than two ports. Null when the
- * joint is not a stored link.
+ * Up to `count` pieces from the joint between `from` and `into`, going into
+ * `into`'s piece, the way the stored links go: each piece hangs off the far
+ * port of the one before. Stops early at a piece with more than two ports.
+ * Null when the joint is not a stored link the right way round.
  */
-export function runFrom(course: Course, a: PortRef, b: PortRef, count: number): Run | null {
-  const first = linkHolder(course, a, b);
-  if (first === null) return null;
-  const entry = first === a.piece ? a : b;
-  const run: Run = { pieces: [], joints: [[entry === a ? b : a, entry]] };
-  let piece = first;
+export function runFrom(course: Course, from: PortRef, into: PortRef, count: number): Run | null {
+  if (linkHolder(course, from, into) !== into.piece) return null;
+  const run: Run = { pieces: [], joints: [[from, into]] };
+  let piece = into.piece;
   for (;;) {
     run.pieces.push(piece);
-    const rec = course.pieces[piece];
-    if (!('to' in rec) || getPart(rec.part).ports.length !== 2) break;
-    const out = { piece, port: 1 - rec.port };
-    const next = course.pieces.findIndex((r) => 'to' in r && r.to[0] === out.piece && r.to[1] === out.port);
-    if (next < 0) break;
-    run.joints.push([out, { piece: next, port: (course.pieces[next] as { port: number }).port }]);
-    if (run.pieces.length >= count || getPart(course.pieces[next].part).ports.length !== 2) break;
-    piece = next;
+    if (!twoEnded(course, piece)) break;
+    const out = { piece, port: 1 - (course.pieces[piece] as { port: number }).port };
+    const next = childAt(course, out);
+    if (!next) break;
+    run.joints.push([out, next]);
+    if (run.pieces.length >= count || !twoEnded(course, next.piece)) break;
+    piece = next.piece;
   }
   return run;
+}
+
+/**
+ * Up to `count` pieces from the joint between `from` and `into`, the other
+ * way: against the stored links, each piece hanging off the next one. The
+ * piece where the links stop (the first piece, or one placed freely) stays
+ * where it is, so it is not part of the run. Returned in the order the
+ * links go, ending at the joint, ready to raise like `runFrom`.
+ */
+function runBack(course: Course, from: PortRef, into: PortRef, count: number): Run | null {
+  if (linkHolder(course, from, into) !== from.piece) return null;
+  const pieces: number[] = [];
+  let entered = into;
+  while (pieces.length < count && twoEnded(course, entered.piece)) {
+    const rec = course.pieces[entered.piece];
+    // Each piece in the run hangs by its far port off the next one up.
+    if (!('to' in rec) || rec.port !== 1 - entered.port) break;
+    pieces.push(entered.piece);
+    entered = { piece: rec.to[0], port: rec.to[1] };
+  }
+  if (pieces.length === 0) return null;
+  const top = pieces[pieces.length - 1];
+  const rec = course.pieces[top] as { port: number; to: [number, number] };
+  return runFrom(course, { piece: rec.to[0], port: rec.to[1] }, { piece: top, port: rec.port }, pieces.length);
+}
+
+/** Which pieces raising from the joint between `from` and `into` would move, going into `into` (spec 16.3). */
+export function previewRun(course: Course, from: PortRef, into: PortRef, count: number): RunPreview {
+  const forward = runFrom(course, from, into, count);
+  if (forward) {
+    const last = forward.pieces[forward.pieces.length - 1];
+    return { pieces: forward.pieces, end: farPort(course, last) };
+  }
+  const back = runBack(course, from, into, count);
+  if (!back) return { pieces: [], end: null };
+  const pieces = [...back.pieces].reverse();
+  const top = course.pieces[pieces[pieces.length - 1]] as { to: [number, number] };
+  return { pieces, end: { piece: top.to[0], port: top.to[1] } };
+}
+
+/** The port of a two-ended piece away from the one it hangs by. */
+function farPort(course: Course, piece: number): PortRef | null {
+  const rec = course.pieces[piece];
+  return 'port' in rec && twoEnded(course, piece) ? { piece, port: 1 - rec.port } : null;
 }
 
 const DEG = 180 / Math.PI;
@@ -88,15 +145,26 @@ function gain(course: Course, run: Run): number {
 const MAX_GRADE = 20;
 
 /**
- * Raise the run of `count` pieces from the joint between `a` and `b` by
- * `rise` mm (spec 16.3): the gradient is found so the far end of the last
- * piece ends up `rise` higher, and the road leaves the run level again.
- * Pieces beyond follow. Returns the course unchanged when the joint is not
- * a stored link.
+ * Raise `count` pieces from the joint between `from` and `into`, going into
+ * `into`, so the far end is `rise` mm higher than the joint (spec 16.3).
+ * The gradient is found so the far end ends up `rise` higher, and the road
+ * leaves the run level again. Going with the stored links, the pieces
+ * beyond follow; going against them, the joint stays and everything joined
+ * on the far side rises. Returns the course unchanged when the joint is
+ * not a stored link.
  */
-export function raiseRun(course: Course, a: PortRef, b: PortRef, count: number, rise: number): Course {
-  const run = runFrom(course, a, b, count);
-  if (!run) return course;
+export function raiseRun(course: Course, from: PortRef, into: PortRef, count: number, rise: number): Course {
+  const run = runFrom(course, from, into, count);
+  if (run) return climbBy(course, run, rise);
+  const back = runBack(course, from, into, count);
+  if (!back) return course;
+  // Going the links' way the run comes down to the joint; lift everything
+  // joined to it back up so the joint stays where it was.
+  const down = climbBy(course, back, -rise);
+  return moveGroup(down, movingGroup(layoutCourse(down), from.piece), new Matrix4().makeTranslation(0, rise, 0));
+}
+
+function climbBy(course: Course, run: Run, rise: number): Course {
   let lo = -MAX_GRADE;
   let hi = MAX_GRADE;
   for (let i = 0; i < 20; i++) {
