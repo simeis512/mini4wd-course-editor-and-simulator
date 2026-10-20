@@ -1,8 +1,8 @@
 import { getPart, PARTS, variantOf } from '../course/catalog';
 import { compatible, movingGroup, placementOf, portKey, type Course, type Layout, type PortRef } from '../course/course';
-import { footprint, jointBend } from '../course/edit';
+import { footprint, jointBend, jointShift, linkHolder, setShift } from '../course/edit';
 import { BEND_LIMIT, TWIST_LIMIT } from '../course/flex';
-import { bendable, joinableNear } from '../course/joining';
+import { asLink, bendable, joinableNear } from '../course/joining';
 import { previewRun } from '../course/raise';
 import { $ } from './dom';
 import { floatSpot, rectAround, type Rect } from './float';
@@ -123,6 +123,8 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
     const pitch = linked ? (jointBend(course, s.a, s.b).pitch ?? 0) : 0;
     setAngleField('bend-pitch', pitch);
     showLimit('bend-warn', pitch, BEND_LIMIT, '折れ角');
+    $('shift-row').hidden = !linked;
+    if (linked) showShift(asLink(course, s.a, s.b), layout, s.a, s.b);
   }
   const near = s?.kind === 'port' ? joinableNear(layout, s.ref) : null;
   $('port-panel').hidden = s?.kind !== 'port';
@@ -148,6 +150,19 @@ export function runMarks(course: Course, from: PortRef, into: PortRef, count: nu
     note.textContent = `点滅している ${span} ${pieces.length} ピースを上げます${short ? `（${count} ピースにあと ${count - pieces.length} ピース足りません。足りなくても上げられます）` : ''}`;
   }
   return { pieces, end, missing: count - pieces.length };
+}
+
+/**
+ * The joint's sideways shift, as seen looking out of the piece it hangs off,
+ * with the arrows off where no lane would meet (#60).
+ */
+function showShift(course: Course, layout: Layout, a: PortRef, b: PortRef): void {
+  const shift = jointShift(course, a, b);
+  $('shift-value').textContent = shift === 0 ? 'なし' : `${shift > 0 ? '右' : '左'}へ ${Math.abs(shift)} レーン`;
+  const base = linkHolder(course, a, b) === a.piece ? b : a;
+  $('shift-from').textContent = `（${pieceLabel(layout, base.piece)} から見て）`;
+  $<HTMLButtonElement>('shift-left').disabled = setShift(course, a, b, shift - 1) === course;
+  $<HTMLButtonElement>('shift-right').disabled = setShift(course, a, b, shift + 1) === course;
 }
 
 function setAngleField(id: string, deg: number): void {
