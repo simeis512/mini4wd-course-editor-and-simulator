@@ -37,10 +37,15 @@ AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari 
 
 - `src/course/catalog.ts` パーツカタログ（中心線の区間・接続口・色バリエーション、URL 用のパーツ番号表）。寸法は mm、多くは推定値
 - `src/course/geometry.ts` 中心線のサンプリングと接続口のフレーム計算
+- `src/course/profile.ts` ウェーブの横うねりやブリッジの高さなどの形の関数
 - `src/course/course.ts` コース（連結グラフ）、配置計算、ループ閉じ判定、編集操作
+- `src/course/add.ts` パーツを口につなぐ・ドロップ先を選ぶ
 - `src/course/codec.ts` コース ⇄ URL ハッシュ（バイナリ → deflate-raw → base64url）
 - `src/course/mesh.ts` 3D メッシュ生成（路面＋フェンスの掃引。シーンは m 単位）
-- `src/editor/` 2D 編集ビュー、3D/AR ビュー、画面
+- `src/editor/app.ts` エディタの状態と操作。`panels.ts` パネル表示、`history.ts` 元に戻す／やり直し
+- `src/editor/view2d.ts` / `view3d.ts` 2D 編集ビュー、3D/AR ビュー（共通インターフェースは `view.ts`）
 - `src/physics/` Rapier の物理ワールド（シミュレーター用、未接続）
+
+コードの置き場所や実装の進め方のルールは [CONTRIBUTING.md](CONTRIBUTING.md) を参照。
 
 仕様はプロジェクトの `specs/course-editor.md`（フェーズ1: ストレート・カーブ・ウェーブ）。
