@@ -65,7 +65,12 @@ export class EditorApp {
       onDragMove: (dx, dz, noSnap) => this.dragMove(dx, dz, noSnap),
       onDragEnd: (commit) => this.dragEnd(commit),
     });
-    this.orbit = new OrbitView($('view3d'), { onPick });
+    this.orbit = new OrbitView($('view3d'), {
+      onPick,
+      onDragStart: (index) => this.dragStart(index),
+      onDragMove: (dx, dz, noSnap) => this.dragMove(dx, dz, noSnap),
+      onDragEnd: (commit) => this.dragEnd(commit),
+    });
     this.buildPalette();
     this.bindUi();
   }
@@ -225,10 +230,12 @@ export class EditorApp {
       dz = Math.round(dz / SNAP_STEP) * SNAP_STEP;
     }
     let next = moveGroup(d.start, d.group, new Matrix4().makeTranslation(dx, 0, dz));
-    const magnet = findMagnet(next, d.group, Math.max(MAGNET_DISTANCE, MAGNET_PX / this.top.pxPerMm));
+    // The 3D view has no single scale, so it uses the plain magnet distance.
+    const px = this.mode === '2d' ? MAGNET_PX / this.top.pxPerMm : 0;
+    const magnet = findMagnet(next, d.group, Math.max(MAGNET_DISTANCE, px));
     if (magnet) next = applyMagnet(next, d.group, magnet);
     d.preview = next;
-    this.top.setData(layoutCourse(next), this.selection);
+    (this.mode === '3d' ? this.orbit : this.top).setData(layoutCourse(next), this.selection);
   }
 
   private dragEnd(commit: boolean): void {
