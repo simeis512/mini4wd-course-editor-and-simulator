@@ -94,8 +94,9 @@ function roadBelow(footprints: readonly Footprint[], own: WorldTrack, x: number,
  * stacked level, a crossing) it reaches further, up to `SUPPORT_REACH`, so
  * its legs stand clear and its crossbar passes over that road's fences,
  * as at races (user, 2026-10-20); beside road on the floor (a ramp next to
- * its own lower lanes) its leg tucks in under the road instead. Where there
- * is no room either way, the road is left to span the gap.
+ * its own lower lanes) its leg tucks in under the road instead, and where
+ * there is no room outside it looks further in, as far as the middle of the
+ * road. Where there is no room at all, the road is left to span the gap.
  */
 export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTracks(layout)): Support[] {
   const footprints = tracks.map(footprintOf);
@@ -142,6 +143,9 @@ export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTr
         const tucked = edge - side * (fenceThickness + 2 * SUPPORT_CLEARANCE);
         if (clear(tucked, side)) return tucked;
         for (let x = wide; Math.abs(x - edge) <= SUPPORT_REACH; x += side * SCAN_STEP) if (clear(x, side)) return x;
+        // No room outside: look further in under the road, as far as its middle (user, 2026-10-20).
+        const middle = (section.left + section.right) / 2;
+        for (let x = tucked; side * (middle - x) <= -STAND_LEG; x -= side * SCAN_STEP) if (clear(x, side)) return x;
         return null;
       };
       const a = legAt(section.left, -1);

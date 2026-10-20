@@ -116,6 +116,26 @@ describe('supports', () => {
     }
   });
 
+  it('tucks a leg in under the road when there is no room outside', () => {
+    // Two straights raised 110 crossing two on the floor at 45° (user's course, 2026-10-20).
+    const course: Course = {
+      v: 1,
+      catalog: 1,
+      pieces: [
+        { part: 'straight', at: 'origin' },
+        { part: 'straight', port: 0, to: [0, 1] },
+        { part: 'straight', port: 0, free: null, pose: { pos: [158.2, 110, 158.2], rot: [-45, 0, 0] } },
+        { part: 'straight', port: 0, to: [2, 1] },
+      ],
+    };
+    const layout = layoutCourse(course);
+    const s = supports(layout);
+    for (const piece of [2, 3]) expect(s.filter((st) => st.piece === piece)).toHaveLength(2);
+    // Some leg stands in under the raised road, so that stand is narrower than usual.
+    const usual = 3 * GLOBAL_SPEC.lanePitch + GLOBAL_SPEC.fenceThickness + 2 * SUPPORT_OVERHANG;
+    expect(s.some((st) => st.left.distanceTo(st.right) < usual - 1)).toBe(true);
+  });
+
   it('leaves the road to span road below when the crossbar would not clear it', () => {
     const below = addPiece(emptyCourse(), 'straight', null);
     expect(supports(layoutCourse(raised(60, below)))).toEqual([]);
