@@ -1,7 +1,7 @@
 import { Matrix4, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { compatible, emptyCourse, layoutCourse, partCounts } from './course';
-import { addPiece, deletePiece, flipPiece, moveGroup, pieceMiddle, setVariant, turnAboutMiddle } from './edit';
+import { addPiece, deletePiece, flipPiece, markIntended, moveGroup, pieceMiddle, setVariant, turnAboutMiddle } from './edit';
 import { facingError } from './geometry';
 import { basicOval, chain } from './presets';
 
@@ -194,5 +194,29 @@ describe('turnAboutMiddle', () => {
   it('leaves a piece where it is at 0°', () => {
     const pc = layoutCourse(chain(['straight'])).pieces[0];
     expect(turnAboutMiddle(pc, 0).equals(new Matrix4())).toBe(true);
+  });
+});
+
+describe('ports left open on purpose (#13)', () => {
+  it('lists marked open ports and drops the mark when unmarked', () => {
+    const c = chain(['straight', 'straight']);
+    const marked = markIntended(c, { piece: 1, port: 1 }, true);
+    expect(c.intended).toBeUndefined();
+    expect(layoutCourse(marked).intended).toEqual([{ piece: 1, port: 1 }]);
+    expect(layoutCourse(marked).open).toHaveLength(2);
+    expect(markIntended(marked, { piece: 1, port: 1 }, false).intended).toBeUndefined();
+  });
+
+  it('only counts a mark while the port is open', () => {
+    const c = markIntended(chain(['straight', 'straight']), { piece: 1, port: 1 }, true);
+    expect(layoutCourse(addPiece(c, 'straight', { piece: 1, port: 1 })).intended).toEqual([]);
+  });
+
+  it('renumbers marks when a piece is deleted and drops them when it turns round', () => {
+    let c = chain(['straight', 'straight', 'straight']);
+    c = markIntended(c, { piece: 2, port: 1 }, true);
+    expect(deletePiece(c, 0).intended).toEqual([[1, 1]]);
+    expect(deletePiece(c, 2).intended).toBeUndefined();
+    expect(flipPiece(c, 2).intended).toBeUndefined();
   });
 });
