@@ -103,6 +103,7 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
     // Only stored links bend (spec 16.1).
     const linked = linkHolder(course, s.a, s.b) !== null;
     $('bend-row').hidden = !linked;
+    $('raise-row').hidden = !linked;
     $('bend-closure').hidden = linked;
     const pitch = linked ? (jointBend(course, s.a, s.b).pitch ?? 0) : 0;
     setAngleField('bend-pitch', pitch);

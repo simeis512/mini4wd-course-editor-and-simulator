@@ -29,6 +29,7 @@ import {
 import { applyMagnet, findMagnet, joinableNear, joinPorts, MAGNET_DISTANCE, splitJoint } from '../course/joining';
 import type { Pose } from '../course/geometry';
 import { basicOval } from '../course/presets';
+import { raiseRun } from '../course/raise';
 import { $, toast } from './dom';
 import { History } from './history';
 import { bindLevelTools, levelMax, renderLevelTools, type HeightView } from './levels';
@@ -383,6 +384,15 @@ export class EditorApp {
     this.commit(setBend(this.course, s.a, s.b, { ...bend, pitch: (deg ?? bend.pitch ?? 0) + by }), s);
   }
 
+  /** Raise the pieces on from the selected joint by bending and twisting them (spec 16.3). */
+  private raiseFromSelected(): void {
+    const s = this.selection;
+    if (s?.kind !== 'joint') return;
+    const count = Math.max(1, Math.round(Number($<HTMLInputElement>('raise-count').value) || 1));
+    const rise = Number($<HTMLInputElement>('raise-mm').value) || 0;
+    this.commit(raiseRun(this.course, s.a, s.b, count, rise), s);
+  }
+
   private splitSelected(): void {
     const s = this.selection;
     if (s?.kind !== 'joint') return;
@@ -512,6 +522,7 @@ export class EditorApp {
     $('bend-minus').addEventListener('click', (e) => this.bendSelected(null, -step(e)));
     $('bend-plus').addEventListener('click', (e) => this.bendSelected(null, step(e)));
     $('bend-pitch').addEventListener('change', (e) => this.bendSelected(Number((e.target as HTMLInputElement).value) || 0));
+    $('raise-run').addEventListener('click', () => this.raiseFromSelected());
     $('split').addEventListener('click', () => this.splitSelected());
     $('join').addEventListener('click', () => this.joinSelected());
 
