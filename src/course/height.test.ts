@@ -4,6 +4,7 @@ import { GLOBAL_SPEC, getPart } from './catalog';
 import { partGeometry, partStands, pointOnFrame } from './geometry';
 import { emptyCourse, layoutCourse, type Course } from './course';
 import { addPiece, setPose } from './edit';
+import { BRIDGE_HEIGHT } from './profile';
 import { atLevel, pieceHeights, SUPPORT_MIN_GAP, supports } from './height';
 import { basicOval, chain } from './presets';
 
@@ -79,8 +80,11 @@ describe('supports', () => {
   it('stands the lane change support square to the lower lanes, across their middle', () => {
     const part = getPart('lane-change-center');
     const [st] = partStands(part);
-    expect(st.left.y).toBeCloseTo(97);
-    expect(st.right.y).toBeCloseTo(97);
+    // Under the bridge, clear of the lower lanes' fences.
+    for (const y of [st.left.y, st.right.y]) {
+      expect(y).toBeLessThan(BRIDGE_HEIGHT - GLOBAL_SPEC.roadThickness);
+      expect(y).toBeGreaterThan(GLOBAL_SPEC.fenceHeight + 20);
+    }
     // Square to the lower lanes, which swing sideways in the middle.
     const mid = partGeometry(part).samples;
     const f = mid[Math.round((mid.length - 1) / 2)];
