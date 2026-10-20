@@ -90,6 +90,12 @@ export interface Layout {
 
 export const portKey = (r: PortRef): string => `${r.piece}:${r.port}`;
 
+/** Whether two joints join the same two ports, either way round. */
+export function sameJoint(x: { a: PortRef; b: PortRef }, y: { a: PortRef; b: PortRef }): boolean {
+  const [xa, xb, ya, yb] = [x.a, x.b, y.a, y.b].map(portKey);
+  return (xa === ya && xb === yb) || (xa === yb && xb === ya);
+}
+
 function anchorRef(rec: PieceRec): [number, number] | null {
   if ('to' in rec) return rec.to;
   if ('free' in rec) return rec.free;
@@ -300,10 +306,9 @@ export function freeSpot(course: Course, partId: string, port: number, x: number
   return [x0, z0];
 }
 
-/** Re-anchor `rec` (which faced `target`) as a free piece in world space. */
-function freeAt(rec: PieceRec, target: Matrix4): PieceRec {
-  const port = 'port' in rec ? rec.port : 0;
-  const out: PieceRec = { part: rec.part, port, free: null, pose: matrixToPose(target) };
+/** `rec` re-anchored as a free piece at `pose` from the port `base` (null: the world). */
+function freeRec(rec: PieceRec, base: PortRef | null, pose: Pose): PieceRec {
+  const out: PieceRec = { part: rec.part, port: 'port' in rec ? rec.port : 0, free: base && [base.piece, base.port], pose };
   if (rec.variant !== undefined) out.variant = rec.variant;
   return out;
 }
@@ -326,7 +331,7 @@ export function deletePiece(course: Course, index: number): Course {
     if (i === index) return;
     const ref = anchorRef(rec);
     if (ref && ref[0] === index) {
-      pieces.push(freeAt(rec, anchorFrame(layout, i)));
+      pieces.push(freeRec(rec, null, matrixToPose(anchorFrame(layout, i))));
       return;
     }
     const out = structuredClone(rec);
@@ -401,12 +406,6 @@ export function placementOf(rec: PieceRec): Placement {
   if ('to' in rec) return { base: { piece: rec.to[0], port: rec.to[1] }, pose: IDENTITY_POSE };
   if ('free' in rec) return { base: rec.free && { piece: rec.free[0], port: rec.free[1] }, pose: rec.pose };
   return { base: null, pose: IDENTITY_POSE };
-}
-
-function freeRec(rec: PieceRec, base: PortRef | null, pose: Pose): PieceRec {
-  const out: PieceRec = { part: rec.part, port: 'port' in rec ? rec.port : 0, free: base && [base.piece, base.port], pose };
-  if (rec.variant !== undefined) out.variant = rec.variant;
-  return out;
 }
 
 function baseFrame(layout: Layout, base: PortRef | null): Matrix4 {
@@ -506,7 +505,11 @@ export function applyMagnet(course: Course, group: Set<number>, magnet: Magnet):
 function uncut(course: Course, refs: PortRef[]): Course {
   if (!course.cuts) return course;
   const keys = new Set(refs.map(portKey));
-  const cuts = course.cuts.filter(([piece, port]) => !keys.has(portKey({ piece, port })));
+  return withCuts(course, course.cuts.filter(([piece, port]) => !keys.has(portKey({ piece, port }))));
+}
+
+/** `course` with these split marks, leaving the field out when there are none. */
+function withCuts(course: Course, cuts: [number, number][]): Course {
   const next = { ...course };
   if (cuts.length) next.cuts = cuts;
   else delete next.cuts;
@@ -565,8 +568,5 @@ export function tidyCuts(course: Course): Course {
     seen.add(key);
     return true;
   });
-  const next = { ...course };
-  if (cuts.length) next.cuts = cuts;
-  else delete next.cuts;
-  return next;
+  return withCuts(course, cuts);
 }
