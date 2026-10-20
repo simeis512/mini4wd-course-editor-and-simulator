@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
 import { portKey, type Layout, type PortRef } from '../course/course';
-import { buildCourseMeshes, MM } from '../course/mesh';
+import { GLOBAL_SPEC } from '../course/catalog';
+import { partGeometry, pointOnFrame } from '../course/geometry';
+import { buildCourseMeshes, crossSection, MM } from '../course/mesh';
 import type { DragHandlers, PickHandlers, Selection } from './selection';
 
 const BACKGROUND = new THREE.Color(0x1b1d22);
@@ -31,6 +33,8 @@ export class OrbitView {
   private root = new THREE.Group();
   private pieces: THREE.Group[] = [];
   private markers = new THREE.Group();
+  /** Outlines of the selected piece (solid) and the pieces joined to it (dashed), as in the 2D view. */
+  private outlines = new THREE.Group();
   private layout: Layout | null = null;
   private active = false;
   private downAt: { x: number; y: number } | null = null;
@@ -61,6 +65,7 @@ export class OrbitView {
     this.scene.add(this.grid);
     this.root.scale.setScalar(MM);
     this.root.add(this.markers);
+    this.root.add(this.outlines);
     this.scene.add(this.root);
 
     this.camera.position.set(2, 2.5, -2);
@@ -188,6 +193,13 @@ export class OrbitView {
         if (o instanceof THREE.Mesh) o.material = level ? highlighted(o.material, level) : unhighlighted(o.material);
       });
     });
+    this.outlines.clear();
+    if (selection?.kind === 'piece') {
+      layout.pieces.forEach((pc, i) => {
+        if (layout.group[i] !== group) return;
+        for (const line of outlineOf(pc.matrix, pc.part, i === selection.index)) this.outlines.add(line);
+      });
+    }
     this.markers.clear();
     const split = new Set(layout.split.map(portKey));
     for (const ref of layout.open) {
@@ -288,6 +300,24 @@ function pieceOf(object: THREE.Object3D): number | null {
   let o: THREE.Object3D | null = object;
   while (o && o.userData.piece === undefined) o = o.parent;
   return o ? o.userData.piece : null;
+}
+
+const OUTLINE_SOLID = new THREE.LineBasicMaterial({ color: 0x3fd0ff });
+const OUTLINE_DASHED = new THREE.LineDashedMaterial({ color: 0x3fd0ff, dashSize: 50, gapSize: 30 });
+
+/** The edge of a piece's road at the height of its fence tops, one loop per track. */
+function outlineOf(matrix: THREE.Matrix4, part: Parameters<typeof partGeometry>[0], solid: boolean): THREE.Line[] {
+  const p = new THREE.Vector3();
+  const y = GLOBAL_SPEC.fenceHeight + 1;
+  return partGeometry(part).tracks.map((track) => {
+    const frames = track.samples.map((f) => matrix.clone().multiply(f));
+    const section = crossSection(track.lanes);
+    const edge = (x: number) => frames.map((f) => pointOnFrame(f, x, y, p).clone());
+    const pts = [...edge(section.left), ...edge(section.right).reverse()];
+    const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), solid ? OUTLINE_SOLID : OUTLINE_DASHED);
+    if (!solid) line.computeLineDistances();
+    return line;
+  });
 }
 
 const MARKER_GEOMETRY = new THREE.ConeGeometry(45, 90, 16).rotateX(Math.PI / 2).translate(0, 30, 30);
