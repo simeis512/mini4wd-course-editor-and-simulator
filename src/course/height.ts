@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { GLOBAL_SPEC } from './catalog';
 import type { Layout } from './course';
-import { pointOnFrame, STAND_BEAM, STAND_LEG, type Stand } from './geometry';
+import { pointOnFrame, STAND_BEAM, STAND_DEPTH, STAND_LEG, type Stand } from './geometry';
 import { insidePolygon, worldTracks, type WorldTrack } from './mesh';
 
 const { roadThickness, fenceThickness, fenceHeight } = GLOBAL_SPEC;
@@ -114,9 +114,18 @@ export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTr
       const edgeTop = (x: number) => pointOnFrame(f, x, -roadThickness);
       const top = Math.min(edgeTop(section.left).y, edgeTop(section.right).y);
       if (Math.max(edgeTop(section.left).y, edgeTop(section.right).y) <= SUPPORT_MIN_GAP) continue;
+      const along = new Vector3(0, 0, 1).transformDirection(f).setY(0);
+      if (along.lengthSq() < 1e-9) continue;
+      along.normalize();
+      // Look across the whole depth of the stand: where it meets road below
+      // at an angle, its corners reach further than its middle.
       const below = (x: number) => {
         const p = pointOnFrame(f, x, 0);
-        return roadBelow(footprints, track, p.x, p.z, top);
+        let y = -Infinity;
+        for (const d of [-STAND_DEPTH / 2, 0, STAND_DEPTH / 2]) {
+          y = Math.max(y, roadBelow(footprints, track, p.x + along.x * d, p.z + along.z * d, top));
+        }
+        return y;
       };
       // A leg from `outer` inwards (side −1 left, +1 right) needs clear floor around it.
       const clear = (outer: number, side: -1 | 1) => {
@@ -140,9 +149,7 @@ export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTr
       let under = -Infinity;
       for (let x = a; x <= b; x += SCAN_STEP) under = Math.max(under, below(x));
       if (under > -Infinity && Math.min(left.y, right.y) - STAND_BEAM < under + fenceHeight + SUPPORT_CLEARANCE) continue;
-      const along = new Vector3(0, 0, 1).transformDirection(f).setY(0);
-      if (along.lengthSq() < 1e-9) continue;
-      out.push({ piece: track.piece, left, right, along: along.normalize() });
+      out.push({ piece: track.piece, left, right, along });
     }
   }
   return out;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
 import { GLOBAL_SPEC, getPart } from './catalog';
-import { partGeometry, partStands, pointOnFrame, STAND_BEAM, STAND_LEG } from './geometry';
+import { partGeometry, partStands, pointOnFrame, STAND_BEAM, STAND_DEPTH, STAND_LEG } from './geometry';
 import { emptyCourse, layoutCourse, type Course } from './course';
 import { addPiece, setPose } from './edit';
 import { BRIDGE_HEIGHT } from './profile';
@@ -73,6 +73,30 @@ describe('supports', () => {
       expect(Math.min(Math.abs(st.left.x), Math.abs(st.right.x)) - STAND_LEG).toBeGreaterThan(roadHalf);
       expect(st.left.distanceTo(st.right)).toBeLessThan(2 * (roadHalf + SUPPORT_REACH));
       expect(st.left.y - STAND_BEAM).toBeGreaterThan(GLOBAL_SPEC.fenceHeight);
+    }
+  });
+
+  it('keeps the corners of a stand clear of road it crosses at an angle', () => {
+    const below = addPiece(emptyCourse(), 'straight', null);
+    const c = addPiece(below, 'straight', null);
+    const layout = layoutCourse(setPose(c, 1, { pos: [0, 150, 0], rot: [20, 0, 0] }));
+    const lower = layout.pieces[0];
+    const s = supports(layout).filter((st) => st.piece === 1);
+    expect(s.length).toBeGreaterThan(0);
+    const roadHalf = (3 * GLOBAL_SPEC.lanePitch + GLOBAL_SPEC.fenceThickness) / 2;
+    for (const st of s) {
+      // Every corner of both legs stands outside the lower road (x in its own frame).
+      const across = st.right.clone().sub(st.left).setY(0).normalize();
+      for (const [top, inward] of [[st.left, 1], [st.right, -1]] as const) {
+        for (const w of [0, STAND_LEG]) {
+          for (const d of [-STAND_DEPTH / 2, STAND_DEPTH / 2]) {
+            const p = top.clone().add(across.clone().multiplyScalar(inward * w)).add(st.along.clone().multiplyScalar(d)).setY(0);
+            const local = p.applyMatrix4(lower.matrix.clone().invert());
+            const inside = Math.abs(local.x) < roadHalf && local.z > 0 && local.z < 540;
+            expect(inside).toBe(false);
+          }
+        }
+      }
     }
   });
 
