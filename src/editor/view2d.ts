@@ -1,9 +1,10 @@
 import { Vector3 } from 'three';
 import { variantOf } from '../course/catalog';
-import { portKey, type Layout, type PortRef } from '../course/course';
+import { portKey, sameJoint, type Layout, type PortRef } from '../course/course';
 import { partGeometry, pointOnFrame } from '../course/geometry';
-import { crossSection, halfWidth } from '../course/mesh';
+import { crossSection, halfWidth, roadOutline, trackEdge } from '../course/mesh';
 import type { DragHandlers, PickHandlers, Selection } from './selection';
+import type { EditorView } from './view';
 
 /** One stretch of road of a piece, as seen from above. */
 interface Outline {
@@ -27,7 +28,7 @@ const JOINT_HIT = 12;
  * pen and touch behave the same: tap to select, drag to pan, wheel or pinch
  * to zoom.
  */
-export class TopView {
+export class TopView implements EditorView {
   private ctx: CanvasRenderingContext2D;
   private layout: Layout | null = null;
   private outlines: Outline[] = [];
@@ -64,13 +65,11 @@ export class TopView {
       this.outlines = layout.pieces.flatMap((pc, piece) =>
         partGeometry(pc.part).tracks.map((track) => {
           const samples = track.samples.map((s) => pc.matrix.clone().multiply(s));
-          const p = new Vector3();
-          const edge = (x: number) => samples.map((f): [number, number] => (pointOnFrame(f, x, 0, p), [p.x, p.z]));
           const section = crossSection(track.lanes);
           return {
             piece,
-            polygon: [...edge(section.left), ...edge(section.right).reverse()],
-            fences: section.fences.map(edge),
+            polygon: roadOutline(samples, section).map(xz),
+            fences: section.fences.map((x) => trackEdge(samples, x).map(xz)),
             height: samples.reduce((sum, f) => sum + f.elements[13], 0) / samples.length,
           };
         }),
@@ -100,7 +99,7 @@ export class TopView {
   }
 
   /** World X/Z (mm) under a point on the page, or null when it is off the view. */
-  worldAt(clientX: number, clientY: number): [number, number] | null {
+  floorAt(clientX: number, clientY: number): [number, number] | null {
     const r = this.canvas.getBoundingClientRect();
     const [sx, sy] = [clientX - r.left, clientY - r.top];
     if (sx < 0 || sy < 0 || sx > r.width || sy > r.height) return null;
@@ -213,14 +212,17 @@ export class TopView {
     }
   }
 
-  /** A short bar across the middle of a joint. */
-  private drawJoint(ref: PortRef, color: string, size: number): void {
-    const frame = this.layout!.pieces[ref.piece].ports[ref.port];
-    const half = halfWidth(this.layout!.pieces[ref.piece].part.ports[ref.port].lanes.length);
+  /**
+   * A bar across the track at a port, `reach` of its width long, in `color`
+   * for strokes and fills; returns the screen point at its middle.
+   */
+  private drawBar(ref: PortRef, reach: number, color: string, size: number): [number, number] {
+    const pc = this.layout!.pieces[ref.piece];
+    const frame = pc.ports[ref.port];
+    const half = halfWidth(pc.part.ports[ref.port].lanes.length) * reach;
     const p = new Vector3();
-    const [ax, ay] = this.toScreen(...xz(pointOnFrame(frame, -half * 0.6, 0, p)));
-    const [bx, by] = this.toScreen(...xz(pointOnFrame(frame, half * 0.6, 0, p)));
-    const [cx, cy] = this.toScreen(...xz(pointOnFrame(frame, 0, 0, p)));
+    const [ax, ay] = this.toScreen(...xz(pointOnFrame(frame, -half, 0, p)));
+    const [bx, by] = this.toScreen(...xz(pointOnFrame(frame, half, 0, p)));
     const { ctx } = this;
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
@@ -229,6 +231,13 @@ export class TopView {
     ctx.moveTo(ax, ay);
     ctx.lineTo(bx, by);
     ctx.stroke();
+    return this.toScreen(...xz(pointOnFrame(frame, 0, 0, p)));
+  }
+
+  /** A short bar across the middle of a joint. */
+  private drawJoint(ref: PortRef, color: string, size: number): void {
+    const [cx, cy] = this.drawBar(ref, 0.6, color, size);
+    const { ctx } = this;
     ctx.beginPath();
     ctx.arc(cx, cy, 4 * size, 0, Math.PI * 2);
     ctx.fill();
@@ -263,24 +272,12 @@ export class TopView {
 
   /** A bar across the track at the port with an arrow pointing out of the piece. */
   private drawPort(ref: PortRef, color: string, size: number): void {
-    const pc = this.layout!.pieces[ref.piece];
-    const frame = pc.ports[ref.port];
-    const half = halfWidth(pc.part.ports[ref.port].lanes.length);
-    const p = new Vector3();
-    const [ax, ay] = this.toScreen(...xz(pointOnFrame(frame, -half, 0, p)));
-    const [bx, by] = this.toScreen(...xz(pointOnFrame(frame, half, 0, p)));
-    const [cx, cy] = this.toScreen(...xz(pointOnFrame(frame, 0, 0, p)));
-    const [fx, fy] = this.toScreen(...xz(p.set(0, 0, 1).applyMatrix4(frame)));
+    const [cx, cy] = this.drawBar(ref, 1, color, size);
+    const frame = this.layout!.pieces[ref.piece].ports[ref.port];
+    const [fx, fy] = this.toScreen(...xz(new Vector3(0, 0, 1).applyMatrix4(frame)));
     const len = Math.hypot(fx - cx, fy - cy) || 1;
     const [dx, dy] = [(fx - cx) / len, (fy - cy) / len];
     const { ctx } = this;
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = 3 * size;
-    ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.lineTo(bx, by);
-    ctx.stroke();
     const r = 9 * size;
     ctx.beginPath();
     ctx.moveTo(cx + dx * r * 1.6, cy + dy * r * 1.6);
@@ -409,11 +406,6 @@ export class TopView {
     const [a, b] = [...this.pointers.values()];
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   }
-}
-
-function sameJoint(x: { a: PortRef; b: PortRef }, y: { a: PortRef; b: PortRef }): boolean {
-  const [xa, xb, ya, yb] = [x.a, x.b, y.a, y.b].map(portKey);
-  return (xa === ya && xb === yb) || (xa === yb && xb === ya);
 }
 
 function xz(v: Vector3): [number, number] {

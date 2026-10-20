@@ -31,6 +31,16 @@ export function crossSection(lanes: readonly number[]): CrossSection {
   };
 }
 
+/** Points `x` mm right of and `y` mm above each frame: one edge of a track. */
+export function trackEdge(frames: readonly THREE.Matrix4[], x: number, y = 0): THREE.Vector3[] {
+  return frames.map((f) => pointOnFrame(f, x, y));
+}
+
+/** A track's road seen from above as a closed loop at height `y`: the left edge, then the right edge back. */
+export function roadOutline(frames: readonly THREE.Matrix4[], section: CrossSection, y = 0): THREE.Vector3[] {
+  return [...trackEdge(frames, section.left, y), ...trackEdge(frames, section.right, y).reverse()];
+}
+
 /** Half the width of `laneCount` lanes side by side, to the outside of the outer fences. */
 export function halfWidth(laneCount: number): number {
   return (laneCount * lanePitch + fenceThickness) / 2;
