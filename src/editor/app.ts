@@ -1,7 +1,6 @@
 import { Matrix4 } from 'three';
 import { joinPart, nextOpenPort } from '../course/add';
 import { LEVEL_HEIGHT } from '../course/catalog';
-import { courseFromHash } from '../course/codec';
 import {
   emptyCourse,
   layoutCourse,
@@ -37,7 +36,7 @@ import { History } from './history';
 import { bindLevelTools, levelMax, renderLevelTools, type HeightView } from './levels';
 import { buildPalette, placeContext, POSE_FIELDS, renderPanels, runMarks } from './panels';
 import type { Selection } from './selection';
-import { exportJson, HashSync, readCourseFile } from './share';
+import { exportJson, HashSync, readCourseFile, readHash } from './share';
 import type { EditorView } from './view';
 import { TopView } from './view2d';
 import { OrbitView } from './view3d';
@@ -107,12 +106,7 @@ export class EditorApp {
   }
 
   async start(): Promise<void> {
-    let course: Course | null = null;
-    try {
-      course = await courseFromHash(location.hash);
-    } catch (e) {
-      toast(`URLのコースを読み込めませんでした: ${(e as Error).message}`);
-    }
+    const course = await readHash();
     this.load(course ?? basicOval(), !course);
     window.addEventListener('hashchange', () => void this.onHashChange());
   }
@@ -136,17 +130,17 @@ export class EditorApp {
   }
 
   private undo(): void {
-    const prev = this.history.undo(this.course);
-    if (!prev) return;
-    this.course = prev;
-    this.selection = null;
-    this.refresh(true);
+    this.restore(this.history.undo(this.course));
   }
 
   private redo(): void {
-    const next = this.history.redo(this.course);
-    if (!next) return;
-    this.course = next;
+    this.restore(this.history.redo(this.course));
+  }
+
+  /** Go back or forward to a course from the history, if there is one. */
+  private restore(course: Course | undefined): void {
+    if (!course) return;
+    this.course = course;
     this.selection = null;
     this.refresh(true);
   }
@@ -172,12 +166,8 @@ export class EditorApp {
 
   private async onHashChange(): Promise<void> {
     if (this.hashSync.isOwn(location.hash)) return;
-    try {
-      const course = await courseFromHash(location.hash);
-      this.load(course ?? emptyCourse(), false);
-    } catch (e) {
-      toast(`URLのコースを読み込めませんでした: ${(e as Error).message}`);
-    }
+    const course = await readHash();
+    if (course !== undefined) this.load(course ?? emptyCourse(), false);
   }
 
   // ---- Commands
@@ -269,12 +259,16 @@ export class EditorApp {
     this.commit(setBend(course, s.a, s.b, { ...bend, pitch: (deg ?? bend.pitch ?? 0) + by }), s);
   }
 
-  /** The selected joint as the side a raise leaves from and the side it goes into, as chosen (spec 16.3). */
-  private raiseSides(): { from: PortRef; into: PortRef } | null {
+  /**
+   * The selected joint as the side a raise leaves from and the side it goes
+   * into, as chosen, with the course holding it as a link (spec 16.3).
+   */
+  private raiseSides(): { from: PortRef; into: PortRef; course: Course } | null {
     const s = this.selection;
     if (s?.kind !== 'joint') return null;
     const intoA = $('raise-dir').dataset.side === 'a';
-    return intoA ? { from: s.b, into: s.a } : { from: s.a, into: s.b };
+    const [from, into] = intoA ? [s.b, s.a] : [s.a, s.b];
+    return { from, into, course: asLink(this.course, from, into) };
   }
 
   private get raiseCount(): number {
@@ -286,14 +280,13 @@ export class EditorApp {
     const sides = this.raiseSides();
     if (!sides) return;
     const rise = Number($<HTMLInputElement>('raise-mm').value) || 0;
-    const course = asLink(this.course, sides.from, sides.into);
-    this.commit(raiseRun(course, sides.from, sides.into, this.raiseCount, rise), this.selection);
+    this.commit(raiseRun(sides.course, sides.from, sides.into, this.raiseCount, rise), this.selection);
   }
 
   /** Blink the pieces a raise from the selected joint would move (spec 16.3). */
   private showRun(): void {
-    const sides = this.raiseSides();
-    const marks = sides && !$('raise-box').hidden ? runMarks(asLink(this.course, sides.from, sides.into), sides.from, sides.into, this.raiseCount) : null;
+    const sides = $('raise-box').hidden ? null : this.raiseSides();
+    const marks = sides ? runMarks(sides.course, sides.from, sides.into, this.raiseCount) : null;
     for (const view of [this.top, this.orbit]) view.setRunMarks(marks);
     this.lit = marks?.pieces ?? [];
   }

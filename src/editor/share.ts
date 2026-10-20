@@ -1,4 +1,4 @@
-import { courseFromJson, courseToHash } from '../course/codec';
+import { courseFromHash, courseFromJson, courseToHash } from '../course/codec';
 import type { Course } from '../course/course';
 import { toast } from './dom';
 
@@ -47,4 +47,14 @@ export function exportJson(course: Course): void {
 /** The course in a file saved by `exportJson`; throws when it is not one. */
 export async function readCourseFile(file: File): Promise<Course> {
   return courseFromJson(await file.text());
+}
+
+/** The course in the page URL: null when there is none, undefined (after saying so) when it cannot be read. */
+export async function readHash(): Promise<Course | null | undefined> {
+  try {
+    return await courseFromHash(location.hash);
+  } catch (e) {
+    toast(`URLのコースを読み込めませんでした: ${(e as Error).message}`);
+    return undefined;
+  }
 }

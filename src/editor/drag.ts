@@ -4,7 +4,7 @@ import { layoutCourse, movingGroup, type Course, type Layout } from '../course/c
 import { addFreePiece, deletePiece, moveGroup, tidyCuts } from '../course/edit';
 import { applyMagnet, findMagnet, MAGNET_DISTANCE } from '../course/joining';
 import { $, toast } from './dom';
-import type { Selection } from './selection';
+import { TAP_SLOP, type Selection } from './selection';
 import type { EditorView } from './view';
 
 /** Ports this many screen pixels apart still pull together while dragging. */
@@ -66,7 +66,7 @@ export class PaletteDrag {
     const d = this.paletteDrag;
     if (!d || e.pointerId !== d.pointerId) return;
     if (!d.active) {
-      if (Math.hypot(e.clientX - d.from.x, e.clientY - d.from.y) <= 6) return;
+      if (Math.hypot(e.clientX - d.from.x, e.clientY - d.from.y) <= TAP_SLOP) return;
       d.active = true;
       document.body.classList.add('dragging-part');
       $('context').hidden = true;

@@ -12,6 +12,11 @@ import type { EditorView, RunMarks } from './view';
 
 export const POSE_FIELDS = ['pose-x', 'pose-y', 'pose-z', 'pose-yaw', 'pose-pitch', 'pose-roll'] as const;
 
+/** A piece as the panels name it: its number and part. */
+function pieceLabel(layout: Layout, index: number): string {
+  return `#${index + 1} ${layout.pieces[index].part.name}`;
+}
+
 /** What a button in the parts list does: `port` is the way round chosen, if the part has two. */
 export interface PaletteHandlers {
   click(partId: string, port: number | undefined): void;
@@ -64,7 +69,7 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
   panel.hidden = s?.kind !== 'piece';
   if (s?.kind === 'piece') {
     const pc = layout.pieces[s.index];
-    $('selection-name').textContent = `#${s.index + 1} ${pc.part.name}`;
+    $('selection-name').textContent = pieceLabel(layout, s.index);
     const notes = [pc.part.note, pc.part.confidence === 'inferred' ? '寸法は推定値' : ''].filter(Boolean);
     $('selection-note').textContent = notes.join('・');
     const select = $<HTMLSelectElement>('variant');
@@ -88,7 +93,7 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
         ? `点線のピースとつながっています。ドラッグするとつながった ${group.size} 個が一緒に動きます`
         : 'ほかのピースとつながっていません';
     const { base, pose } = placementOf(pc.rec);
-    const from = base ? `#${base.piece + 1} ${layout.pieces[base.piece].part.name} の口から` : 'ワールド原点から';
+    const from = base ? `${pieceLabel(layout, base.piece)} の口から` : 'ワールド原点から';
     $('placement-base').textContent = 'free' in pc.rec ? `自由配置（${from}）` : base ? `連結（${from}）` : '先頭（原点）';
     const values = [...pose.pos, ...pose.rot];
     POSE_FIELDS.forEach((id, i) => {
@@ -100,7 +105,7 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
   // Selected joint, or an open port that could be joined.
   $('joint-panel').hidden = s?.kind !== 'joint';
   if (s?.kind === 'joint') {
-    const name = (r: { piece: number }) => `#${r.piece + 1} ${layout.pieces[r.piece].part.name}`;
+    const name = (r: PortRef) => pieceLabel(layout, r.piece);
     $('joint-name').textContent = `${name(s.a)} と ${name(s.b)} のつなぎ目`;
     // Only stored links bend (spec 16.1).
     const linked = bendable(course, s.a, s.b);
@@ -122,7 +127,7 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
   const near = s?.kind === 'port' ? joinableNear(layout, s.ref) : null;
   $('port-panel').hidden = s?.kind !== 'port';
   $('join-row').hidden = !near;
-  if (near) $('join-name').textContent = `近くの口（#${near.piece + 1} ${layout.pieces[near.piece].part.name}）`;
+  if (near) $('join-name').textContent = `近くの口（${pieceLabel(layout, near.piece)}）`;
 
   renderCourseInfo(course, layout);
 
@@ -178,7 +183,7 @@ function renderCourseInfo(course: Course, layout: Layout): void {
     info.push('<div class="ok">コースは閉じています</div>');
   }
   for (const pr of layout.problems) {
-    info.push(`<div class="warn">#${pr.piece + 1} ${layout.pieces[pr.piece].part.name}: ${PROBLEM_TEXT[pr.kind]}</div>`);
+    info.push(`<div class="warn">${pieceLabel(layout, pr.piece)}: ${PROBLEM_TEXT[pr.kind]}</div>`);
   }
   for (const c of layout.closures) {
     // Ports placed exactly together are simply joined; only real gaps are worth showing.
