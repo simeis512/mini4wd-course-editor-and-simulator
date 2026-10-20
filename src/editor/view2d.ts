@@ -1,8 +1,8 @@
 import { Vector3 } from 'three';
 import { variantOf } from '../course/catalog';
 import { portKey, sameJoint, type Layout, type PortRef } from '../course/course';
-import { partGeometry, pointOnFrame } from '../course/geometry';
-import { crossSection, halfWidth, roadOutline, trackEdge } from '../course/mesh';
+import { pointOnFrame } from '../course/geometry';
+import { halfWidth, insidePolygon, roadOutline, trackEdge, worldTracks } from '../course/mesh';
 import type { DragHandlers, PickHandlers, Selection } from './selection';
 import type { EditorView } from './view';
 
@@ -62,18 +62,12 @@ export class TopView implements EditorView {
   setData(layout: Layout, selection: Selection): void {
     if (layout !== this.layout) {
       this.layout = layout;
-      this.outlines = layout.pieces.flatMap((pc, piece) =>
-        partGeometry(pc.part).tracks.map((track) => {
-          const samples = track.samples.map((s) => pc.matrix.clone().multiply(s));
-          const section = crossSection(track.lanes);
-          return {
-            piece,
-            polygon: roadOutline(samples, section).map(xz),
-            fences: section.fences.map((x) => trackEdge(samples, x).map(xz)),
-            height: samples.reduce((sum, f) => sum + f.elements[13], 0) / samples.length,
-          };
-        }),
-      );
+      this.outlines = worldTracks(layout).map(({ piece, samples, section }) => ({
+        piece,
+        polygon: roadOutline(samples, section).map(xz),
+        fences: section.fences.map((x) => trackEdge(samples, x).map(xz)),
+        height: samples.reduce((sum, f) => sum + f.elements[13], 0) / samples.length,
+      }));
       // Stable sort keeps placing order between pieces at the same height.
       this.order = this.outlines.map((_, i) => i).sort((a, b) => this.outlines[a].height - this.outlines[b].height);
     }
@@ -410,14 +404,4 @@ export class TopView implements EditorView {
 
 function xz(v: Vector3): [number, number] {
   return [v.x, v.z];
-}
-
-function insidePolygon(x: number, z: number, poly: [number, number][]): boolean {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [xi, zi] = poly[i];
-    const [xj, zj] = poly[j];
-    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
-  }
-  return inside;
 }

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLOBAL_SPEC, laneOffset, variantOf, type PartDef } from './catalog';
-import type { Layout } from './course';
+import type { Layout, PlacedPiece } from './course';
 import { partGeometry, pointOnFrame } from './geometry';
 
 /** Scene units are metres; course data is in millimetres. */
@@ -39,6 +39,39 @@ export function trackEdge(frames: readonly THREE.Matrix4[], x: number, y = 0): T
 /** A track's road seen from above as a closed loop at height `y`: the left edge, then the right edge back. */
 export function roadOutline(frames: readonly THREE.Matrix4[], section: CrossSection, y = 0): THREE.Vector3[] {
   return [...trackEdge(frames, section.left, y), ...trackEdge(frames, section.right, y).reverse()];
+}
+
+/** One stretch of road of a placed piece, in world millimetres. */
+export interface WorldTrack {
+  piece: number;
+  /** Centreline samples, world frames. */
+  samples: THREE.Matrix4[];
+  section: CrossSection;
+}
+
+/** Every stretch of road of a piece, placed in the world. */
+export function pieceTracks(pc: PlacedPiece, piece: number): WorldTrack[] {
+  return partGeometry(pc.part).tracks.map((track) => ({
+    piece,
+    samples: track.samples.map((s) => pc.matrix.clone().multiply(s)),
+    section: crossSection(track.lanes),
+  }));
+}
+
+/** Every stretch of road of the course, piece by piece. */
+export function worldTracks(layout: Layout): WorldTrack[] {
+  return layout.pieces.flatMap((pc, i) => pieceTracks(pc, i));
+}
+
+/** Whether the point (x, z) lies inside a polygon given in X/Z. */
+export function insidePolygon(x: number, z: number, poly: readonly (readonly [number, number])[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, zi] = poly[i];
+    const [xj, zj] = poly[j];
+    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
 }
 
 /** Half the width of `laneCount` lanes side by side, to the outside of the outer fences. */

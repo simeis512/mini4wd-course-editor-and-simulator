@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
-import { portKey, sameJoint, type Layout } from '../course/course';
+import { portKey, sameJoint, type Layout, type PlacedPiece } from '../course/course';
 import { GLOBAL_SPEC } from '../course/catalog';
-import { partGeometry } from '../course/geometry';
-import { buildCourseMeshes, crossSection, MM, roadOutline } from '../course/mesh';
+import { buildCourseMeshes, MM, pieceTracks, roadOutline } from '../course/mesh';
 import type { DragHandlers, PickHandlers, Selection } from './selection';
 import type { EditorView } from './view';
 
@@ -200,7 +199,7 @@ export class OrbitView implements EditorView {
     if (selection?.kind === 'piece') {
       layout.pieces.forEach((pc, i) => {
         if (layout.group[i] !== group) return;
-        for (const line of outlineOf(pc.matrix, pc.part, i === selection.index)) this.outlines.add(line);
+        for (const line of outlineOf(pc, i, i === selection.index)) this.outlines.add(line);
       });
     }
     this.markers.clear();
@@ -308,11 +307,10 @@ const OUTLINE_SOLID = new THREE.LineBasicMaterial({ color: 0x3fd0ff });
 const OUTLINE_DASHED = new THREE.LineDashedMaterial({ color: 0x3fd0ff, dashSize: 50, gapSize: 30 });
 
 /** The edge of a piece's road at the height of its fence tops, one loop per track. */
-function outlineOf(matrix: THREE.Matrix4, part: Parameters<typeof partGeometry>[0], solid: boolean): THREE.Line[] {
+function outlineOf(pc: PlacedPiece, index: number, solid: boolean): THREE.Line[] {
   const y = GLOBAL_SPEC.fenceHeight + 1;
-  return partGeometry(part).tracks.map((track) => {
-    const frames = track.samples.map((f) => matrix.clone().multiply(f));
-    const pts = roadOutline(frames, crossSection(track.lanes), y);
+  return pieceTracks(pc, index).map(({ samples, section }) => {
+    const pts = roadOutline(samples, section, y);
     const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), solid ? OUTLINE_SOLID : OUTLINE_DASHED);
     if (!solid) line.computeLineDistances();
     return line;
