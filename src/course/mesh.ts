@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLOBAL_SPEC, laneOffset, variantOf, type PartDef } from './catalog';
 import type { Layout, PlacedPiece } from './course';
+import type { Support } from './height';
 import { partGeometry, pointOnFrame } from './geometry';
 
 /** Scene units are metres; course data is in millimetres. */
@@ -180,4 +181,55 @@ export function buildCourseMeshes(layout: Layout): THREE.Group[] {
     group.matrix.copy(pc.matrix);
     return group;
   });
+}
+
+/** Size of a support's legs and crossbar across the road, and its thickness along it, mm (#11, provisional: not measured). */
+const SUPPORT_LEG = 15;
+const SUPPORT_BEAM = 12;
+const SUPPORT_THICKNESS = 20;
+/** Wood-coloured, and drawn from both sides since the slabs' winding follows the road. */
+const SUPPORT_MATERIAL = new THREE.MeshStandardMaterial({ color: '#b89a6e', roughness: 0.8, side: THREE.DoubleSide });
+
+/** Push a slab: the four-cornered face `face`, pushed `half` both ways along `along`. */
+function pushSlab(positions: number[], face: THREE.Vector3[], along: THREE.Vector3, half: number): void {
+  const d = along.clone().multiplyScalar(half);
+  const back = face.map((v) => v.clone().sub(d));
+  const front = face.map((v) => v.clone().add(d));
+  const quad = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, e: THREE.Vector3) => {
+    for (const v of [a, b, c, a, c, e]) positions.push(v.x, v.y, v.z);
+  };
+  quad(back[0], back[3], back[2], back[1]);
+  quad(front[0], front[1], front[2], front[3]);
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    quad(back[i], back[j], front[j], front[i]);
+  }
+}
+
+/**
+ * Each support as a frame: a leg from the floor under either edge of the
+ * road and a crossbar under the road between them. All in one geometry,
+ * world mm.
+ */
+export function buildSupportMesh(list: readonly Support[]): THREE.Mesh {
+  const positions: number[] = [];
+  const up = new THREE.Vector3(0, 1, 0);
+  for (const { left, right, along } of list) {
+    // Across the road, level, from the left edge to the right.
+    const across = right.clone().sub(left).setY(0).normalize();
+    const floor = (v: THREE.Vector3) => new THREE.Vector3(v.x, 0, v.z);
+    const leg = across.clone().multiplyScalar(SUPPORT_LEG);
+    const beam = up.clone().multiplyScalar(SUPPORT_BEAM);
+    const l2 = left.clone().add(leg);
+    const r2 = right.clone().sub(leg);
+    pushSlab(positions, [floor(left), floor(l2), l2, left], along, SUPPORT_THICKNESS / 2);
+    pushSlab(positions, [floor(r2), floor(right), right, r2], along, SUPPORT_THICKNESS / 2);
+    pushSlab(positions, [l2.clone().sub(beam), r2.clone().sub(beam), r2, l2], along, SUPPORT_THICKNESS / 2);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, SUPPORT_MATERIAL);
+  mesh.name = 'supports';
+  return mesh;
 }

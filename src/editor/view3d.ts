@@ -3,7 +3,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
 import { portKey, sameJoint, type Layout, type PlacedPiece } from '../course/course';
 import { GLOBAL_SPEC } from '../course/catalog';
-import { buildCourseMeshes, MM, pieceTracks, roadOutline } from '../course/mesh';
+import { supports } from '../course/height';
+import { buildCourseMeshes, buildSupportMesh, MM, pieceTracks, roadOutline } from '../course/mesh';
 import type { DragHandlers, PickHandlers, Selection } from './selection';
 import type { EditorView } from './view';
 
@@ -32,6 +33,8 @@ export class OrbitView implements EditorView {
   /** Course in millimetres, scaled to metres. */
   private root = new THREE.Group();
   private pieces: THREE.Group[] = [];
+  /** Stands under raised road, shown only (#11). */
+  private supports: THREE.Mesh | null = null;
   private markers = new THREE.Group();
   /** Outlines of the selected piece (solid) and the pieces joined to it (dashed), as in the 2D view. */
   private outlines = new THREE.Group();
@@ -186,6 +189,12 @@ export class OrbitView implements EditorView {
       for (const p of this.pieces) this.root.remove(p);
       this.pieces = buildCourseMeshes(layout);
       for (const p of this.pieces) this.root.add(p);
+      if (this.supports) {
+        this.root.remove(this.supports);
+        this.supports.geometry.dispose();
+      }
+      this.supports = buildSupportMesh(supports(layout));
+      this.root.add(this.supports);
     }
     // The selected piece glows; the pieces joined to it (which move with it) glow faintly.
     const group = selection?.kind === 'piece' ? layout.group[selection.index] : -1;
