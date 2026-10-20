@@ -111,7 +111,11 @@ export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTr
     const count = Math.max(1, Math.ceil(length / SUPPORT_SPACING));
     for (let k = 0; k < count; k++) {
       const f = samples[Math.round(((k + 0.5) / count) * (samples.length - 1))];
-      const edgeTop = (x: number) => pointOnFrame(f, x, -roadThickness);
+      // The top is level along the road, so on a slope it sits low enough
+      // for its uphill side to stay under the road too.
+      const forward = new Vector3(0, 0, 1).transformDirection(f);
+      const drop = ((STAND_DEPTH / 2) * Math.abs(forward.y)) / (Math.hypot(forward.x, forward.z) || 1);
+      const edgeTop = (x: number) => pointOnFrame(f, x, -roadThickness).setY(pointOnFrame(f, x, -roadThickness).y - drop);
       const top = Math.min(edgeTop(section.left).y, edgeTop(section.right).y);
       if (Math.max(edgeTop(section.left).y, edgeTop(section.right).y) <= SUPPORT_MIN_GAP) continue;
       const along = new Vector3(0, 0, 1).transformDirection(f).setY(0);

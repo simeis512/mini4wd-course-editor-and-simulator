@@ -76,6 +76,22 @@ describe('supports', () => {
     }
   });
 
+  it('keeps the top of a stand under a sloping road across its whole depth', () => {
+    const pitch = 10;
+    const c = addPiece(emptyCourse(), 'straight', null);
+    const layout = layoutCourse(setPose(c, 0, { pos: [0, 150, 0], rot: [0, pitch, 0] }));
+    const s = supports(layout);
+    expect(s.length).toBeGreaterThan(0);
+    const t = Math.tan((pitch * Math.PI) / 180);
+    for (const st of s) {
+      // Road underside over the downhill edge of the stand.
+      const h = st.left.z - STAND_DEPTH / 2;
+      const underside = 150 + h * t - GLOBAL_SPEC.roadThickness / Math.cos((pitch * Math.PI) / 180);
+      expect(st.left.y).toBeLessThanOrEqual(underside + 1e-6);
+      expect(st.left.y).toBeGreaterThan(underside - 1);
+    }
+  });
+
   it('keeps the corners of a stand clear of road it crosses at an angle', () => {
     const below = addPiece(emptyCourse(), 'straight', null);
     const c = addPiece(below, 'straight', null);
