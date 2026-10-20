@@ -1,6 +1,6 @@
 import { Matrix4, Vector3 } from 'three';
 import { dropJoin, joinPart, nextOpenPort } from '../course/add';
-import { hasPart } from '../course/catalog';
+import { hasPart, LEVEL_HEIGHT } from '../course/catalog';
 import { courseFromHash, courseToHash } from '../course/codec';
 import {
   emptyCourse,
@@ -511,8 +511,15 @@ export class EditorApp {
     });
     $('rot-left').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? 1 : 15));
     $('rot-right').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? -1 : -15));
-    $('raise').addEventListener('click', () => this.moveSelected(new Matrix4().makeTranslation(0, 10, 0)));
-    $('lower').addEventListener('click', () => this.moveSelected(new Matrix4().makeTranslation(0, -10, 0)));
+    // Up and down by one level, a slope's height; Shift for a fine step.
+    $('raise').textContent = `↑${LEVEL_HEIGHT}mm`;
+    $('lower').textContent = `↓${LEVEL_HEIGHT}mm`;
+    $('raise').title = `${LEVEL_HEIGHT}mm（スロープ 1 段）上げる。Shift で ${SNAP_STEP}mm`;
+    $('lower').title = `${LEVEL_HEIGHT}mm（スロープ 1 段）下げる。Shift で ${SNAP_STEP}mm`;
+    const lift = (e: MouseEvent) => (e.shiftKey ? SNAP_STEP : LEVEL_HEIGHT);
+    $('raise').addEventListener('click', (e) => this.moveSelected(new Matrix4().makeTranslation(0, lift(e), 0)));
+    $('lower').addEventListener('click', (e) => this.moveSelected(new Matrix4().makeTranslation(0, -lift(e), 0)));
+    $<HTMLInputElement>('raise-mm').value = String(LEVEL_HEIGHT);
     for (const id of POSE_FIELDS) $(id).addEventListener('change', () => this.setPoseFromFields());
     // Angles step 0.5°, or 0.1° with Shift (spec 16.3).
     const step = (e: MouseEvent) => (e.shiftKey ? 0.1 : 0.5);

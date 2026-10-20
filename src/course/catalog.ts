@@ -197,6 +197,8 @@ const CURVE_ANGLE = 45;
 const BANK_APPROACH_LENGTH = 180;
 /** Height the slope climbs (official). */
 const SLOPE_DROP = 110;
+/** One level of a raised course: the height a slope climbs (user, 2026-10-20). */
+export const LEVEL_HEIGHT = SLOPE_DROP;
 /** Floor length of the slope: the same as a straight (per the user; unmeasured). */
 const SLOPE_RUN = STRAIGHT_LENGTH;
 /**

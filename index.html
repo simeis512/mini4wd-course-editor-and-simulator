@@ -125,8 +125,8 @@
           <div class="row">
             <button id="rot-left" title="左に15°回す (Q、Shift で 1°)">⟲15°</button>
             <button id="rot-right" title="右に15°回す (E、Shift で 1°)">⟳15°</button>
-            <button id="raise" title="10mm 上げる">↑10mm</button>
-            <button id="lower" title="10mm 下げる">↓10mm</button>
+            <button id="raise"></button>
+            <button id="lower"></button>
           </div>
           <div class="row angle">
             <label for="twist" title="入口に対して出口が中心線まわりに回る角度（右下がり+）。ピース全体に均等にねじります">ねじれ</label>
@@ -167,7 +167,7 @@
           <div id="raise-row" class="row angle">
             <label title="このつなぎ目から先のピースを、折れ角とねじれで少しずつ持ち上げます（カーブを重ねた螺旋など）">この先</label>
             <input id="raise-count" type="number" min="1" step="1" value="8" /> ピースで
-            <input id="raise-mm" type="number" step="10" value="100" /> mm
+            <input id="raise-mm" type="number" step="10" /> mm
             <button id="raise-run">上げる</button>
           </div>
           <p id="bend-closure" class="hint" hidden>ループを閉じたつなぎ目（口が近くで合っているだけ）なので、折れ角は付けられません。</p>
