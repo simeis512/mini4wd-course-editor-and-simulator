@@ -314,3 +314,11 @@ export function markIntended(course: Course, ref: PortRef, on: boolean): Course 
   else delete next.intended;
   return next;
 }
+
+/** Run the course the other way round (spec 5.1 `dir`): laps then start by the first piece's other port. */
+export function reverseDirection(course: Course): Course {
+  const next = clone(course);
+  if (course.dir === -1) delete next.dir;
+  else next.dir = -1;
+  return next;
+}

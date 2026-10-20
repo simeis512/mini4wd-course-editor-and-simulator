@@ -1,7 +1,7 @@
 import { Matrix4, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { compatible, emptyCourse, layoutCourse, partCounts } from './course';
-import { addPiece, deletePiece, flipPiece, markIntended, moveGroup, pieceMiddle, setVariant, turnAboutMiddle } from './edit';
+import { addPiece, deletePiece, flipPiece, markIntended, moveGroup, reverseDirection, pieceMiddle, setVariant, turnAboutMiddle } from './edit';
 import { facingError } from './geometry';
 import { basicOval, chain } from './presets';
 
@@ -218,5 +218,13 @@ describe('ports left open on purpose (#13)', () => {
     expect(deletePiece(c, 0).intended).toEqual([[1, 1]]);
     expect(deletePiece(c, 2).intended).toBeUndefined();
     expect(flipPiece(c, 2).intended).toBeUndefined();
+  });
+});
+
+describe('reverseDirection', () => {
+  it('toggles the way the course runs', () => {
+    const c = chain(['straight']);
+    expect(reverseDirection(c).dir).toBe(-1);
+    expect(reverseDirection(reverseDirection(c)).dir).toBeUndefined();
   });
 });
