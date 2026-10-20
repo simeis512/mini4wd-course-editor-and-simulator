@@ -1,3 +1,4 @@
+import type { Clash } from '../course/clash';
 import type { Layout, PortRef } from '../course/course';
 import type { Selection } from './selection';
 
@@ -24,6 +25,8 @@ export interface EditorView {
   setData(layout: Layout, selection: Selection): void;
   /** Blink the pieces a raise would move, or stop with null. */
   setRunMarks(marks: RunMarks | null): void;
+  /** Mark where pieces are in each other's way (spec 7). */
+  setClashes(clashes: readonly Clash[]): void;
   /** Frame the whole course. */
   fit(): void;
   /** Floor point (mm, X/Z) in the middle of the view. */
@@ -56,4 +59,24 @@ export function drawShortMark(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(String(n), x, y + 3);
+}
+
+/** Colours of the clash marks: an overlap is an error, a low crossing a warning. */
+const CLASH_COLOR: Record<Clash['kind'], string> = { interference: '#ff5a5a', clearance: '#ffc828' };
+
+/** A round "!" where pieces are in each other's way (spec 7). Both views draw it. */
+export function drawClashMark(ctx: CanvasRenderingContext2D, x: number, y: number, kind: Clash['kind']): void {
+  const r = 11;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = CLASH_COLOR[kind];
+  ctx.fill();
+  ctx.strokeStyle = '#1b1d22';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = '#1b1d22';
+  ctx.font = 'bold 15px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('!', x, y + 1);
 }

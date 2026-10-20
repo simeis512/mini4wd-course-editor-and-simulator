@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import { variantOf } from '../course/catalog';
+import type { Clash } from '../course/clash';
 import { portKey, sameJoint, type Layout, type PortRef } from '../course/course';
 import { pointOnFrame } from '../course/geometry';
 import { atLevel, pieceHeights, type HeightRange } from '../course/height';
@@ -7,7 +8,7 @@ import { halfWidth, insidePolygon, worldTracks } from '../course/mesh';
 import { colorRange, heightColor, type HeightView } from './levels';
 import { lowestFirst, outlinesOf, xz, type Outline } from './outline2d';
 import { JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
-import { blink, drawShortMark, type EditorView, type RunMarks } from './view';
+import { blink, drawClashMark, drawShortMark, type EditorView, type RunMarks } from './view';
 
 /**
  * Top-down 2D editor view drawn on a canvas. Pointer Events only, so mouse,
@@ -35,6 +36,7 @@ export class TopView implements EditorView {
   private moving = false;
   private runMarks: RunMarks | null = null;
   private blinking = false;
+  private clashes: readonly Clash[] = [];
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -76,6 +78,11 @@ export class TopView implements EditorView {
       };
       requestAnimationFrame(tick);
     }
+  }
+
+  setClashes(clashes: readonly Clash[]): void {
+    this.clashes = clashes;
+    this.draw();
   }
 
   /** Colour by height and show only the pieces from a level up (spec 8). */
@@ -255,10 +262,18 @@ export class TopView implements EditorView {
       this.drawJoint(j.a, selected ? '#3fd0ff' : '#39c26b', selected ? 1.6 : 1);
     }
     const split = new Set(layout.split.map(portKey));
+    const intended = new Set(layout.intended.map(portKey));
     for (const ref of layout.open) {
       if (!this.shown(ref.piece)) continue;
-      const selected = sel?.kind === 'port' && portKey(sel.ref) === portKey(ref);
-      this.drawPort(ref, selected ? '#3fd0ff' : split.has(portKey(ref)) ? '#ff5a5a' : '#ff9a2e', selected ? 1.3 : 1);
+      const key = portKey(ref);
+      const selected = sel?.kind === 'port' && portKey(sel.ref) === key;
+      // Ports left open on purpose are grey (#13).
+      const color = selected ? '#3fd0ff' : split.has(key) ? '#ff5a5a' : intended.has(key) ? '#8a9099' : '#ff9a2e';
+      this.drawPort(ref, color, selected ? 1.3 : 1);
+    }
+    for (const c of this.clashes) {
+      const [sx, sy] = this.toScreen(c.at.x, c.at.z);
+      drawClashMark(ctx, sx, sy, c.kind);
     }
     if (run?.missing && run.end) {
       const [sx, sy] = this.portPoint(run.end);

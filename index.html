@@ -59,9 +59,21 @@
       #context .close { position: absolute; top: 6px; right: 6px; min-height: 0; padding: 2px 8px; border: 0; background: transparent; font-size: 18px; line-height: 1; }
       #context details { margin-top: 8px; }
       #context summary, #course-info summary { cursor: pointer; color: var(--muted); font-size: 13px; }
-      #course-info { position: absolute; left: 10px; bottom: 10px; z-index: 3; max-width: min(320px, calc(100% - 150px)); max-height: calc(100% - 20px); overflow-y: auto; padding: 6px 10px; background: rgba(36, 39, 46, 0.92); border: 1px solid var(--line); border-radius: 8px; }
+      #course-info { position: absolute; left: 10px; bottom: 10px; z-index: 3; max-width: min(360px, calc(100% - 150px)); max-height: calc(100% - 20px); overflow-y: auto; padding: 6px 10px; background: rgba(36, 39, 46, 0.92); border: 1px solid var(--line); border-radius: 8px; }
       #course-info summary { color: var(--text); font-size: 14px; }
       #course-info[open] summary { margin-bottom: 4px; }
+      #course-info h3 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 10px 0 4px; }
+      #info button.link { min-height: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline dotted; cursor: pointer; }
+      #info button.link:hover { background: none; color: var(--accent); }
+      #info button.small { min-height: 0; padding: 2px 8px; font-size: 12px; }
+      #info ul.checks { list-style: none; padding-left: 0; }
+      #info ul.checks li { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+      #info .mark { display: flex; gap: 3px; align-items: center; font-size: 12px; color: var(--muted); white-space: nowrap; }
+      #info table.laps { border-collapse: collapse; font-size: 13px; margin: 2px 0 4px; }
+      #info table.laps th { color: var(--muted); font-weight: 400; text-align: left; padding-right: 10px; }
+      #info table.laps td { padding: 1px 10px 1px 0; }
+      #info .num { text-align: right; font-variant-numeric: tabular-nums; }
+      .err { color: #ff6b6b; }
       .ok { color: var(--ok); }
       .warn { color: var(--warn); }
       .angle input#raise-count { width: 48px; }
