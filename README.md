@@ -52,7 +52,7 @@ AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari 
 - `src/course/codec.ts` コース ⇄ URL ハッシュ（バイナリ → deflate-raw → base64url）
 - `src/course/height.ts` ピースの高さの範囲（階層フィルター）と支柱の位置
 - `src/course/mesh.ts` 3D メッシュ生成（路面＋フェンスの掃引、支柱。シーンは m 単位）
-- `src/editor/app.ts` エディタの状態と操作。`panels.ts` パネル表示、`levels.ts` 2D の高さ表示の設定、`history.ts` 元に戻す／やり直し
+- `src/editor/app.ts` エディタの状態と操作。`panels.ts` パネル表示、`drag.ts` ドラッグ操作、`share.ts` URL・ファイルでの受け渡し、`levels.ts` 2D の高さ表示の設定、`history.ts` 元に戻す／やり直し
 - `src/editor/view2d.ts` / `view3d.ts` 2D 編集ビュー、3D/AR ビュー（共通インターフェースは `view.ts`）
 - `src/physics/` Rapier の物理ワールド（シミュレーター用、未接続）
 
