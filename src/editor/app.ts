@@ -1,14 +1,13 @@
 import { Matrix4, Vector3 } from 'three';
-import { dropJoin, joinPart, nextOpenPort } from '../course/add';
-import { hasPart, LEVEL_HEIGHT } from '../course/catalog';
-import { courseFromHash, courseToHash } from '../course/codec';
+import { joinPart, nextOpenPort } from '../course/add';
+import { LEVEL_HEIGHT } from '../course/catalog';
+import { courseFromHash } from '../course/codec';
 import {
   emptyCourse,
   layoutCourse,
   movingGroup,
   portKey,
   sameJoint,
-  validateCourse,
   type Course,
   type Layout,
   type PortRef,
@@ -27,30 +26,22 @@ import {
   setVariant,
   tidyCuts,
 } from '../course/edit';
-import { applyMagnet, asLink, findMagnet, joinableNear, joinPorts, MAGNET_DISTANCE, splitJoint } from '../course/joining';
+import { asLink, joinableNear, joinPorts, splitJoint } from '../course/joining';
 import type { Pose } from '../course/geometry';
 import { basicOval } from '../course/presets';
 import { raiseRun } from '../course/raise';
 import { $, toast } from './dom';
+import { PaletteDrag, PieceDrag, SNAP_STEP, type DragHost } from './drag';
 import { History } from './history';
 import { bindLevelTools, levelMax, renderLevelTools, type HeightView } from './levels';
 import { buildPalette, placeContext, POSE_FIELDS, renderPanels, runMarks } from './panels';
 import type { Selection } from './selection';
+import { exportJson, HashSync, readCourseFile } from './share';
 import type { EditorView } from './view';
 import { TopView } from './view2d';
 import { OrbitView } from './view3d';
 
 const HISTORY_LIMIT = 200;
-/** Ports this many screen pixels apart still pull together while dragging. */
-const MAGNET_PX = 12;
-/** Drag steps with snapping on (spec 8). */
-const SNAP_STEP = 10;
-/** A part dropped this close (screen px) to where it would sit on an open port joins that port. */
-const DROP_JOIN_PX = 40;
-/** …and at least this close in mm, so a zoomed-in view still catches it. */
-const DROP_JOIN_MM = 150;
-
-const snap = (v: number) => Math.round(v / SNAP_STEP) * SNAP_STEP;
 
 export class EditorApp {
   private course: Course = emptyCourse();
@@ -63,47 +54,53 @@ export class EditorApp {
   private heightView: HeightView = { colors: false, level: 0 };
   private top: TopView;
   private orbit: OrbitView;
-  /** The hash we last wrote, so our own updates are not reloaded. */
-  private writtenHash = '';
-  private hashWrite = Promise.resolve();
-  /** A piece being dragged in the top view, and the course as it would be if dropped now. */
-  private drag: {
-    index: number;
-    start: Course;
-    group: Set<number>;
-    preview: Course | null;
-    /** The pointer is over the side panel: dropping there puts a lone piece away (deletes it). */
-    overPanel: boolean;
-  } | null = null;
-  /** A part being dragged out of the parts list, and the course as it would be if dropped now. */
-  private paletteDrag: {
-    partId: string;
-    port: number | undefined;
-    pointerId: number;
-    from: { x: number; y: number };
-    active: boolean;
-    preview: Course | null;
-  } | null = null;
-  /** The click that ends a drag out of the parts list adds nothing more. */
-  private swallowClick = false;
+  private hashSync = new HashSync();
+  private paletteDrag: PaletteDrag;
+  private pieceDrag: PieceDrag;
 
   constructor() {
+    const app = this;
+    const host: DragHost = {
+      get course() {
+        return app.course;
+      },
+      get layout() {
+        return app.layout;
+      },
+      get selection() {
+        return app.selection;
+      },
+      get view() {
+        return app.view;
+      },
+      get snapOn() {
+        return app.snapOn;
+      },
+      get moveAlone() {
+        return app.moveAlone;
+      },
+      screenMm: (px) => this.screenMm(px),
+      commit: (next, selection) => this.commit(next, selection),
+      refresh: (writeUrl) => this.refresh(writeUrl),
+    };
+    this.paletteDrag = new PaletteDrag(host);
+    this.pieceDrag = new PieceDrag(host);
     const handlers = {
       onPick: (s: Selection) => this.select(s),
       onViewChange: () => this.placeContext(),
-      onDragStart: (index: number) => this.dragStart(index),
-      onDragMove: (dx: number, dz: number, noSnap: boolean) => this.dragMove(dx, dz, noSnap),
-      onDragEnd: (commit: boolean) => this.dragEnd(commit),
+      onDragStart: (index: number) => this.pieceDrag.start(index),
+      onDragMove: (dx: number, dz: number, noSnap: boolean) => this.pieceDrag.move(dx, dz, noSnap),
+      onDragEnd: (commit: boolean) => this.pieceDrag.end(commit),
     };
     this.top = new TopView($('view2d'), handlers);
     this.orbit = new OrbitView($('view3d'), handlers);
     buildPalette({
       click: (partId, port) => {
-        if (!this.swallowClick) this.place(partId, port);
+        if (this.paletteDrag.clickAdds) this.place(partId, port);
       },
-      down: (e, partId, port) => this.paletteDown(e, partId, port),
-      move: (e) => this.paletteMove(e),
-      up: (e, cancelled) => this.paletteUp(e, cancelled),
+      down: (e, partId, port) => this.paletteDrag.down(e, partId, port),
+      move: (e) => this.paletteDrag.move(e),
+      up: (e, cancelled) => this.paletteDrag.up(e, cancelled),
     });
     this.bindUi();
   }
@@ -169,21 +166,11 @@ export class EditorApp {
     this.orbit.setData(this.layout, this.selection);
     this.setHeightView(this.heightView);
     this.renderPanel();
-    if (writeUrl) this.writeUrl();
-  }
-
-  private writeUrl(): void {
-    const course = this.course;
-    // Chain the writes so a slow encode never overwrites a newer one.
-    this.hashWrite = this.hashWrite.then(async () => {
-      const hash = await courseToHash(course);
-      this.writtenHash = hash;
-      history.replaceState(null, '', hash || location.pathname + location.search);
-    });
+    if (writeUrl) this.hashSync.write(this.course);
   }
 
   private async onHashChange(): Promise<void> {
-    if (location.hash === this.writtenHash) return;
+    if (this.hashSync.isOwn(location.hash)) return;
     try {
       const course = await courseFromHash(location.hash);
       this.load(course ?? emptyCourse(), false);
@@ -227,55 +214,6 @@ export class EditorApp {
     this.commit(next, { kind: 'piece', index: next.pieces.length - 1 });
   }
 
-  // ---- Dragging a part out of the parts list (#40)
-
-  private paletteDown(e: PointerEvent, partId: string, port: number | undefined): void {
-    if (!e.isPrimary || e.button !== 0) return;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    this.paletteDrag = { partId, port, pointerId: e.pointerId, from: { x: e.clientX, y: e.clientY }, active: false, preview: null };
-  }
-
-  private paletteMove(e: PointerEvent): void {
-    const d = this.paletteDrag;
-    if (!d || e.pointerId !== d.pointerId) return;
-    if (!d.active) {
-      if (Math.hypot(e.clientX - d.from.x, e.clientY - d.from.y) <= 6) return;
-      d.active = true;
-      document.body.classList.add('dragging-part');
-      $('context').hidden = true;
-    }
-    const at = this.view.floorAt(e.clientX, e.clientY);
-    const preview = at && this.dropCourse(d.partId, d.port, at[0], at[1], e.shiftKey);
-    if (!preview && !d.preview) return;
-    d.preview = preview;
-    const layout = preview ? layoutCourse(preview) : this.layout;
-    const selection: Selection = preview ? { kind: 'piece', index: preview.pieces.length - 1 } : this.selection;
-    this.view.setData(layout, selection);
-  }
-
-  private paletteUp(e: PointerEvent, cancelled: boolean): void {
-    const d = this.paletteDrag;
-    if (!d || e.pointerId !== d.pointerId) return;
-    this.paletteDrag = null;
-    if (!d.active) return;
-    document.body.classList.remove('dragging-part');
-    this.swallowClick = true;
-    setTimeout(() => (this.swallowClick = false));
-    if (d.preview && !cancelled) this.commit(d.preview, { kind: 'piece', index: d.preview.pieces.length - 1 });
-    else this.refresh(false);
-  }
-
-  /**
-   * The course with `partId` dropped at (x, z): joined to an open port when
-   * it lands about where it would sit there, else on its own (#40).
-   */
-  private dropCourse(partId: string, port: number | undefined, x: number, z: number, noSnap: boolean): Course {
-    const joined = dropJoin(this.course, partId, port, x, z, Math.max(DROP_JOIN_MM, this.screenMm(DROP_JOIN_PX)));
-    if (joined) return joined;
-    if (this.snapOn && !noSnap) [x, z] = [snap(x), snap(z)];
-    return addFreePiece(this.course, partId, port ?? 0, x, z);
-  }
-
   private flipSelected(): void {
     const s = this.selection;
     if (s?.kind !== 'piece') return;
@@ -296,55 +234,6 @@ export class EditorApp {
 
   private get moveAlone(): boolean {
     return $<HTMLInputElement>('move-alone').checked;
-  }
-
-  private dragStart(index: number): boolean {
-    this.drag = { index, start: this.course, group: movingGroup(this.layout, index, this.moveAlone), preview: null, overPanel: false };
-    return true;
-  }
-
-  /** Follow a piece drag onto the side panel, where a lone piece can be put away. */
-  private dragOverPanel(e: PointerEvent): void {
-    const d = this.drag;
-    if (!d?.preview) return;
-    const r = $('panel').getBoundingClientRect();
-    const over = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-    if (over !== d.overPanel) {
-      d.overPanel = over;
-      const lone = d.group.size === 1;
-      const zone = $('trash-zone');
-      zone.hidden = !over;
-      zone.classList.toggle('blocked', !lone);
-      zone.textContent = lone
-        ? 'ここで離すとピースを片づけます（削除）'
-        : 'つながっているピースは片づけられません。分断するか「このピースだけ動かす」にしてください';
-    }
-    // Show the course without the piece while it would be put away.
-    if (over && d.group.size === 1) this.view.setData(layoutCourse(deletePiece(d.start, d.index)), null);
-  }
-
-  private dragMove(dx: number, dz: number, noSnap: boolean): void {
-    const d = this.drag;
-    if (!d) return;
-    if (this.snapOn && !noSnap) [dx, dz] = [snap(dx), snap(dz)];
-    $('context').hidden = true;
-    let next = moveGroup(d.start, d.group, new Matrix4().makeTranslation(dx, 0, dz));
-    const magnet = findMagnet(next, d.group, Math.max(MAGNET_DISTANCE, this.screenMm(MAGNET_PX)));
-    if (magnet) next = applyMagnet(next, d.group, magnet);
-    d.preview = next;
-    this.view.setData(layoutCourse(next), this.selection);
-  }
-
-  private dragEnd(commit: boolean): void {
-    const d = this.drag;
-    this.drag = null;
-    $('trash-zone').hidden = true;
-    if (!d?.preview) return;
-    if (commit && d.overPanel && d.group.size === 1) {
-      this.commit(deletePiece(d.start, d.index));
-      toast('ピースを片づけました（元に戻す で戻せます）');
-    } else if (commit && !d.overPanel) this.commit(tidyCuts(d.preview), { kind: 'piece', index: d.index });
-    else this.refresh(false);
   }
 
   /** Move the selected piece, with the pieces joined to it, by a rigid transform in world space. */
@@ -439,32 +328,9 @@ export class EditorApp {
     this.commit(setPose(this.course, s.index, pose), s);
   }
 
-  private async copyUrl(): Promise<void> {
-    await this.hashWrite;
-    try {
-      await navigator.clipboard.writeText(location.href);
-      toast('URLをコピーしました');
-    } catch {
-      prompt('このURLをコピーしてください', location.href);
-    }
-  }
-
-  private exportJson(): void {
-    const blob = new Blob([JSON.stringify(this.course, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${this.course.name || 'course'}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-
   private async importJson(file: File): Promise<void> {
     try {
-      const data = JSON.parse(await file.text()) as Course;
-      if (data?.v !== 1 || !Array.isArray(data.pieces)) throw new Error('コースのファイルではありません');
-      for (const rec of data.pieces) if (!hasPart(rec.part)) throw new Error(`不明なパーツ: ${rec.part}`);
-      validateCourse(data);
-      this.load(data, true);
+      this.load(await readCourseFile(file), true);
       toast('コースを読み込みました');
     } catch (e) {
       toast(`読み込めませんでした: ${(e as Error).message}`);
@@ -505,7 +371,7 @@ export class EditorApp {
   private bindUi(): void {
     bindLevelTools((view) => this.setHeightView(view));
     // Views capture the pointer while dragging, so its moves still bubble up here.
-    window.addEventListener('pointermove', (e) => this.dragOverPanel(e));
+    window.addEventListener('pointermove', (e) => this.pieceDrag.overPanel(e));
     $<HTMLDetailsElement>('course-info').addEventListener('toggle', () => this.placeContext());
     $('context').querySelector('details')!.addEventListener('toggle', () => this.placeContext());
     $('context-close').addEventListener('click', () => this.select(null));
@@ -518,8 +384,8 @@ export class EditorApp {
         this.load(emptyCourse(), true);
       }
     });
-    $('copy-url').addEventListener('click', () => void this.copyUrl());
-    $('export').addEventListener('click', () => this.exportJson());
+    $('copy-url').addEventListener('click', () => void this.hashSync.copyUrl());
+    $('export').addEventListener('click', () => exportJson(this.course));
     const file = $<HTMLInputElement>('import-file');
     $('import').addEventListener('click', () => file.click());
     file.addEventListener('change', () => {
