@@ -1,8 +1,10 @@
 import { Vector3 } from 'three';
 import { variantOf } from '../course/catalog';
 import { portKey, sameJoint, type Layout, type PortRef } from '../course/course';
-import { partGeometry, pointOnFrame } from '../course/geometry';
-import { crossSection, halfWidth, roadOutline, trackEdge } from '../course/mesh';
+import { pointOnFrame } from '../course/geometry';
+import { atLevel, pieceHeights, type HeightRange } from '../course/height';
+import { halfWidth, insidePolygon, roadOutline, trackEdge, worldTracks } from '../course/mesh';
+import { colorRange, heightColor, type HeightView } from './levels';
 import type { DragHandlers, PickHandlers, Selection } from './selection';
 import type { EditorView } from './view';
 
@@ -14,6 +16,8 @@ interface Outline {
   fences: [number, number][][];
   /** Mean road height, mm; higher pieces are drawn over lower ones. */
   height: number;
+  /** The road cut at each sample step, with its mean height, for colouring by height. */
+  steps: { polygon: [number, number][]; height: number }[];
 }
 
 /** Pixels a pointer may move and still count as a tap. */
@@ -35,6 +39,8 @@ export class TopView implements EditorView {
   /** Outline indices from the lowest road to the highest. */
   private order: number[] = [];
   private selection: Selection = null;
+  private heights: HeightRange[] = [];
+  private heightView: HeightView = { colors: false, level: 0 };
   /** World point (mm) at the canvas centre, and zoom in px per mm. */
   private cx = 0;
   private cz = 0;
@@ -62,23 +68,43 @@ export class TopView implements EditorView {
   setData(layout: Layout, selection: Selection): void {
     if (layout !== this.layout) {
       this.layout = layout;
-      this.outlines = layout.pieces.flatMap((pc, piece) =>
-        partGeometry(pc.part).tracks.map((track) => {
-          const samples = track.samples.map((s) => pc.matrix.clone().multiply(s));
-          const section = crossSection(track.lanes);
-          return {
-            piece,
-            polygon: roadOutline(samples, section).map(xz),
-            fences: section.fences.map((x) => trackEdge(samples, x).map(xz)),
-            height: samples.reduce((sum, f) => sum + f.elements[13], 0) / samples.length,
-          };
-        }),
-      );
+      const tracks = worldTracks(layout);
+      this.heights = pieceHeights(layout, tracks);
+      this.outlines = tracks.map(({ piece, samples, section }) => {
+        const left = trackEdge(samples, section.left).map(xz);
+        const right = trackEdge(samples, section.right).map(xz);
+        return {
+          piece,
+          polygon: roadOutline(samples, section).map(xz),
+          fences: section.fences.map((x) => trackEdge(samples, x).map(xz)),
+          height: samples.reduce((sum, f) => sum + f.elements[13], 0) / samples.length,
+          steps: samples.slice(1).map((f, i) => ({
+            polygon: [left[i], left[i + 1], right[i + 1], right[i]],
+            height: (f.elements[13] + samples[i].elements[13]) / 2,
+          })),
+        };
+      });
       // Stable sort keeps placing order between pieces at the same height.
       this.order = this.outlines.map((_, i) => i).sort((a, b) => this.outlines[a].height - this.outlines[b].height);
     }
     this.selection = selection;
     this.draw();
+  }
+
+  /** Colour by height and show only the pieces from a level up (spec 8). */
+  setHeightView(view: HeightView): void {
+    this.heightView = view;
+    this.draw();
+  }
+
+  /** Height of the highest road, mm. */
+  get topHeight(): number {
+    return Math.max(0, ...this.heights.map((r) => r[1]));
+  }
+
+  /** Whether a piece shows under the level filter; the others are faint and cannot be picked. */
+  private shown(piece: number): boolean {
+    return atLevel(this.heights[piece] ?? [0, 0], this.heightView.level);
   }
 
   /** Current zoom, px per mm. */
@@ -166,15 +192,35 @@ export class TopView implements EditorView {
       if (close) ctx.closePath();
     };
 
+    const range = colorRange(this.topHeight);
     for (const i of this.order) {
       const o = this.outlines[i];
+      if (!this.shown(o.piece)) {
+        path(o.polygon, true);
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        continue;
+      }
       const pc = layout.pieces[o.piece];
-      const color = variantOf(pc.part, pc.rec.variant).color;
-      path(o.polygon, true);
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.85;
-      ctx.fill();
-      ctx.globalAlpha = 1;
+      if (this.heightView.colors) {
+        for (const step of o.steps) {
+          path(step.polygon, true);
+          // Stroke too, so no hairline gaps show between the steps.
+          ctx.fillStyle = ctx.strokeStyle = heightColor(step.height, range);
+          ctx.lineWidth = 1;
+          ctx.fill();
+          ctx.stroke();
+        }
+      } else {
+        path(o.polygon, true);
+        ctx.fillStyle = variantOf(pc.part, pc.rec.variant).color;
+        ctx.globalAlpha = 0.85;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
       ctx.strokeStyle = 'rgba(0,0,0,0.45)';
       ctx.lineWidth = 1;
       for (const f of o.fences) {
@@ -202,11 +248,13 @@ export class TopView implements EditorView {
     }
 
     for (const j of layout.joints) {
+      if (!this.shown(j.a.piece) && !this.shown(j.b.piece)) continue;
       const selected = sel?.kind === 'joint' && sameJoint(sel, j);
       this.drawJoint(j.a, selected ? '#3fd0ff' : '#39c26b', selected ? 1.6 : 1);
     }
     const split = new Set(layout.split.map(portKey));
     for (const ref of layout.open) {
+      if (!this.shown(ref.piece)) continue;
       const selected = sel?.kind === 'port' && portKey(sel.ref) === portKey(ref);
       this.drawPort(ref, selected ? '#3fd0ff' : split.has(portKey(ref)) ? '#ff5a5a' : '#ff9a2e', selected ? 1.3 : 1);
     }
@@ -293,6 +341,7 @@ export class TopView implements EditorView {
     let best: { ref: PortRef; d: number } | null = null;
     const p = new Vector3();
     for (const ref of layout.open) {
+      if (!this.shown(ref.piece)) continue;
       const [px, py] = this.toScreen(...xz(pointOnFrame(layout.pieces[ref.piece].ports[ref.port], 0, 0, p)));
       const d = Math.hypot(px - sx, py - sy);
       if (d < PORT_HIT && (!best || d < best.d)) best = { ref, d };
@@ -300,6 +349,7 @@ export class TopView implements EditorView {
     if (best) return { kind: 'port', ref: best.ref };
     let joint: { a: PortRef; b: PortRef; d: number } | null = null;
     for (const j of layout.joints) {
+      if (!this.shown(j.a.piece) && !this.shown(j.b.piece)) continue;
       const [px, py] = this.toScreen(...xz(pointOnFrame(layout.pieces[j.a.piece].ports[j.a.port], 0, 0, p)));
       const d = Math.hypot(px - sx, py - sy);
       if (d < JOINT_HIT && (!joint || d < joint.d)) joint = { a: j.a, b: j.b, d };
@@ -314,7 +364,7 @@ export class TopView implements EditorView {
     const [x, z] = this.toWorld(sx, sy);
     for (let k = this.order.length - 1; k >= 0; k--) {
       const o = this.outlines[this.order[k]];
-      if (insidePolygon(x, z, o.polygon)) return o.piece;
+      if (this.shown(o.piece) && insidePolygon(x, z, o.polygon)) return o.piece;
     }
     return null;
   }
@@ -410,14 +460,4 @@ export class TopView implements EditorView {
 
 function xz(v: Vector3): [number, number] {
   return [v.x, v.z];
-}
-
-function insidePolygon(x: number, z: number, poly: [number, number][]): boolean {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [xi, zi] = poly[i];
-    const [xj, zj] = poly[j];
-    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
-  }
-  return inside;
 }

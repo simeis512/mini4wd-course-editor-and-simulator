@@ -185,3 +185,35 @@ export function facingError(a: Matrix4, b: Matrix4): FrameError {
 export function pointOnFrame(frame: Matrix4, right: number, up: number, out = new Vector3()): Vector3 {
   return out.set(-right, up, 0).applyMatrix4(frame);
 }
+
+/**
+ * Size of a stand's legs and crossbar across the road, and its usual depth
+ * along it, mm (#11, provisional: not measured). A little stout, like the
+ * blocks used under raised road at races (user, 2026-10-20).
+ */
+export const STAND_LEG = 20;
+export const STAND_BEAM = 15;
+export const STAND_DEPTH = 60;
+
+/** A stand's outline: the top corners above its outer legs and the level way it faces. */
+export interface Stand {
+  left: Vector3;
+  right: Vector3;
+  along: Vector3;
+  /** Depth along `along`, mm, when not the usual. */
+  depth?: number;
+}
+
+/** The stands that come with a part (#11), in part-local coordinates. */
+export function partStands(part: PartDef): Stand[] {
+  const { samples } = partGeometry(part);
+  return (part.supports ?? []).map(({ at, offset, halfWidth, top, depth }) => {
+    const f = samples[Math.round(at * (samples.length - 1))];
+    return {
+      left: pointOnFrame(f, offset - halfWidth, top),
+      right: pointOnFrame(f, offset + halfWidth, top),
+      along: new Vector3(0, 0, 1).transformDirection(f).setY(0).normalize(),
+      depth,
+    };
+  });
+}

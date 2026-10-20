@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
-import { portKey, sameJoint, type Layout } from '../course/course';
+import { portKey, sameJoint, type Layout, type PlacedPiece } from '../course/course';
 import { GLOBAL_SPEC } from '../course/catalog';
-import { partGeometry } from '../course/geometry';
-import { buildCourseMeshes, crossSection, MM, roadOutline } from '../course/mesh';
+import { supports } from '../course/height';
+import { buildCourseMeshes, buildSupportMesh, MM, pieceTracks, roadOutline } from '../course/mesh';
 import type { DragHandlers, PickHandlers, Selection } from './selection';
 import type { EditorView } from './view';
 
@@ -33,6 +33,8 @@ export class OrbitView implements EditorView {
   /** Course in millimetres, scaled to metres. */
   private root = new THREE.Group();
   private pieces: THREE.Group[] = [];
+  /** Stands under raised road, shown only (#11). */
+  private supports: THREE.Mesh | null = null;
   private markers = new THREE.Group();
   /** Outlines of the selected piece (solid) and the pieces joined to it (dashed), as in the 2D view. */
   private outlines = new THREE.Group();
@@ -187,6 +189,12 @@ export class OrbitView implements EditorView {
       for (const p of this.pieces) this.root.remove(p);
       this.pieces = buildCourseMeshes(layout);
       for (const p of this.pieces) this.root.add(p);
+      if (this.supports) {
+        this.root.remove(this.supports);
+        this.supports.geometry.dispose();
+      }
+      this.supports = buildSupportMesh(supports(layout));
+      this.root.add(this.supports);
     }
     // The selected piece glows; the pieces joined to it (which move with it) glow faintly.
     const group = selection?.kind === 'piece' ? layout.group[selection.index] : -1;
@@ -200,7 +208,7 @@ export class OrbitView implements EditorView {
     if (selection?.kind === 'piece') {
       layout.pieces.forEach((pc, i) => {
         if (layout.group[i] !== group) return;
-        for (const line of outlineOf(pc.matrix, pc.part, i === selection.index)) this.outlines.add(line);
+        for (const line of outlineOf(pc, i, i === selection.index)) this.outlines.add(line);
       });
     }
     this.markers.clear();
@@ -308,11 +316,10 @@ const OUTLINE_SOLID = new THREE.LineBasicMaterial({ color: 0x3fd0ff });
 const OUTLINE_DASHED = new THREE.LineDashedMaterial({ color: 0x3fd0ff, dashSize: 50, gapSize: 30 });
 
 /** The edge of a piece's road at the height of its fence tops, one loop per track. */
-function outlineOf(matrix: THREE.Matrix4, part: Parameters<typeof partGeometry>[0], solid: boolean): THREE.Line[] {
+function outlineOf(pc: PlacedPiece, index: number, solid: boolean): THREE.Line[] {
   const y = GLOBAL_SPEC.fenceHeight + 1;
-  return partGeometry(part).tracks.map((track) => {
-    const frames = track.samples.map((f) => matrix.clone().multiply(f));
-    const pts = roadOutline(frames, crossSection(track.lanes), y);
+  return pieceTracks(pc, index).map(({ samples, section }) => {
+    const pts = roadOutline(samples, section, y);
     const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), solid ? OUTLINE_SOLID : OUTLINE_DASHED);
     if (!solid) line.computeLineDistances();
     return line;

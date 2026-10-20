@@ -28,6 +28,7 @@ import { partGeometry, type Pose } from '../course/geometry';
 import { basicOval } from '../course/presets';
 import { $, toast } from './dom';
 import { History } from './history';
+import { bindLevelTools, levelMax, renderLevelTools, type HeightView } from './levels';
 import { buildPalette, placeContext, POSE_FIELDS, renderPanels } from './panels';
 import type { Selection } from './selection';
 import type { EditorView } from './view';
@@ -52,6 +53,7 @@ export class EditorApp {
   private selection: Selection = null;
   private history = new History<Course>(HISTORY_LIMIT);
   private mode: '2d' | '3d' = '2d';
+  private heightView: HeightView = { colors: false, level: 0 };
   private top: TopView;
   private orbit: OrbitView;
   /** The hash we last wrote, so our own updates are not reloaded. */
@@ -158,6 +160,7 @@ export class EditorApp {
     if (s?.kind === 'joint' && !this.layout.joints.some((j) => sameJoint(s, j))) this.selection = null;
     this.top.setData(this.layout, this.selection);
     this.orbit.setData(this.layout, this.selection);
+    this.setHeightView(this.heightView);
     this.renderPanel();
     if (writeUrl) this.writeUrl();
   }
@@ -420,6 +423,7 @@ export class EditorApp {
     $('mode-3d').setAttribute('aria-pressed', String(mode === '3d'));
     $('view2d').hidden = mode !== '2d';
     $('view3d').hidden = mode !== '3d';
+    $('height-tools').hidden = mode !== '2d';
     this.orbit.setActive(mode === '3d');
     if (mode === '2d') this.top.draw();
   }
@@ -436,7 +440,16 @@ export class EditorApp {
 
   // ---- UI
 
+  /** Height colours and level filter of the top view (spec 8); the level stays within the course. */
+  private setHeightView(view: HeightView): void {
+    const top = this.top.topHeight;
+    this.heightView = { ...view, level: Math.min(view.level, levelMax(top)) };
+    this.top.setHeightView(this.heightView);
+    renderLevelTools(top, this.heightView);
+  }
+
   private bindUi(): void {
+    bindLevelTools((view) => this.setHeightView(view));
     // Views capture the pointer while dragging, so its moves still bubble up here.
     window.addEventListener('pointermove', (e) => this.dragOverPanel(e));
     $<HTMLDetailsElement>('course-info').addEventListener('toggle', () => this.placeContext());

@@ -81,6 +81,24 @@ export interface PortDef {
  * part ways (the lane change's ramp and bridges). Lane positions are
  * measured from this track's centreline.
  */
+/**
+ * A stand that comes with the part (spec 3.4, #11), as under the lane
+ * change bridge: a leg under each end and a crossbar between, standing
+ * square to the part's main centreline where it stands.
+ */
+export interface PartSupport {
+  /** Where along the main centreline, as a fraction of its length. */
+  at: number;
+  /** Middle of the stand from the centreline, mm, + right. */
+  offset: number;
+  /** Half its width, to the outside of the legs, mm. */
+  halfWidth: number;
+  /** Height of its top above the centreline, mm. */
+  top: number;
+  /** How deep it is along the centreline, mm. */
+  depth: number;
+}
+
 export interface Track {
   /** Where the track's centreline starts, in part-local coordinates. */
   start: Pose;
@@ -136,6 +154,11 @@ export interface PartDef {
   ways?: [string, string];
   /** Parts this part cannot be joined to directly (e.g. two ramps in a row). */
   cannotJoin?: string[];
+  /**
+   * Stands that are part of the part. A part that has them gets automatic
+   * supports only under its main road, and only when it is raised (#11).
+   */
+  supports?: PartSupport[];
   /** Shown in the editor when the geometry is a placeholder. */
   note?: string;
   /**
@@ -189,6 +212,18 @@ const JOINT_HEIGHT = bridgeRise(RAMP_RUN);
 const JOINT_PITCH = (Math.atan(bridgeRiseSlope(RAMP_RUN)) * 180) / Math.PI;
 /** Lateral offset of the right-hand lane, as a part-local X (+ X is left). */
 const RIGHT_LANE_X = -laneOffset(2);
+/**
+ * Size of the lane change's own bridge support, mm: wider than the two lower
+ * lanes with room beside their fences, and about one lane deep (user, from
+ * the real part, 2026-10-20; the exact sizes are provisional, #1).
+ */
+const LANE_CHANGE_SUPPORT_HALF = (2 * GLOBAL_SPEC.lanePitch + GLOBAL_SPEC.fenceThickness) / 2 + 25;
+const LANE_CHANGE_SUPPORT_DEPTH = GLOBAL_SPEC.lanePitch;
+/**
+ * Top of that support, mm: a little under the top of the bridge, whose
+ * underside curves down away from the top (user, 2026-10-20; provisional).
+ */
+const LANE_CHANGE_SUPPORT_TOP = BRIDGE_HEIGHT - GLOBAL_SPEC.roadThickness - 15;
 const LANE_CHANGE_NOTE = `橋がアプローチ側へ約1/3入り込み、全体で1つのなだらかな山になる形は公式の図・写真どおり。寸法は未計測のため仮（橋の最高点${BRIDGE_HEIGHT}、各ピースの床の長さ${LANE_CHANGE_LENGTH}）`;
 
 export const PARTS: readonly PartDef[] = [
@@ -352,6 +387,18 @@ export const PARTS: readonly PartDef[] = [
       { from: [0, 0], to: [1, 1] },
       { from: [0, 1], to: [1, 2] },
       { from: [2, 2], to: [3, 0] },
+    ],
+    // The set's own support stands across the middle, under the top of the
+    // bridge, square to the two lower lanes and centred on them, in the
+    // part's colour (user, from the real part, 2026-10-20).
+    supports: [
+      {
+        at: 0.5,
+        offset: (laneOffset(0) + laneOffset(1)) / 2,
+        halfWidth: LANE_CHANGE_SUPPORT_HALF,
+        top: LANE_CHANGE_SUPPORT_TOP,
+        depth: LANE_CHANGE_SUPPORT_DEPTH,
+      },
     ],
     variants: [PALETTE.white, PALETTE.gray, PALETTE.black],
     defaultVariant: 0,

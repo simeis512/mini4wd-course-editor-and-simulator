@@ -32,6 +32,11 @@
       #view3d canvas { display: block; touch-action: none; }
       #view3d .ar-button { position: absolute !important; bottom: 12px !important; }
       #fit { position: absolute; right: 10px; bottom: 10px; }
+      #height-tools { position: absolute; left: 10px; top: 10px; z-index: 3; width: 210px; padding: 6px 10px; font-size: 13px; background: rgba(36, 39, 46, 0.92); border: 1px solid var(--line); border-radius: 8px; }
+      #height-tools label { display: flex; gap: 6px; align-items: center; }
+      #height-tools input[type='range'] { flex: 1; min-width: 0; }
+      #height-legend { height: 8px; border-radius: 4px; margin-top: 4px; }
+      #height-scale .ends { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
       #panel { grid-area: panel; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); padding: 10px 12px; }
       #panel h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 6px; }
       #panel h2:first-child { margin-top: 0; }
@@ -96,6 +101,15 @@
       <canvas id="view2d"></canvas>
       <div id="view3d" hidden></div>
       <button id="fit">全体を表示</button>
+      <div id="height-tools">
+        <label title="路面を高さで色分けします"><input id="height-colors" type="checkbox" /> 高さで色分け</label>
+        <div id="height-scale" hidden>
+          <div id="height-legend"></div>
+          <div class="ends"><span>0mm</span><span id="legend-top"></span></div>
+        </div>
+        <label title="この高さに届くピースだけを表示し、ほかは薄くして選べなくします">表示 <input id="level" type="range" min="0" value="0" /></label>
+        <div id="level-value" class="muted"></div>
+      </div>
       <div id="context" hidden>
         <button id="context-close" class="close" title="選択を解除 (Esc)" aria-label="閉じる">×</button>
         <section id="selection-panel" hidden>
