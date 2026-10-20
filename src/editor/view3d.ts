@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
-import { portKey, type Layout, type PortRef } from '../course/course';
+import { portKey, sameJoint, type Layout } from '../course/course';
 import { GLOBAL_SPEC } from '../course/catalog';
-import { partGeometry, pointOnFrame } from '../course/geometry';
-import { buildCourseMeshes, crossSection, MM } from '../course/mesh';
+import { partGeometry } from '../course/geometry';
+import { buildCourseMeshes, crossSection, MM, roadOutline } from '../course/mesh';
 import type { DragHandlers, PickHandlers, Selection } from './selection';
+import type { EditorView } from './view';
 
 const BACKGROUND = new THREE.Color(0x1b1d22);
 
@@ -23,7 +24,7 @@ const TAP_SLOP = 6;
  * the selected piece moves it across the level it was grabbed at; any other
  * drag orbits the camera.
  */
-export class OrbitView {
+export class OrbitView implements EditorView {
   readonly renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(50, 1, 0.01, 200);
@@ -211,10 +212,9 @@ export class OrbitView {
       m.userData.port = ref;
       this.markers.add(m);
     }
-    const key = (a: PortRef, b: PortRef) => [portKey(a), portKey(b)].sort().join();
-    const selectedJoint = selection?.kind === 'joint' ? key(selection.a, selection.b) : null;
     for (const j of layout.joints) {
-      const m = new THREE.Mesh(JOINT_GEOMETRY, key(j.a, j.b) === selectedJoint ? MARKER_SELECTED : MARKER_JOINT);
+      const selected = selection?.kind === 'joint' && sameJoint(selection, j);
+      const m = new THREE.Mesh(JOINT_GEOMETRY, selected ? MARKER_SELECTED : MARKER_JOINT);
       m.applyMatrix4(layout.pieces[j.a.piece].ports[j.a.port]);
       m.userData.joint = { a: j.a, b: j.b };
       this.markers.add(m);
@@ -236,7 +236,7 @@ export class OrbitView {
   }
 
   /** Floor point (course mm, X/Z) under a point on the page, or null when it is off the view or above the horizon. */
-  groundAt(clientX: number, clientY: number): [number, number] | null {
+  floorAt(clientX: number, clientY: number): [number, number] | null {
     const r = this.renderer.domElement.getBoundingClientRect();
     if (clientX < r.left || clientY < r.top || clientX > r.right || clientY > r.bottom) return null;
     const at = this.raycaster({ clientX, clientY }).ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), new THREE.Vector3());
@@ -309,13 +309,10 @@ const OUTLINE_DASHED = new THREE.LineDashedMaterial({ color: 0x3fd0ff, dashSize:
 
 /** The edge of a piece's road at the height of its fence tops, one loop per track. */
 function outlineOf(matrix: THREE.Matrix4, part: Parameters<typeof partGeometry>[0], solid: boolean): THREE.Line[] {
-  const p = new THREE.Vector3();
   const y = GLOBAL_SPEC.fenceHeight + 1;
   return partGeometry(part).tracks.map((track) => {
     const frames = track.samples.map((f) => matrix.clone().multiply(f));
-    const section = crossSection(track.lanes);
-    const edge = (x: number) => frames.map((f) => pointOnFrame(f, x, y, p).clone());
-    const pts = [...edge(section.left), ...edge(section.right).reverse()];
+    const pts = roadOutline(frames, crossSection(track.lanes), y);
     const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), solid ? OUTLINE_SOLID : OUTLINE_DASHED);
     if (!solid) line.computeLineDistances();
     return line;
