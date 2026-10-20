@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLOBAL_SPEC, laneOffset, variantOf, type PartDef } from './catalog';
 import type { Layout, PlacedPiece } from './course';
-import { partGeometry, partStands, pointOnFrame, type Stand } from './geometry';
+import { partGeometry, partStands, pointOnFrame, STAND_BEAM, STAND_DEPTH, STAND_LEG, type Stand } from './geometry';
 
 /** Scene units are metres; course data is in millimetres. */
 export const MM = 0.001;
@@ -186,10 +186,6 @@ export function buildCourseMeshes(layout: Layout): THREE.Group[] {
   });
 }
 
-/** Size of a support's legs and crossbar across the road, and its thickness along it, mm (#11, provisional: not measured). */
-const SUPPORT_LEG = 15;
-const SUPPORT_BEAM = 12;
-const SUPPORT_THICKNESS = 20;
 /** Automatic supports are wood-coloured (#11). */
 const SUPPORT_COLOR = '#b89a6e';
 
@@ -217,12 +213,12 @@ function pushSlab(positions: number[], face: THREE.Vector3[], along: THREE.Vecto
 export function buildSupportMesh(list: readonly Stand[], mat = material(SUPPORT_COLOR, 1, true)): THREE.Mesh {
   const positions: number[] = [];
   const up = new THREE.Vector3(0, 1, 0);
-  for (const { left, right, along, depth = SUPPORT_THICKNESS } of list) {
+  for (const { left, right, along, depth = STAND_DEPTH } of list) {
     // Across the road, level, from the left edge to the right.
     const across = right.clone().sub(left).setY(0).normalize();
     const floor = (v: THREE.Vector3) => new THREE.Vector3(v.x, 0, v.z);
-    const leg = across.clone().multiplyScalar(SUPPORT_LEG);
-    const beam = up.clone().multiplyScalar(SUPPORT_BEAM);
+    const leg = across.clone().multiplyScalar(STAND_LEG);
+    const beam = up.clone().multiplyScalar(STAND_BEAM);
     const l2 = left.clone().add(leg);
     const r2 = right.clone().sub(leg);
     pushSlab(positions, [floor(left), floor(l2), l2, left], along, depth / 2);

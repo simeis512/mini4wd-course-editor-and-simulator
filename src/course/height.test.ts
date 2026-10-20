@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
 import { GLOBAL_SPEC, getPart } from './catalog';
-import { partGeometry, partStands, pointOnFrame } from './geometry';
+import { partGeometry, partStands, pointOnFrame, STAND_BEAM, STAND_LEG } from './geometry';
 import { emptyCourse, layoutCourse, type Course } from './course';
 import { addPiece, setPose } from './edit';
 import { BRIDGE_HEIGHT } from './profile';
-import { atLevel, pieceHeights, SUPPORT_MIN_GAP, supports } from './height';
+import { atLevel, pieceHeights, SUPPORT_MIN_GAP, SUPPORT_OVERHANG, SUPPORT_REACH, supports } from './height';
 import { basicOval, chain } from './presets';
 
 /** A lone straight with its start port `y` mm off the floor. */
@@ -44,6 +44,8 @@ describe('supports', () => {
       expect(st.left.y).toBeCloseTo(100 - GLOBAL_SPEC.roadThickness);
       expect(st.right.y).toBeCloseTo(100 - GLOBAL_SPEC.roadThickness);
       expect(Math.abs(st.along.z)).toBeCloseTo(1);
+      // A little wider than the road.
+      expect(st.left.distanceTo(st.right)).toBeCloseTo(3 * GLOBAL_SPEC.lanePitch + GLOBAL_SPEC.fenceThickness + 2 * SUPPORT_OVERHANG);
     }
     const zs = s.map((st) => st.left.z).sort((a, b) => a - b);
     expect(zs[0]).toBeGreaterThan(50);
@@ -61,12 +63,25 @@ describe('supports', () => {
     for (const st of s) expect(Math.max(st.left.y, st.right.y)).toBeGreaterThan(SUPPORT_MIN_GAP);
   });
 
-  it('does not stand on road running underneath', () => {
+  it('straddles road running underneath, its crossbar over the fences', () => {
     const below = addPiece(emptyCourse(), 'straight', null);
-    expect(supports(layoutCourse(raised(150, below)))).toEqual([]);
+    const s = supports(layoutCourse(raised(150, below)));
+    expect(s).toHaveLength(2);
+    const roadHalf = (3 * GLOBAL_SPEC.lanePitch + GLOBAL_SPEC.fenceThickness) / 2;
+    for (const st of s) {
+      // The legs stand outside the lower road.
+      expect(Math.min(Math.abs(st.left.x), Math.abs(st.right.x)) - STAND_LEG).toBeGreaterThan(roadHalf);
+      expect(st.left.distanceTo(st.right)).toBeLessThan(2 * (roadHalf + SUPPORT_REACH));
+      expect(st.left.y - STAND_BEAM).toBeGreaterThan(GLOBAL_SPEC.fenceHeight);
+    }
   });
 
-  it('stands the ramps on the floor and lets the bridge span the lanes below', () => {
+  it('leaves the road to span road below when the crossbar would not clear it', () => {
+    const below = addPiece(emptyCourse(), 'straight', null);
+    expect(supports(layoutCourse(raised(60, below)))).toEqual([]);
+  });
+
+  it('stands the ramps on the floor beside their lower lanes', () => {
     const layout = layoutCourse(basicOval());
     const s = supports(layout);
     const ramps = layout.pieces.flatMap((pc, i) => (pc.part.id === 'bridge-approach' ? [i] : []));

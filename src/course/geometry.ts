@@ -186,6 +186,15 @@ export function pointOnFrame(frame: Matrix4, right: number, up: number, out = ne
   return out.set(-right, up, 0).applyMatrix4(frame);
 }
 
+/**
+ * Size of a stand's legs and crossbar across the road, and its usual depth
+ * along it, mm (#11, provisional: not measured). A little stout, like the
+ * blocks used under raised road at races (user, 2026-10-20).
+ */
+export const STAND_LEG = 20;
+export const STAND_BEAM = 15;
+export const STAND_DEPTH = 30;
+
 /** A stand's outline: the top corners above its outer legs and the level way it faces. */
 export interface Stand {
   left: Vector3;
