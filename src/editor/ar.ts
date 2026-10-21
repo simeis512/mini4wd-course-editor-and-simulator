@@ -3,7 +3,7 @@ import { ARButton } from 'three/addons/webxr/ARButton.js';
 import { MM } from '../course/mesh';
 import { ArGestures } from './ar-gesture';
 import { ArScan, DEPTH_SENSING } from './ar-scan';
-import { AR_SCALES, AR_TURN_STEP, arPose, floorPivot, headingOf, nextScale, scaleLabel } from './ar-pose';
+import { AR_SCALES, AR_TURN_STEP, arPose, floorPivot, headingOf, nextScale, scaleLabel, turnAbout } from './ar-pose';
 
 // Three uses a WebXR Layers projection layer whenever the browser offers one.
 // On Android Chrome that path left the AR camera feed black, so hide it and
@@ -96,10 +96,7 @@ export class ArMode {
     this.gestures = new ArGestures(document.getElementById('ar-touch')!, {
       enabled: () => !this.aiming && !!this.at,
       onDrag: (from, to) => this.drag(from, to),
-      onTwist: (turn) => {
-        this.yaw -= turn;
-        this.update();
-      },
+      onTwist: (turn, centre) => this.twist(-turn, centre),
     });
     // A tap on our controls must not also count as a tap on the floor.
     document.getElementById('ar-controls')!.addEventListener('beforexrselect', (e) => e.preventDefault());
@@ -193,6 +190,15 @@ export class ArMode {
     const b = this.floorUnder(to, this.at.y);
     if (!a || !b) return;
     this.at.add(b.sub(a));
+    this.update();
+  }
+
+  /** Turn the course by `turn` (radians about the up axis) around the floor under a point on the screen (#19). */
+  private twist(turn: number, centre: { x: number; y: number }): void {
+    if (!this.at) return;
+    const c = this.floorUnder(centre, this.at.y);
+    if (c) this.at = turnAbout(this.at, c, turn);
+    this.yaw += turn;
     this.update();
   }
 

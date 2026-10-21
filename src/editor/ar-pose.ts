@@ -60,3 +60,8 @@ export function angleDelta(from: number, to: number): number {
   if (d <= -Math.PI) d += 2 * Math.PI;
   return d;
 }
+
+/** Where the floor point `at` goes when the course turns by `turn` (radians, about the up axis) around `centre`. */
+export function turnAbout(at: THREE.Vector3, centre: THREE.Vector3, turn: number): THREE.Vector3 {
+  return at.clone().sub(centre).applyAxisAngle(new THREE.Vector3(0, 1, 0), turn).add(centre);
+}

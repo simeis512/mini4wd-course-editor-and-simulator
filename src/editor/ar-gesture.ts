@@ -6,8 +6,8 @@ export interface ArGestureHandlers {
   enabled(): boolean;
   /** One finger moved from one point on the screen to another. */
   onDrag(from: { x: number; y: number }, to: { x: number; y: number }): void;
-  /** Two fingers turned by this much on the screen, radians, clockwise positive. */
-  onTwist(turn: number): void;
+  /** Two fingers turned by this much on the screen (radians, clockwise positive) about the point between them. */
+  onTwist(turn: number, centre: { x: number; y: number }): void;
 }
 
 /** One-finger drag and two-finger twist on the AR screen (#19). */
@@ -34,7 +34,8 @@ export class ArGestures {
       if (this.fingers.size === 1) this.handlers.onDrag(from, to);
       else if (this.fingers.size === 2) {
         const other = [...this.fingers].find(([id]) => id !== e.pointerId)![1];
-        this.handlers.onTwist(angleDelta(twistAngle(other, from), twistAngle(other, to)));
+        const centre = { x: (other.x + to.x) / 2, y: (other.y + to.y) / 2 };
+        this.handlers.onTwist(angleDelta(twistAngle(other, from), twistAngle(other, to)), centre);
       }
     }
     this.fingers.set(e.pointerId, to);

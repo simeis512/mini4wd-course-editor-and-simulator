@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { MM } from '../course/mesh';
-import { angleDelta, AR_SCALES, arPose, dotCell, floorPivot, headingOf, nextScale, scaleLabel, twistAngle } from './ar-pose';
+import { angleDelta, AR_SCALES, arPose, dotCell, floorPivot, headingOf, nextScale, scaleLabel, turnAbout, twistAngle } from './ar-pose';
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
@@ -76,5 +76,21 @@ describe('twist', () => {
     expect(angleDelta(after, before)).toBeCloseTo(-Math.PI / 2);
     expect(angleDelta(Math.PI - 0.1, -Math.PI + 0.1)).toBeCloseTo(0.2);
     expect(angleDelta(-Math.PI + 0.1, Math.PI - 0.1)).toBeCloseTo(-0.2);
+  });
+});
+
+describe('turnAbout', () => {
+  it('keeps the turning centre where it is', () => {
+    const pivot = v(100, 0, 200);
+    const at = v(0.5, -1.2, -1.5);
+    const centre = v(0.8, -1.2, -1.0);
+    const yaw = 0.3;
+    const turn = 0.9;
+    // The course point over the centre before the turn...
+    const before = arPose(pivot, at, yaw, 1 / 5);
+    const under = centre.clone().applyMatrix4(before.clone().invert());
+    // ...is still there after it.
+    const after = arPose(pivot, turnAbout(at, centre, turn), yaw + turn, 1 / 5);
+    expectNear(under.applyMatrix4(after), centre);
   });
 });
