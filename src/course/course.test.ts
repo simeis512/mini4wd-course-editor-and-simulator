@@ -2,7 +2,7 @@ import { Matrix4, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { compatible, emptyCourse, layoutCourse } from './course';
 import { FREE_STRAIGHT_MAX, FREE_STRAIGHT_MIN, getPart, partOf } from './catalog';
-import { addPiece, deletePiece, flipPiece, markIntended, moveGroup, reverseDirection, pieceMiddle, setLength, setVariant, turnAboutMiddle } from './edit';
+import { addFreePiece, addPiece, deletePiece, flipPiece, markIntended, moveGroup, reverseDirection, pieceMiddle, setLength, setPose, setVariant, turnAboutMiddle } from './edit';
 import { facingError } from './geometry';
 import { basicOval, chain } from './presets';
 
@@ -252,6 +252,20 @@ describe('home-made straights (#69)', () => {
     expect(partOf(c.pieces[0]).name).toBe('自作ストレート 100mm');
     expect(partOf({ part: 'free-straight', length: 100 })).toBe(partOf(c.pieces[0]));
     expect(partOf(c.pieces[1])).toBe(getPart('straight'));
+  });
+
+  it('moves pieces that only meet its far end along with it', () => {
+    // A straight placed on its own where the home-made one ends, with another hung off it:
+    // they meet by loop closure, not by a stored link.
+    let c = setLength(addPiece(emptyCourse(), 'free-straight', null), 0, 100);
+    c = setPose(addFreePiece(c, 'straight', 0, 0, 0), 1, { pos: [0, 0, 100], rot: [0, 0, 0] });
+    c = addPiece(c, 'curve45', { piece: 1, port: 1 });
+    expect(layoutCourse(c).closures).toHaveLength(1);
+    const layout = layoutCourse(setLength(c, 0, 300));
+    expect(layout.closures).toHaveLength(1);
+    expect(new Vector3().setFromMatrixPosition(layout.pieces[2].ports[0]).z).toBeCloseTo(840);
+    // The pieces before it stay put.
+    expect(new Vector3().setFromMatrixPosition(layout.pieces[0].ports[0]).z).toBeCloseTo(0);
   });
 
   it('keeps its length when the piece is placed another way', () => {

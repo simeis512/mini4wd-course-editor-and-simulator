@@ -189,7 +189,44 @@ export function setLength(course: Course, index: number, length: number): Course
   const mm = lengthWithin(part, length);
   if (mm === part.lengths.default) delete rec.length;
   else rec.length = mm;
-  return next;
+  return withFarSide(course, next, index);
+}
+
+/**
+ * `next`, a change to piece `index` that moves its far end, with the pieces
+ * that only meet that end (a loop closed by placing them there, not a stored
+ * link) moved along with it, as the pieces hanging off it are. Everything
+ * reached from the far end goes, except the pieces the changed one hangs
+ * off: where the far side comes round to them, the loop opens there.
+ */
+function withFarSide(course: Course, next: Course, index: number): Course {
+  const before = layoutCourse(course);
+  const after = layoutCourse(next);
+  const rec = course.pieces[index];
+  const near = 'port' in rec ? rec.port : 0;
+  const far = before.pieces[index].ports.map((_, p) => p).filter((p) => p !== near);
+  if (far.length !== 1) return next;
+  const delta = after.pieces[index].ports[far[0]].clone().multiply(before.pieces[index].ports[far[0]].clone().invert());
+  // Pieces it hangs off stay; pieces hanging off it already follow.
+  const stay = new Set([index]);
+  for (let ref = anchorRef(rec); ref; ref = anchorRef(course.pieces[ref[0]])) stay.add(ref[0]);
+  const hangsOff = (i: number): boolean => {
+    for (let ref = anchorRef(course.pieces[i]); ref; ref = anchorRef(course.pieces[ref[0]])) if (ref[0] === index) return true;
+    return false;
+  };
+  const reached = new Set<number>();
+  const queue = before.joints.flatMap((j) => [[j.a, j.b], [j.b, j.a]]).filter(([x]) => x.piece === index && x.port === far[0]).map(([, y]) => y.piece);
+  while (queue.length) {
+    const i = queue.pop()!;
+    if (stay.has(i) || reached.has(i)) continue;
+    reached.add(i);
+    for (const j of before.joints) {
+      if (j.a.piece === i) queue.push(j.b.piece);
+      if (j.b.piece === i) queue.push(j.a.piece);
+    }
+  }
+  const moving = new Set([...reached].filter((i) => !hangsOff(i)));
+  return moving.size ? tidyCuts(moveGroup(next, moving, delta)) : next;
 }
 
 /** Round an angle to the 0.1° kept in URLs. */
