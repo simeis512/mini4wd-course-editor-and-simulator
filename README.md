@@ -27,6 +27,8 @@ AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari 
 ## 使い方（コースエディタ）
 
 - 2D（上から見た図）で編集し、3D で立体表示を確認する。AR は 3D 表示の下のボタンから（対応端末のみ）
+  - AR ではスマホを床に向けると青い輪が出る。床をタップするとコースがそこに置かれる（床を見つけられない端末では足元の少し前に置く）
+  - 置いた後は ⟲／⟳ で 15° ずつ回す、「大きさ」で実寸 → 1/5 → 1/10 → 1/20 を切り替える、「置き直す」で場所を選び直す
 - オレンジの矢印（開いた口）をタップ → パーツを選ぶとつながる。続けて選ぶと先へ伸びていく
 - ピースをタップして選択 → 色の変更、反転（カーブの左右切り替え）、削除。削除しても先のピースはその場に残る
 - ドラッグで移動、ホイール／ピンチで拡大縮小。Ctrl+Z / Ctrl+Y、Delete、F（反転）も使える
@@ -66,7 +68,7 @@ AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari 
 - `src/course/clash.ts` ピース同士の重なりと立体交差の高さ（検証）
 - `src/course/mesh.ts` 3D メッシュ生成（路面＋フェンスの掃引、支柱。シーンは m 単位）
 - `src/editor/app.ts` エディタの状態と操作。`panels.ts` パネル表示、`checks.ts` コース欄（検証の結果）、`shopping.ts` コース欄の購入リスト、`attach.ts` ウォッシュボードの設定欄、`drag.ts` ドラッグ操作、`share.ts` URL・ファイルでの受け渡し、`levels.ts` 2D の高さ表示の設定、`history.ts` 元に戻す／やり直し
-- `src/editor/view2d.ts` / `view3d.ts` 2D 編集ビュー、3D/AR ビュー（共通インターフェースは `view.ts`、2D の道の外形は `outline2d.ts`）
+- `src/editor/view2d.ts` / `view3d.ts` 2D 編集ビュー、3D/AR ビュー（共通インターフェースは `view.ts`、AR の設置と操作は `ar.ts`、その置き方の計算は `ar-pose.ts`、2D の道の外形は `outline2d.ts`）
 - `src/physics/` Rapier の物理ワールド（シミュレーター用、未接続）
 
 コードの置き場所や実装の進め方のルールは [CONTRIBUTING.md](CONTRIBUTING.md) を参照。

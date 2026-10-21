@@ -40,6 +40,7 @@ DOM にもビューにも触らない処理が `editor` に 10 行以上あれ�
 | `share.ts` | URL・ファイルでのコースの受け渡し |
 | `view.ts` | 2D/3D ビュー共通のインターフェース `EditorView` |
 | `view2d.ts` / `view3d.ts` | 各ビューの描画とポインター操作（2D の道の外形は `outline2d.ts`） |
+| `ar.ts` / `ar-pose.ts` | 3D ビューの AR（床への設置・大きさ・向き）と、その置き方の計算 |
 | `history.ts`、`dom.ts`、`icons.ts` など | 小さな部品 |
 
 2D と 3D の両方に要る機能は `EditorView` に足し、`app.ts` で「2D なら…3D なら…」と分岐しないようにします。

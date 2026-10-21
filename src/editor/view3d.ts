@@ -77,16 +77,19 @@ export class OrbitView implements EditorView {
     this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
     this.controls.addEventListener('change', () => this.handlers.onViewChange?.());
 
-    this.ar = new ArMode(renderer, container, this.root, {
+    this.ar = new ArMode(renderer, container, this.root, this.scene, {
       onStart: () => {
         this.scene.background = null;
         this.grid.visible = false;
         this.controls.enabled = false;
+        // AR is for looking at the course only, so the editing marks stay in the 3D view.
+        this.markers.visible = this.outlines.visible = this.clashMarks.visible = false;
       },
       onEnd: () => {
         this.scene.background = BACKGROUND;
         this.grid.visible = true;
         this.controls.enabled = true;
+        this.markers.visible = this.outlines.visible = this.clashMarks.visible = true;
         // Keep the loop matching the current view now the session is over.
         this.setActive(this.active);
       },
@@ -124,7 +127,7 @@ export class OrbitView implements EditorView {
     this.resize();
     // Never stop the loop while an AR session is running.
     const run = active || this.renderer.xr.isPresenting;
-    this.renderer.setAnimationLoop(run ? () => this.render() : null);
+    this.renderer.setAnimationLoop(run ? (_, frame) => this.render(frame) : null);
   }
 
   private onDown(e: PointerEvent): void {
@@ -315,9 +318,10 @@ export class OrbitView implements EditorView {
     this.handlers.onViewChange?.();
   }
 
-  private render(): void {
+  private render(frame?: XRFrame): void {
     try {
-      if (!this.renderer.xr.isPresenting) this.controls.update();
+      if (this.renderer.xr.isPresenting) this.ar.onFrame(frame);
+      else this.controls.update();
       const glow = blink(performance.now());
       for (const m of this.runMaterials) m.emissiveIntensity = 0.3 + 1.2 * glow;
       this.renderer.render(this.scene, this.camera);
