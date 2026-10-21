@@ -4,12 +4,24 @@ import type { PartDef, PortDef } from './part';
 import { bendAngle, bendMatrix, BEND_LIMIT, pieceGeometry, TWIST_LIMIT, type Bend } from './flex';
 import { attach, FACE, facingError, IDENTITY_POSE, poseToMatrix, type FrameError, type PartGeometry, type Pose } from './geometry';
 
-/** What every piece record has. */
-interface RecBase {
-  part: string;
+/** A piece's own settings, which go with it however it is placed. */
+export interface PieceSettings {
   variant?: number;
   /** Twist of the piece about its centreline, deg, + lowers the right side (spec 16.2). */
   twist?: number;
+}
+
+/** What every piece record has. */
+interface RecBase extends PieceSettings {
+  part: string;
+}
+
+/** The settings of `rec`, to carry over to a record that places it some other way. */
+export function settingsOf(rec: PieceSettings): PieceSettings {
+  const out: PieceSettings = {};
+  if (rec.variant !== undefined) out.variant = rec.variant;
+  if (rec.twist) out.twist = rec.twist;
+  return out;
 }
 
 /** A placed piece. Pieces only refer to pieces before them (spec 5.1). */

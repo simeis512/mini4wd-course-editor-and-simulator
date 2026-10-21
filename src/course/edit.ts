@@ -8,6 +8,7 @@ import {
   layoutCourse,
   placementOf,
   portKey,
+  settingsOf,
   type Course,
   type Layout,
   type PieceRec,
@@ -99,10 +100,7 @@ export function freeSpot(course: Course, partId: string, port: number, x: number
 
 /** `rec` re-anchored as a free piece at `pose` from the port `base` (null: the world). */
 export function freeRec(rec: PieceRec, base: PortRef | null, pose: Pose): PieceRec {
-  const out: PieceRec = { part: rec.part, port: 'port' in rec ? rec.port : 0, free: base && [base.piece, base.port], pose };
-  if (rec.variant !== undefined) out.variant = rec.variant;
-  if (rec.twist) out.twist = rec.twist;
-  return out;
+  return { part: rec.part, port: 'port' in rec ? rec.port : 0, free: base && [base.piece, base.port], pose, ...settingsOf(rec) };
 }
 
 /**
