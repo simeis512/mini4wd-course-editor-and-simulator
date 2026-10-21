@@ -28,7 +28,7 @@ import { isZeroBend } from './flex';
  *   [split mark count, then piece, port for each]  when flagged
  *   [open-on-purpose mark count, then piece, port for each]  when flagged (#13)
  *   [attachment count, then for each: kind (index into ATTACHMENT_CODES),
- *    piece, lane, offset (mm)]                                  when flagged (spec 4)
+ *    piece, lane, offset (mm), side (mm, signed)]               when flagged (spec 4)
  *
  * Format 4 is the same without lengths and attachments, format 3 also without shifts,
  * format 2 also without the open-on-purpose marks, and format 1 without
@@ -144,6 +144,7 @@ export function courseToBytes(course: Course): Uint8Array {
       const code = ATTACHMENT_CODES.indexOf(a.kind);
       if (code < 0) throw new Error(`attachment has no code: ${a.kind}`);
       for (const n of [code, a.piece, a.lane, Math.round(a.offset)]) w.uint(n);
+      w.int(Math.round(a.side));
     }
   }
   return new Uint8Array(w.bytes);
@@ -197,7 +198,7 @@ export function courseFromBytes(bytes: Uint8Array): Course {
     course.attachments = Array.from({ length: r.uint() }, () => {
       const kind = ATTACHMENT_CODES[r.uint()];
       if (!kind) throw new Error('unknown attachment code');
-      return { kind, piece: r.uint(), lane: r.uint(), offset: r.uint() };
+      return { kind, piece: r.uint(), lane: r.uint(), offset: r.uint(), side: r.int() };
     });
   }
   if (r.pos !== bytes.length) throw new Error('unexpected data after course');

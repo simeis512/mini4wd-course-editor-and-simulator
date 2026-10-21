@@ -374,31 +374,45 @@ export function partOf(rec: { part: string; length?: number }): PartDef {
   return out;
 }
 
-/** Something laid on the road (spec 4): a washboard. */
+/**
+ * Something laid on the road (spec 4): a washboard. A long plate laid
+ * along the lane, its top flat and its ends sloping down to thin tabs
+ * that are taped to the road (69572 manual and photos, user 2026-10-21).
+ */
 export interface AttachmentDef {
   id: string;
   name: string;
-  /** Height of its bumps above the road, mm (official). */
+  /** Height of its flat top above the road, mm (official). */
   height: number;
-  /** Length along the lane, mm (official: 120, 69572). */
+  /** Length along the lane, tabs included, mm (official: 120, 69572). */
   length: number;
-  /** Width across the lane, mm. */
+  /** Width across the lane, mm (official: 49 / 55). */
   width: number;
-  /** Number of bumps along it. */
-  bumps: number;
+  /** Length of each sloping end, mm. */
+  ramp: number;
+  /** Length and thickness of the thin tab at each end, mm. */
+  tab: number;
+  tabThickness: number;
 }
 
 /**
- * Bumps along a washboard and its width across the lane: not measured,
- * so the lane's width and a guess (spec 4, #1, provisional).
+ * The sloping ends and tabs are not measured: guesses from the manual's
+ * drawing (spec 4, #1, provisional).
  */
-const WASHBOARD_BUMPS = 5;
-const WASHBOARD_WIDTH = GLOBAL_SPEC.laneWidth;
+const WASHBOARD_TAB = 10;
+const WASHBOARD_TAB_THICKNESS = 1;
+const washboardRamp = (height: number) => 2 * height;
 
-export const ATTACHMENTS: readonly AttachmentDef[] = [
-  { id: 'washboard-5', name: 'ウォッシュボード 5mm', height: 5, length: 120, width: WASHBOARD_WIDTH, bumps: WASHBOARD_BUMPS },
-  { id: 'washboard-10', name: 'ウォッシュボード 10mm', height: 10, length: 120, width: WASHBOARD_WIDTH, bumps: WASHBOARD_BUMPS },
-];
+export const ATTACHMENTS: readonly AttachmentDef[] = [5, 10].map((height, i) => ({
+  id: `washboard-${height}`,
+  name: `ウォッシュボード ${height}mm`,
+  height,
+  length: 120,
+  width: [49, 55][i],
+  ramp: washboardRamp(height),
+  tab: WASHBOARD_TAB,
+  tabThickness: WASHBOARD_TAB_THICKNESS,
+}));
 
 /** Attachment number in shared URLs. Append only, as PART_CODES. */
 export const ATTACHMENT_CODES: readonly string[] = ['washboard-5', 'washboard-10'];

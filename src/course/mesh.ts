@@ -223,16 +223,15 @@ export function buildCourseMeshes(layout: Layout, visuals: ModelVisuals = new Ma
   });
 }
 
-/** Washboards are dark grey: their colour is not known (spec 4, provisional). */
-export const ATTACHMENT_COLOR = '#55595f';
-/** Thinnest a washboard is drawn, mm, so it shows over the road between its bumps (cosmetic). */
-const ATTACHMENT_PLATE = 1;
+/** Washboards are red, as sold (69572). */
+export const ATTACHMENT_COLOR = '#e5483f';
+/** How far a washboard is drawn sunk into the road, mm, so its underside never shows through (cosmetic). */
+const ATTACHMENT_SINK = 0.5;
 
-/** A washboard on its piece, part-local; it sits on the road and its bumps rise from it. */
+/** A washboard on its piece, part-local: a plate on the road, sloping down to thin tabs at its ends. */
 function attachmentMesh(pc: PlacedPiece, a: Attachment): THREE.Mesh {
   const { frames, tops, half } = attachmentShape(pc, a);
-  const top = tops.map((t) => Math.max(t, ATTACHMENT_PLATE));
-  const mesh = new THREE.Mesh(sweepBox(frames, -half, half, -ATTACHMENT_PLATE, top), material(ATTACHMENT_COLOR, 1));
+  const mesh = new THREE.Mesh(sweepBox(frames, -half, half, -ATTACHMENT_SINK, tops), material(ATTACHMENT_COLOR, 1));
   mesh.name = 'attachment';
   return mesh;
 }

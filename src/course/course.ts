@@ -54,6 +54,8 @@ export interface Attachment {
   lane: number;
   /** From the start of the main centreline to the attachment's middle, mm. */
   offset: number;
+  /** Its middle across the lane from the lane's centre, mm, + right looking along the centreline. */
+  side: number;
 }
 
 export interface Course {
@@ -207,7 +209,7 @@ export function validateCourse(course: Course): void {
     const rec = course.pieces[a.piece];
     getAttachment(a.kind);
     if (!rec || !partOf(rec).lanes.includes(a.lane)) throw new Error(`${a.kind} on missing lane ${a.piece}:${a.lane}`);
-    if (!(a.offset >= 0)) throw new Error(`${a.kind} at ${a.offset}mm`);
+    if (!(a.offset >= 0) || !Number.isFinite(a.side)) throw new Error(`${a.kind} at ${a.offset}mm, ${a.side}mm across`);
   }
   for (const [what, marks] of [['split', course.cuts], ['open', course.intended]] as const) {
     for (const [piece, port] of marks ?? []) {

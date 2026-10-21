@@ -230,13 +230,19 @@ export class TopView implements EditorView {
         drawnMarks.add(o.piece);
         for (const a of layout.attachments) {
           if (a.piece !== o.piece) continue;
-          const { outline, crests } = attachmentOutline(pc, a);
+          const { outline, tabs, lines } = attachmentOutline(pc, a);
           path(outline.map(xz), true);
           ctx.fillStyle = ATTACHMENT_COLOR;
           ctx.fill();
-          ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-          for (const crest of crests) {
-            path(crest.map(xz), false);
+          // The thin tabs at the ends, where the tape goes, are lighter.
+          ctx.fillStyle = 'rgba(255,255,255,0.55)';
+          for (const tab of tabs) {
+            path(tab.map(xz), true);
+            ctx.fill();
+          }
+          ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+          for (const line of [...lines, outline]) {
+            path(line.map(xz), line === outline);
             ctx.stroke();
           }
         }

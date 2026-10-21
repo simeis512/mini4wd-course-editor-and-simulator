@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { addAttachment, attachmentShape, moveAttachment, offsetWithin, removeAttachment } from './attachments';
-import { laneOffset } from './catalog';
+import { addAttachment, attachmentHeight, attachmentShape, moveAttachment, offsetWithin, removeAttachment, sideLimit } from './attachments';
+import { getAttachment, laneOffset } from './catalog';
 import { emptyCourse, layoutCourse, validateCourse } from './course';
 import { addPiece, deletePiece, setLength } from './edit';
 
@@ -14,22 +14,34 @@ function straights() {
 describe('washboards (spec 4, #17)', () => {
   it('goes on the middle lane halfway along by default', () => {
     const c = addAttachment(straights(), 'washboard-5', 1);
-    expect(c.attachments).toEqual([{ kind: 'washboard-5', piece: 1, lane: 1, offset: 270 }]);
+    // Along the left fence of the lane, as the manual lays it.
+    expect(c.attachments).toEqual([{ kind: 'washboard-5', piece: 1, lane: 1, offset: 270, side: -33 }]);
     expect(layoutCourse(c).attachments).toEqual(c.attachments);
   });
 
-  it('lies on its lane, with bumps as high as the board', () => {
+  it('lies on its lane against the fence, a flat top sloping down to thin tabs', () => {
     const c = addAttachment(straights(), 'washboard-10', 0, 0, 100);
-    const layout = layoutCourse(c);
-    const shape = attachmentShape(layout.pieces[0], c.attachments![0]);
+    const shape = attachmentShape(layoutCourse(c).pieces[0], c.attachments![0]);
     const first = new Vector3().setFromMatrixPosition(shape.frames[0]);
     const last = new Vector3().setFromMatrixPosition(shape.frames[shape.frames.length - 1]);
-    // Lane 0 is on the left (+X) looking along the centreline.
-    expect(first.x).toBeCloseTo(-laneOffset(0));
+    // Lane 0 is on the left (+X) looking along the centreline; the board 30mm further left.
+    expect(first.x).toBeCloseTo(-laneOffset(0) + 30);
     expect(first.z).toBeCloseTo(40);
     expect(last.z).toBeCloseTo(160);
-    expect(Math.max(...shape.tops)).toBeCloseTo(10, 0);
-    expect(shape.tops[0]).toBeCloseTo(0);
+    expect(shape.half).toBe(27.5);
+    expect(shape.tops[0]).toBe(1);
+    expect(Math.max(...shape.tops)).toBe(10);
+    const def = getAttachment('washboard-10');
+    expect(attachmentHeight(def, 5)).toBe(1);
+    expect(attachmentHeight(def, 20)).toBeCloseTo(5.5);
+    expect(attachmentHeight(def, 60)).toBe(10);
+  });
+
+  it('stays between the fences', () => {
+    let c = addAttachment(straights(), 'washboard-5', 0);
+    c = moveAttachment(c, 0, { side: 999 });
+    expect(c.attachments![0].side).toBe(sideLimit('washboard-5'));
+    expect(moveAttachment(c, 0, { side: 0.4 }).attachments![0].side).toBe(0);
   });
 
   it('stays on the road when placed past its end or the piece gets shorter', () => {
@@ -54,14 +66,14 @@ describe('washboards (spec 4, #17)', () => {
     let c = addAttachment(straights(), 'washboard-5', 0);
     c = addAttachment(c, 'washboard-10', 1);
     const next = deletePiece(c, 0);
-    expect(next.attachments).toEqual([{ kind: 'washboard-10', piece: 0, lane: 1, offset: 270 }]);
+    expect(next.attachments).toEqual([{ kind: 'washboard-10', piece: 0, lane: 1, offset: 270, side: -30 }]);
     expect(deletePiece(next, 0)).not.toHaveProperty('attachments');
   });
 
   it('is checked against the pieces', () => {
     const c = straights();
-    expect(() => validateCourse({ ...c, attachments: [{ kind: 'washboard-5', piece: 5, lane: 0, offset: 0 }] })).toThrow();
-    expect(() => validateCourse({ ...c, attachments: [{ kind: 'washboard-5', piece: 0, lane: 3, offset: 0 }] })).toThrow();
-    expect(() => validateCourse({ ...c, attachments: [{ kind: 'no-such', piece: 0, lane: 0, offset: 0 }] })).toThrow();
+    expect(() => validateCourse({ ...c, attachments: [{ kind: 'washboard-5', piece: 5, lane: 0, offset: 0, side: 0 }] })).toThrow();
+    expect(() => validateCourse({ ...c, attachments: [{ kind: 'washboard-5', piece: 0, lane: 3, offset: 0, side: 0 }] })).toThrow();
+    expect(() => validateCourse({ ...c, attachments: [{ kind: 'no-such', piece: 0, lane: 0, offset: 0, side: 0 }] })).toThrow();
   });
 });
