@@ -16,7 +16,7 @@ export interface AttachmentShape {
   tops: number[];
   /** Half its width across the lane. */
   half: number;
-  /** Indices of the frames where the tabs end and the flat top begins and ends. */
+  /** Indices of the frames where the entry tab ends, the top starts and the thick end is. */
   edges: number[];
 }
 
@@ -44,15 +44,23 @@ export function sideWithin(a: Pick<Attachment, 'kind' | 'side'>): number {
   return Math.round(Math.min(limit, Math.max(-limit, a.side)));
 }
 
+/** A step in an attachment's sampling just past the thick end, where the top drops to the tab, mm. */
+const DROP = 0.01;
+
 /**
- * Height of an attachment's top `s` mm from one end: a thin tab, a slope
- * up (smoothed at both ends) and the flat top, then the same back down.
+ * Height of an attachment's top `s` mm from the end machines come in by:
+ * a thin tab, a curve up, the top climbing straight to its full height,
+ * then a drop to the other tab.
  */
 export function attachmentHeight(def: AttachmentDef, s: number): number {
-  const u = Math.min(s, def.length - s) - def.tab;
-  if (u < 0) return def.tabThickness;
-  const t = Math.min(1, u / def.ramp);
-  return def.tabThickness + (def.height - def.tabThickness) * t * t * (3 - 2 * t);
+  const u = s - def.tab;
+  const top = def.length - 2 * def.tab;
+  if (u < 0 || u > top) return def.tabThickness;
+  if (u < def.ramp) {
+    const t = u / def.ramp;
+    return def.tabThickness + (def.entryHeight - def.tabThickness) * t * t * (3 - 2 * t);
+  }
+  return def.entryHeight + ((def.height - def.entryHeight) * (u - def.ramp)) / (top - def.ramp);
 }
 
 /** Where an attachment lies on its piece `pc` and the shape of its top (provisional, spec 4). */
@@ -61,38 +69,49 @@ export function attachmentShape(pc: PlacedPiece, a: Attachment): AttachmentShape
   const { samples } = pc.geometry;
   const distances = distancesAlong(samples);
   const mid = offsetWithin(pc, a);
-  // Sample at the tab and top edges exactly, and every STEP mm between.
-  const marks = [def.tab, def.tab + def.ramp, def.length - def.tab - def.ramp, def.length - def.tab];
-  const along = [...new Set([...Array.from({ length: Math.ceil(def.length / STEP) + 1 }, (_, i) => Math.min(def.length, i * STEP)), ...marks])].sort((x, y) => x - y);
+  // From the entry end: the tab's edge, the top's start, the thick end and the drop past it.
+  const marks = [def.tab, def.tab + def.ramp, def.length - def.tab, def.length - def.tab + DROP];
+  const fromEntry = [...new Set([...Array.from({ length: Math.ceil(def.length / STEP) + 1 }, (_, i) => Math.min(def.length, i * STEP)), ...marks])].sort((x, y) => x - y);
+  // Laid along the centreline, entry end first unless reversed.
+  const along = a.reverse ? fromEntry.map((s) => def.length - s).reverse() : fromEntry;
+  const entryAt = (x: number) => (a.reverse ? def.length - x : x);
   // Across to the lane and its place in it; + X is left.
   const across = laneOffset(a.lane) + sideWithin(a);
-  const frames = along.map((s) => {
-    const f = frameAlong(samples, distances, mid - def.length / 2 + s);
+  const frames = along.map((x) => {
+    const f = frameAlong(samples, distances, mid - def.length / 2 + x);
     return f.setPosition(pointOnFrame(f, across, 0));
   });
   return {
     frames,
-    tops: along.map((s) => attachmentHeight(def, s)),
+    tops: along.map((x) => attachmentHeight(def, entryAt(x))),
     half: def.width / 2,
-    edges: marks.map((m) => along.indexOf(m)),
+    edges: marks.slice(0, 3).map((m) => along.indexOf(a.reverse ? def.length - m : m)),
   };
 }
 
 /**
  * An attachment seen from above, world mm: its outline (one edge, then the
- * other back), the tabs at its ends, and lines across where its top is flat.
+ * other back), the tabs at its ends, the line where its top starts and the
+ * thick end machines leave by.
  */
-export function attachmentOutline(pc: PlacedPiece, a: Attachment): { outline: Vector3[]; tabs: Vector3[][]; lines: [Vector3, Vector3][] } {
+export function attachmentOutline(
+  pc: PlacedPiece,
+  a: Attachment,
+): { outline: Vector3[]; tabs: Vector3[][]; top: [Vector3, Vector3]; thick: [Vector3, Vector3] } {
   const { frames, half, edges } = attachmentShape(pc, a);
   const world = frames.map((f) => pc.matrix.clone().multiply(f));
   const edge = (x: number) => world.map((f) => pointOnFrame(f, x, 0));
   const [left, right] = [edge(-half), edge(half)];
-  const part = (i: number, j: number) => [...left.slice(i, j + 1), ...right.slice(i, j + 1).reverse()];
-  const [tabIn, topIn, topOut, tabOut] = edges;
+  const part = (i: number, j: number) => [...left.slice(Math.min(i, j), Math.max(i, j) + 1), ...right.slice(Math.min(i, j), Math.max(i, j) + 1).reverse()];
+  const [tabIn, topIn, thick] = edges;
+  const [first, last] = [0, world.length - 1];
+  const entryEnd = a.reverse ? last : first;
+  const exitEnd = a.reverse ? first : last;
   return {
     outline: [...left, ...right.slice().reverse()],
-    tabs: [part(0, tabIn), part(tabOut, world.length - 1)],
-    lines: [topIn, topOut].map((i) => [left[i], right[i]]),
+    tabs: [part(entryEnd, tabIn), part(thick, exitEnd)],
+    top: [left[topIn], right[topIn]],
+    thick: [left[thick], right[thick]],
   };
 }
 
@@ -114,13 +133,15 @@ export function addAttachment(course: Course, kind: string, piece: number, lane?
   return next;
 }
 
-/** Change an attachment's lane or place along or across it (whole mm). */
-export function moveAttachment(course: Course, index: number, to: { lane?: number; offset?: number; side?: number }): Course {
+/** Change an attachment's lane, its place along or across it (whole mm), or which way it faces. */
+export function moveAttachment(course: Course, index: number, to: { lane?: number; offset?: number; side?: number; reverse?: boolean }): Course {
   const next = structuredClone(course);
   const a = next.attachments![index];
   if (to.lane !== undefined && partOf(next.pieces[a.piece]).lanes.includes(to.lane)) a.lane = to.lane;
   if (to.offset !== undefined) a.offset = Math.max(0, Math.round(to.offset));
   if (to.side !== undefined) a.side = sideWithin({ kind: a.kind, side: to.side });
+  if (to.reverse) a.reverse = true;
+  else if (to.reverse === false) delete a.reverse;
   return next;
 }
 

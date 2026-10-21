@@ -376,19 +376,22 @@ export function partOf(rec: { part: string; length?: number }): PartDef {
 
 /**
  * Something laid on the road (spec 4): a washboard. A long plate laid
- * along the lane, its top flat and its ends sloping down to thin tabs
- * that are taped to the road (69572 manual and photos, user 2026-10-21).
+ * along the lane, its top a flat slope that climbs from the end machines
+ * come in by to its full height at the end they leave by, each end a thin
+ * tab that is taped to the road (69572 manual and photos, user 2026-10-21).
  */
 export interface AttachmentDef {
   id: string;
   name: string;
-  /** Height of its flat top above the road, mm (official). */
+  /** Height of its top at the thick end, mm (official). */
   height: number;
+  /** Height its top starts climbing from at the thin end, mm. */
+  entryHeight: number;
   /** Length along the lane, tabs included, mm (official: 120, 69572). */
   length: number;
   /** Width across the lane, mm (official: 49 / 55). */
   width: number;
-  /** Length of each sloping end, mm. */
+  /** Length of the curve up from the entry tab to the top, mm. */
   ramp: number;
   /** Length and thickness of the thin tab at each end, mm. */
   tab: number;
@@ -396,17 +399,20 @@ export interface AttachmentDef {
 }
 
 /**
- * The sloping ends and tabs are not measured: guesses from the manual's
- * drawing (spec 4, #1, provisional).
+ * The curve up at the thin end, the height the top starts from and the
+ * tabs are not measured: guesses from the manual's drawing (spec 4, #1,
+ * provisional).
  */
 const WASHBOARD_TAB = 10;
 const WASHBOARD_TAB_THICKNESS = 1;
-const washboardRamp = (height: number) => 2 * height;
+const washboardRamp = (height: number) => height;
+const washboardEntry = (height: number) => height / 2;
 
 export const ATTACHMENTS: readonly AttachmentDef[] = [5, 10].map((height, i) => ({
   id: `washboard-${height}`,
   name: `ウォッシュボード ${height}mm`,
   height,
+  entryHeight: washboardEntry(height),
   length: 120,
   width: [49, 55][i],
   ramp: washboardRamp(height),

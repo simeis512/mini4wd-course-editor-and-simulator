@@ -56,6 +56,8 @@ export interface Attachment {
   offset: number;
   /** Its middle across the lane from the lane's centre, mm, + right looking along the centreline. */
   side: number;
+  /** Machines come in by the end nearer the far end of the centreline: the thick end faces its start. */
+  reverse?: boolean;
 }
 
 export interface Course {

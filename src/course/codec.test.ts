@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { courseFromBytes, courseFromHash, courseFromJson, courseToBytes, courseToHash, decodeCourse, encodeCourse } from './codec';
-import { addAttachment } from './attachments';
+import { addAttachment, moveAttachment } from './attachments';
 import { type Course } from './course';
 import { addPiece, deletePiece, flipPiece, markIntended, setLength, setShift, setVariant } from './edit';
 import { splitJoint } from './joining';
@@ -17,6 +17,7 @@ function sample(): Course {
   c = addPiece(c, 'free-straight', null, 1);
   c = setLength(c, c.pieces.length - 1, 123);
   c = addAttachment(c, 'washboard-10', 3, 2, 50);
+  c = moveAttachment(c, 0, { reverse: true, side: 10 });
   return { ...c, name: 'テストコース', dir: -1 };
 }
 

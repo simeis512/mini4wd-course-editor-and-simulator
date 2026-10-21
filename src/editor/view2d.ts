@@ -230,7 +230,7 @@ export class TopView implements EditorView {
         drawnMarks.add(o.piece);
         for (const a of layout.attachments) {
           if (a.piece !== o.piece) continue;
-          const { outline, tabs, lines } = attachmentOutline(pc, a);
+          const { outline, tabs, top, thick } = attachmentOutline(pc, a);
           path(outline.map(xz), true);
           ctx.fillStyle = ATTACHMENT_COLOR;
           ctx.fill();
@@ -241,10 +241,17 @@ export class TopView implements EditorView {
             ctx.fill();
           }
           ctx.strokeStyle = 'rgba(0,0,0,0.45)';
-          for (const line of [...lines, outline]) {
+          ctx.lineWidth = 1;
+          for (const line of [top, outline]) {
             path(line.map(xz), line === outline);
             ctx.stroke();
           }
+          // The thick end machines leave by, where the top drops.
+          ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+          ctx.lineWidth = 2.5;
+          path(thick.map(xz), false);
+          ctx.stroke();
+          ctx.lineWidth = 1;
         }
       }
     }

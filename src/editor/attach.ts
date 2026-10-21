@@ -8,7 +8,7 @@ import { $ } from './dom';
 /** What the washboard controls ask for. */
 export interface AttachHandlers {
   add(kind: string): void;
-  move(index: number, to: { lane?: number; offset?: number; side?: number }): void;
+  move(index: number, to: { lane?: number; offset?: number; side?: number; reverse?: boolean }): void;
   remove(index: number): void;
 }
 
@@ -34,8 +34,9 @@ export function renderAttachments(layout: Layout, index: number): void {
     if (!sides.some(([v]) => v === side)) sides.push([side, `${side > 0 ? '右' : '左'}${Math.abs(side)}mm`]);
     const across = sides.map(([v, name]) => `<option value="${v}"${v === side ? ' selected' : ''}>${name}</option>`);
     return [
-      `<li data-index="${i}"><span>${short}</span><select data-lane title="レーン（口 ${pc.part.ports[0].id} から見て）">${options.join('')}</select><select data-side title="レーンの中の位置（説明書では壁に沿わせて貼ります）">${across.join('')}</select>
+      `<li data-index="${i}"${a.reverse ? ' data-reverse' : ''}><span>${short}</span><select data-lane title="レーン（口 ${pc.part.ports[0].id} から見て）">${options.join('')}</select><select data-side title="レーンの中の位置（説明書では壁に沿わせて貼ります）">${across.join('')}</select>
         <input data-offset type="number" step="10" value="${offsetWithin(pc, a)}" title="口 ${pc.part.ports[0].id} の端からウォッシュボードの真ん中まで" />mm
+        <button data-flip title="向きを反転（低い方から進入し、厚い方から抜けます。2D では厚い端を太線で表示）">⇄</button>
         <button data-remove title="はがす">×</button></li>`,
     ];
   });
@@ -49,6 +50,7 @@ export function bindAttachments(handlers: AttachHandlers): void {
     if (b?.dataset.attach) handlers.add(b.dataset.attach);
     const li = b?.closest<HTMLElement>('li');
     if (li && b?.dataset.remove !== undefined) handlers.remove(Number(li.dataset.index));
+    if (li && b?.dataset.flip !== undefined) handlers.move(Number(li.dataset.index), { reverse: li.dataset.reverse === undefined });
   });
   box.addEventListener('change', (e) => {
     const t = e.target as HTMLInputElement | HTMLSelectElement;

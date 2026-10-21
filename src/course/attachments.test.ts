@@ -19,7 +19,7 @@ describe('washboards (spec 4, #17)', () => {
     expect(layoutCourse(c).attachments).toEqual(c.attachments);
   });
 
-  it('lies on its lane against the fence, a flat top sloping down to thin tabs', () => {
+  it('lies on its lane against the fence, its top climbing to the thick end', () => {
     const c = addAttachment(straights(), 'washboard-10', 0, 0, 100);
     const shape = attachmentShape(layoutCourse(c).pieces[0], c.attachments![0]);
     const first = new Vector3().setFromMatrixPosition(shape.frames[0]);
@@ -29,12 +29,26 @@ describe('washboards (spec 4, #17)', () => {
     expect(first.z).toBeCloseTo(40);
     expect(last.z).toBeCloseTo(160);
     expect(shape.half).toBe(27.5);
+    // Thin at the start end, thickest just before the far tab.
     expect(shape.tops[0]).toBe(1);
-    expect(Math.max(...shape.tops)).toBe(10);
+    expect(shape.tops[shape.edges[2]]).toBeCloseTo(10);
+    expect(shape.tops[shape.tops.length - 1]).toBe(1);
     const def = getAttachment('washboard-10');
     expect(attachmentHeight(def, 5)).toBe(1);
-    expect(attachmentHeight(def, 20)).toBeCloseTo(5.5);
-    expect(attachmentHeight(def, 60)).toBe(10);
+    expect(attachmentHeight(def, 20)).toBeCloseTo(5);
+    expect(attachmentHeight(def, 65)).toBeCloseTo(7.5);
+    expect(attachmentHeight(def, 110)).toBeCloseTo(10);
+    expect(attachmentHeight(def, 115)).toBe(1);
+  });
+
+  it('turns round', () => {
+    const c = moveAttachment(addAttachment(straights(), 'washboard-5', 0), 0, { reverse: true });
+    expect(c.attachments![0].reverse).toBe(true);
+    const shape = attachmentShape(layoutCourse(c).pieces[0], c.attachments![0]);
+    // The thick end now faces the start of the centreline.
+    expect(shape.edges[2]).toBeLessThan(shape.edges[0]);
+    expect(shape.tops[shape.edges[2]]).toBeCloseTo(5);
+    expect(moveAttachment(c, 0, { reverse: false }).attachments![0]).not.toHaveProperty('reverse');
   });
 
   it('stays between the fences', () => {
