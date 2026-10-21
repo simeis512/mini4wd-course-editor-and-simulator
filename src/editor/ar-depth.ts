@@ -154,8 +154,8 @@ function occluderMaterial(uniforms: object): THREE.ShaderMaterial {
       void main() {
         float metres = metresHere();
         if (metres <= 0.0) discard;
-        metres = metres * (1.0 - marginShare) - margin;
-        if (metres <= 0.0) discard;
+        // Push the real distance back, so only things clearly in front hide the course.
+        metres = metres * (1.0 + marginShare) + margin;
         // The distance is along the view axis: a view-space z of -metres.
         float ndc = (vDepthTerms.y - vDepthTerms.x * metres) / metres;
         gl_FragDepth = clamp(ndc * 0.5 + 0.5, 0.0, 1.0);
