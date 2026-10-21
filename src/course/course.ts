@@ -1,5 +1,5 @@
 import { Matrix4, Vector3 } from 'three';
-import { CATALOG_VERSION, getPart, GLOBAL_SPEC, portLaneOffsets } from './catalog';
+import { CATALOG_VERSION, GLOBAL_SPEC, lengthWithin, partOf, portLaneOffsets } from './catalog';
 import type { PartDef, PortDef } from './part';
 import { bendAngle, bendMatrix, BEND_LIMIT, pieceGeometry, TWIST_LIMIT, type Bend } from './flex';
 import { attach, FACE, facingError, IDENTITY_POSE, poseToMatrix, type FrameError, type PartGeometry, type Pose } from './geometry';
@@ -9,6 +9,8 @@ export interface PieceSettings {
   variant?: number;
   /** Twist of the piece about its centreline, deg, + lowers the right side (spec 16.2). */
   twist?: number;
+  /** Length of a piece whose part sets it per piece, mm (#69); the part's default when left out. */
+  length?: number;
 }
 
 /** What every piece record has. */
@@ -21,6 +23,7 @@ export function settingsOf(rec: PieceSettings): PieceSettings {
   const out: PieceSettings = {};
   if (rec.variant !== undefined) out.variant = rec.variant;
   if (rec.twist) out.twist = rec.twist;
+  if (rec.length !== undefined) out.length = rec.length;
   return out;
 }
 
@@ -164,25 +167,28 @@ export function anchorRef(rec: PieceRec): [number, number] | null {
 /** Check that every reference points at an earlier piece and an existing port. */
 export function validateCourse(course: Course): void {
   course.pieces.forEach((rec, i) => {
-    const part = getPart(rec.part);
+    const part = partOf(rec);
     if ('port' in rec && (rec.port < 0 || rec.port >= part.ports.length)) {
       throw new Error(`piece ${i}: no port ${rec.port} on ${rec.part}`);
     }
     if (rec.variant !== undefined && !part.variants[rec.variant]) {
       throw new Error(`piece ${i}: no variant ${rec.variant} on ${rec.part}`);
     }
+    if (rec.length !== undefined && (!part.lengths || lengthWithin(part, rec.length) !== rec.length)) {
+      throw new Error(`piece ${i}: ${rec.part} cannot be ${rec.length}mm long`);
+    }
     const ref = anchorRef(rec);
     if (ref) {
       const [j, p] = ref;
       if (!(j >= 0 && j < i)) throw new Error(`piece ${i}: refers to piece ${j}`);
-      const other = getPart(course.pieces[j].part);
+      const other = partOf(course.pieces[j]);
       if (p < 0 || p >= other.ports.length) throw new Error(`piece ${i}: no port ${p} on piece ${j}`);
     }
   });
   for (const [what, marks] of [['split', course.cuts], ['open', course.intended]] as const) {
     for (const [piece, port] of marks ?? []) {
       const rec = course.pieces[piece];
-      if (!rec || port < 0 || port >= getPart(rec.part).ports.length) throw new Error(`${what} mark on missing port ${piece}:${port}`);
+      if (!rec || port < 0 || port >= partOf(rec).ports.length) throw new Error(`${what} mark on missing port ${piece}:${port}`);
     }
   }
 }
@@ -251,7 +257,7 @@ export function layoutCourse(course: Course): Layout {
   const cut = new Set((course.cuts ?? []).map(([piece, port]) => portKey({ piece, port })));
   const problems: Problem[] = [];
   course.pieces.forEach((rec, i) => {
-    const part = getPart(rec.part);
+    const part = partOf(rec);
     const geo = pieceGeometry(part, rec.twist);
     if (Math.abs(rec.twist ?? 0) > TWIST_LIMIT) problems.push({ kind: 'twist-limit', piece: i, port: 'port' in rec ? rec.port : 0 });
     let matrix: Matrix4;

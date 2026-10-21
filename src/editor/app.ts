@@ -23,6 +23,7 @@ import {
   moveGroup,
   reverseDirection,
   setBend,
+  setLength,
   setPose,
   setShift,
   setTwist,
@@ -415,6 +416,11 @@ export class EditorApp {
       const s = this.selection;
       if (s?.kind !== 'piece') return;
       this.commit(setVariant(this.course, s.index, Number((e.target as HTMLSelectElement).value)), s);
+    });
+    $('piece-length').addEventListener('change', (e) => {
+      const s = this.selection;
+      const mm = Number((e.target as HTMLInputElement).value);
+      if (s?.kind === 'piece' && mm) this.commit(setLength(this.course, s.index, mm), s);
     });
     $('rot-left').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? 1 : 15));
     $('rot-right').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? -1 : -15));

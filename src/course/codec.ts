@@ -6,7 +6,7 @@ import { isZeroBend } from './flex';
  * Course ⇄ URL hash (spec 6): `#c=<format>.<payload>`, where the payload is
  * a compact binary course, deflate-raw compressed and base64url encoded.
  *
- * Format 2, all integers as LEB128 varints (signed ones zigzag encoded):
+ * Format 5, all integers as LEB128 varints (signed ones zigzag encoded):
  *   catalog version
  *   flags: bit0 dir = -1, bit1 has name, bit2 has split marks,
  *          bit3 has ports left open on purpose
@@ -15,7 +15,8 @@ import { isZeroBend } from './flex';
  *   per piece:
  *     part code (index into PART_CODES)
  *     head: bits0-1 anchor (0 origin, 1 to, 2 free in world, 3 free from port),
- *           bit2 has variant, bit3 has bend, bit4 has twist, bit5 has shift
+ *           bit2 has variant, bit3 has bend, bit4 has twist, bit5 has shift,
+ *           bit6 has length
  *     [variant]
  *     [port]                         unless origin
  *     [piece, port]                  to / free from port
@@ -23,16 +24,17 @@ import { isZeroBend } from './flex';
  *     [shift (lanes)]                sideways shift of a `to` joint (#60)
  *     [x, y, z (0.1 mm), yaw, pitch, roll (0.1°)]  free
  *     [twist (0.1°)]                 (spec 16.5)
+ *     [length (mm)]                  of a home-made straight (#69)
  *   [split mark count, then piece, port for each]  when flagged
  *   [open-on-purpose mark count, then piece, port for each]  when flagged (#13)
  *
- * Format 3 is the same without shifts, format 2 also without the
- * open-on-purpose marks, and format 1 without bends and twists too, so all
- * still read.
+ * Format 4 is the same without lengths, format 3 also without shifts,
+ * format 2 also without the open-on-purpose marks, and format 1 without
+ * bends and twists too, so all still read.
  */
-export const FORMAT_VERSION = 4;
+export const FORMAT_VERSION = 5;
 /** Older formats that still read. */
-const READABLE_VERSIONS = [1, 2, 3, FORMAT_VERSION];
+const READABLE_VERSIONS = [1, 2, 3, 4, FORMAT_VERSION];
 const HASH_KEY = 'c';
 
 class Writer {
@@ -102,7 +104,8 @@ export function courseToBytes(course: Course): Uint8Array {
     const anchor = 'at' in rec ? 0 : 'to' in rec ? 1 : rec.free ? 3 : 2;
     const bend = 'to' in rec && !isZeroBend(rec.bend) ? rec.bend! : null;
     const shift = 'to' in rec ? (rec.shift ?? 0) : 0;
-    w.uint(anchor | (rec.variant !== undefined ? 4 : 0) | (bend ? 8 : 0) | (rec.twist ? 16 : 0) | (shift ? 32 : 0));
+    const length = rec.length !== undefined ? 64 : 0;
+    w.uint(anchor | (rec.variant !== undefined ? 4 : 0) | (bend ? 8 : 0) | (rec.twist ? 16 : 0) | (shift ? 32 : 0) | length);
     if (rec.variant !== undefined) w.uint(rec.variant);
     if ('port' in rec) w.uint(rec.port);
     if ('to' in rec) {
@@ -122,6 +125,7 @@ export function courseToBytes(course: Course): Uint8Array {
       for (const x of rec.pose.rot) w.tenths(x);
     }
     if (rec.twist) w.tenths(rec.twist);
+    if (rec.length !== undefined) w.uint(rec.length);
   }
   for (const marks of [cuts, intended]) {
     if (!marks.length) continue;
@@ -172,6 +176,7 @@ export function courseFromBytes(bytes: Uint8Array): Course {
     }
     if (variant !== undefined) rec.variant = variant;
     if (head & 16) rec.twist = r.tenths();
+    if (head & 64) rec.length = r.uint();
     course.pieces.push(rec);
   }
   const marks = (): [number, number][] => Array.from({ length: r.uint() }, () => [r.uint(), r.uint()]);

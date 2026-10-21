@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { courseFromBytes, courseFromHash, courseFromJson, courseToBytes, courseToHash, decodeCourse, encodeCourse } from './codec';
 import { type Course } from './course';
-import { deletePiece, flipPiece, markIntended, setShift, setVariant } from './edit';
+import { addPiece, deletePiece, flipPiece, markIntended, setLength, setShift, setVariant } from './edit';
 import { splitJoint } from './joining';
 import { basicOval } from './presets';
 
@@ -13,6 +13,8 @@ function sample(): Course {
   c = splitJoint(c, { piece: 0, port: 1 }, { piece: 1, port: 0 });
   c = markIntended(c, { piece: 1, port: 0 }, true);
   c = setShift(c, { piece: 2, port: 1 }, { piece: 3, port: 0 }, -1);
+  c = addPiece(c, 'free-straight', null, 1);
+  c = setLength(c, c.pieces.length - 1, 123);
   return { ...c, name: 'テストコース', dir: -1 };
 }
 
@@ -25,14 +27,14 @@ describe('codec', () => {
   it('round-trips through the URL hash', async () => {
     const c = sample();
     const hash = await courseToHash(c);
-    expect(hash).toMatch(/^#c=4\.[A-Za-z0-9_-]+$/);
+    expect(hash).toMatch(/^#c=5\.[A-Za-z0-9_-]+$/);
     expect(await courseFromHash(hash)).toEqual(c);
   });
 
-  it('still reads format 1, 2 and 3 links', async () => {
-    // Each older format is the newer one without shifts, open-on-purpose marks, bends and twists in turn.
+  it('still reads format 1 to 4 links', async () => {
+    // Each older format is the newer one without lengths, shifts, open-on-purpose marks, bends and twists in turn.
     const payload = (await encodeCourse(basicOval())).split('.')[1];
-    for (const v of [1, 2, 3]) expect(await decodeCourse(`${v}.${payload}`)).toEqual(basicOval());
+    for (const v of [1, 2, 3, 4]) expect(await decodeCourse(`${v}.${payload}`)).toEqual(basicOval());
   });
 
   it('keeps the basic oval short', async () => {
@@ -74,5 +76,13 @@ describe('courseFromJson', () => {
     const c = sample();
     const broken = { ...c, pieces: [...c.pieces, { part: c.pieces[0].part, port: 0, to: [99, 0] }] };
     expect(() => courseFromJson(JSON.stringify(broken))).toThrow('refers to piece 99');
+  });
+
+  it('rejects lengths a part cannot have', () => {
+    const c = sample();
+    const long = { ...c, pieces: [...c.pieces, { part: 'free-straight', port: 0, free: null, pose: { pos: [0, 0, 0], rot: [0, 0, 0] }, length: 9999 }] };
+    expect(() => courseFromJson(JSON.stringify(long))).toThrow('cannot be 9999mm long');
+    const fixed = { ...c, pieces: [...c.pieces, { part: 'straight', port: 0, free: null, pose: { pos: [0, 0, 0], rot: [0, 0, 0] }, length: 100 }] };
+    expect(() => courseFromJson(JSON.stringify(fixed))).toThrow('cannot be 100mm long');
   });
 });

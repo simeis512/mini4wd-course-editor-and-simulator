@@ -1,5 +1,5 @@
 import { Matrix4, Vector3 } from 'three';
-import { getPart, GLOBAL_SPEC } from './catalog';
+import { getPart, GLOBAL_SPEC, lengthWithin, partOf } from './catalog';
 import {
   anchorFrame,
   anchorRef,
@@ -140,7 +140,7 @@ export function deletePiece(course: Course, index: number): Course {
 export function flipPiece(course: Course, index: number): Course {
   const next = clone(course);
   const rec = next.pieces[index];
-  const part = getPart(rec.part);
+  const part = partOf(rec);
   if (part.ports.length !== 2) return next;
   const oldPort = 'port' in rec ? rec.port : 0;
   const newPort = 1 - oldPort;
@@ -167,8 +167,23 @@ export function flipPiece(course: Course, index: number): Course {
 export function setVariant(course: Course, index: number, variant: number): Course {
   const next = clone(course);
   const rec = next.pieces[index];
-  if (variant === getPart(rec.part).defaultVariant) delete rec.variant;
+  if (variant === partOf(rec).defaultVariant) delete rec.variant;
   else rec.variant = variant;
+  return next;
+}
+
+/**
+ * Set the length of a piece whose part takes one (#69), in whole mm within
+ * its range. Pieces beyond its far port follow it.
+ */
+export function setLength(course: Course, index: number, length: number): Course {
+  const part = getPart(course.pieces[index].part);
+  if (!part.lengths) return course;
+  const next = clone(course);
+  const rec = next.pieces[index];
+  const mm = lengthWithin(part, length);
+  if (mm === part.lengths.default) delete rec.length;
+  else rec.length = mm;
   return next;
 }
 
@@ -342,7 +357,7 @@ export function setShift(course: Course, a: PortRef, b: PortRef, shift: number):
   const rec = course.pieces[holder];
   if (!('to' in rec)) return course;
   const [j, p] = rec.to;
-  if (!compatible(getPart(course.pieces[j].part), p, getPart(rec.part), rec.port, shift)) return course;
+  if (!compatible(partOf(course.pieces[j]), p, partOf(rec), rec.port, shift)) return course;
   const next = clone(course);
   const out = next.pieces[holder] as typeof rec;
   if (shift) out.shift = shift;

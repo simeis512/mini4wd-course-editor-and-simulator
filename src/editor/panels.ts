@@ -83,6 +83,15 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
     );
     select.value = String(pc.part.variants.indexOf(variantOf(pc.part, pc.rec.variant)));
     $<HTMLButtonElement>('flip').disabled = pc.part.ports.length !== 2;
+    // A home-made straight takes its own length (#69).
+    const range = pc.part.lengths;
+    $('length-row').hidden = !range;
+    if (range) {
+      const input = $<HTMLInputElement>('piece-length');
+      Object.assign(input, { min: String(range.min), max: String(range.max) });
+      if (document.activeElement !== input) input.value = String(pc.geometry.length);
+      $('length-range').textContent = `（${range.min}〜${range.max}）`;
+    }
     const twist = pc.rec.twist ?? 0;
     setAngleField('twist', twist);
     showLimit('twist-warn', twist, TWIST_LIMIT, 'ねじれ');

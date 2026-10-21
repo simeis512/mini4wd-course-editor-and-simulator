@@ -128,6 +128,12 @@ export interface PartDef {
    * supports only under its main road, and only when it is raised (#11).
    */
   supports?: PartSupport[];
+  /**
+   * Each piece sets its own length within this range (a home-made
+   * straight, #69). The part is then one straight segment; `segments`
+   * holds it at the default length. See `partOf`.
+   */
+  lengths?: { min: number; max: number; default: number };
   /** Shown in the editor when the geometry is a placeholder. */
   note?: string;
   /**

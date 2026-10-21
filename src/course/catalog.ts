@@ -42,6 +42,8 @@ const PALETTE = {
   green: { id: 'green', name: 'グリーン', color: '#2f9a4a', material: 'current' },
   yellow: { id: 'yellow', name: 'イエロー', color: '#f0c419', material: 'current' },
   orange: { id: 'orange', name: 'オレンジ', color: '#ee7d22', material: 'current' },
+  // Not a Tamiya colour: marks pieces made by shops or users (#69).
+  custom: { id: 'custom', name: '自作', color: '#a77bd8', material: 'current' },
 } as const satisfies Record<string, Variant>;
 
 const ALL_LANES = [0, 1, 2];
@@ -55,6 +57,13 @@ function twoEnded(): PortDef[] {
 }
 
 const STRAIGHT_LENGTH = 540;
+/**
+ * Lengths a home-made straight can be set to, mm, in whole mm: up to one
+ * real straight (owner, #69). Its default is a placeholder (provisional).
+ */
+export const FREE_STRAIGHT_MIN = 10;
+export const FREE_STRAIGHT_MAX = STRAIGHT_LENGTH;
+const FREE_STRAIGHT_DEFAULT = 270;
 const CURVE_RADIUS = 540;
 const CURVE_ANGLE = 45;
 /** Short ramp; roughly a third of a straight judging by product photos (inferred). */
@@ -294,6 +303,20 @@ export const PARTS: readonly PartDef[] = [
     confidence: 'inferred',
     note: LANE_CHANGE_NOTE,
   },
+  {
+    // A straight cut to length, as shops make to fit a layout (#69). Not a
+    // Tamiya part: drawn in its own colour and listed apart when buying.
+    id: 'free-straight',
+    name: '自作ストレート',
+    segments: [{ length: FREE_STRAIGHT_DEFAULT }],
+    ports: twoEnded(),
+    lanes: ALL_LANES,
+    lengths: { min: FREE_STRAIGHT_MIN, max: FREE_STRAIGHT_MAX, default: FREE_STRAIGHT_DEFAULT },
+    variants: [PALETTE.custom],
+    defaultVariant: 0,
+    confidence: 'community',
+    note: `長さを ${FREE_STRAIGHT_MIN}〜${FREE_STRAIGHT_MAX}mm で決められる自作のストレート（タミヤの部品ではありません）`,
+  },
 ];
 
 const PART_BY_ID = new Map(PARTS.map((p) => [p.id, p]));
@@ -322,7 +345,34 @@ export const PART_CODES: readonly string[] = [
   'bridge-approach',
   'lane-change-center',
   'under-bridge',
+  'free-straight',
 ];
+
+/** A part's length for a piece, as `setLength` keeps it: whole mm within its range (#69). */
+export function lengthWithin(part: PartDef, length: number): number {
+  const range = part.lengths;
+  if (!range) return part.segments.reduce((sum, s) => sum + s.length, 0);
+  return Math.min(range.max, Math.max(range.min, Math.round(length)));
+}
+
+const sized = new Map<string, PartDef>();
+
+/**
+ * The part a piece is. Mostly its catalog part; a part whose pieces set
+ * their own length (#69) comes as a part of that length, named with it.
+ */
+export function partOf(rec: { part: string; length?: number }): PartDef {
+  const part = getPart(rec.part);
+  if (!part.lengths) return part;
+  const length = lengthWithin(part, rec.length ?? part.lengths.default);
+  const key = `${part.id}@${length}`;
+  let out = sized.get(key);
+  if (!out) {
+    out = { ...part, name: `${part.name} ${length}mm`, segments: [{ length }] };
+    sized.set(key, out);
+  }
+  return out;
+}
 
 export function variantOf(part: PartDef, index: number | undefined): Variant {
   return part.variants[index ?? part.defaultVariant] ?? part.variants[part.defaultVariant];

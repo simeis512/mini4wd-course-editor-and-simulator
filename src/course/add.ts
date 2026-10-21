@@ -1,4 +1,4 @@
-import { getPart } from './catalog';
+import { getPart, partOf } from './catalog';
 import { compatible, layoutCourse, portKey, type Course, type PortRef } from './course';
 import { addPiece, footprint } from './edit';
 
@@ -10,7 +10,7 @@ import { addPiece, footprint } from './edit';
  */
 export function joinPart(course: Course, partId: string, at: PortRef, port?: number): { course: Course; port: number } | null {
   const part = getPart(partId);
-  const target = getPart(course.pieces[at.piece].part);
+  const target = partOf(course.pieces[at.piece]);
   const ports = part.ports
     .map((_, p) => p)
     .filter((p) => (port === undefined || p === port) && compatible(target, at.port, part, p));
@@ -29,7 +29,7 @@ export function joinPart(course: Course, partId: string, at: PortRef, port?: num
  */
 export function nextOpenPort(course: Course, port: number): PortRef | null {
   const index = course.pieces.length - 1;
-  const part = getPart(course.pieces[index].part);
+  const part = partOf(course.pieces[index]);
   const open = new Set(layoutCourse(course).open.map(portKey));
   const far = part.ports.findIndex((_, p) => p !== port && open.has(portKey({ piece: index, port: p })));
   return far >= 0 ? { piece: index, port: far } : null;

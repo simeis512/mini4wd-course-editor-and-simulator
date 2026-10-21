@@ -1,5 +1,5 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
-import { getPart } from './catalog';
+import { partOf } from './catalog';
 import { anchorFrame, anchorRef, layoutCourse, placementOf, settingsOf, type Course, type Layout, type PieceRec, type PortRef } from './course';
 import { clone, freeRec, jointBend, linkHolder, setBend, setTwist } from './edit';
 import { FACE, matrixToPose, type Pose } from './geometry';
@@ -29,7 +29,7 @@ function childAt(course: Course, ref: PortRef): PortRef | null {
   return piece < 0 ? null : { piece, port: (course.pieces[piece] as { port: number }).port };
 }
 
-const twoEnded = (course: Course, piece: number) => getPart(course.pieces[piece].part).ports.length === 2;
+const twoEnded = (course: Course, piece: number) => partOf(course.pieces[piece]).ports.length === 2;
 
 /**
  * Up to `count` pieces from the joint between `from` and `into`, going into

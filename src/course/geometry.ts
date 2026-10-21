@@ -1,5 +1,5 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
-import { portLaneCentre } from './catalog';
+import { getPart, portLaneCentre } from './catalog';
 import type { PartDef, PortDef, Segment } from './part';
 import type { PartModel } from './model';
 import { lateralProfile } from './profile';
@@ -99,7 +99,7 @@ export interface PartGeometry {
   length: number;
 }
 
-const geometryCache = new Map<string, PartGeometry>();
+const geometryCache = new WeakMap<PartDef, PartGeometry>();
 /** Measured models in use, by part id (spec 15). */
 const models = new Map<string, PartModel>();
 
@@ -116,7 +116,7 @@ export function modelFor(partId: string): PartModel | null {
 export function useModel(partId: string, model: PartModel | null): void {
   if (model) models.set(partId, model);
   else models.delete(partId);
-  geometryCache.delete(partId);
+  geometryCache.delete(getPart(partId));
 }
 
 function portFrame(port: PortDef, samples: Matrix4[]): Matrix4 {
@@ -128,7 +128,7 @@ function portFrame(port: PortDef, samples: Matrix4[]): Matrix4 {
 }
 
 export function partGeometry(part: PartDef): PartGeometry {
-  let geo = geometryCache.get(part.id);
+  let geo = geometryCache.get(part);
   if (!geo) {
     const samples = sampleCenterline(part.segments);
     const tracks: TrackGeometry[] = [{ samples, lanes: part.lanes }];
@@ -144,7 +144,7 @@ export function partGeometry(part: PartDef): PartGeometry {
       ports: ports.map((p) => portFrame(p, samples)),
       length: part.segments.reduce((sum, s) => sum + s.length, 0),
     };
-    geometryCache.set(part.id, geo);
+    geometryCache.set(part, geo);
   }
   return geo;
 }
