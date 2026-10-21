@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { MM } from '../course/mesh';
-import { AR_SCALES, arPose, floorPivot, headingOf, nextScale, scaleLabel } from './ar-pose';
+import { AR_SCALES, arPose, dotCell, floorPivot, headingOf, nextScale, scaleLabel } from './ar-pose';
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
@@ -58,5 +58,12 @@ describe('scales', () => {
     }
     expect(seen).toEqual(['実寸', '1/5', '1/10', '1/20']);
     expect(s).toBe(1);
+  });
+});
+
+describe('dotCell', () => {
+  it('gives nearby points one cell and farther ones another', () => {
+    expect(dotCell(v(0.01, -1.2, 0.51), 0.05)).toBe(dotCell(v(0.0, -1.21, 0.49), 0.05));
+    expect(dotCell(v(0.1, -1.2, 0.5), 0.05)).not.toBe(dotCell(v(0, -1.2, 0.5), 0.05));
   });
 });

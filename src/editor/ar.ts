@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
 import { MM } from '../course/mesh';
+import { ArScan, DEPTH_SENSING } from './ar-scan';
 import { AR_SCALES, AR_TURN_STEP, arPose, floorPivot, headingOf, nextScale, scaleLabel } from './ar-pose';
 
 // Three uses a WebXR Layers projection layer whenever the browser offers one.
@@ -45,7 +46,11 @@ export class ArMode {
   private hitPending = false;
   /** Ring on the floor point being aimed at. */
   private reticle: THREE.Mesh;
-  private buttons: { scale: HTMLButtonElement; replace: HTMLButtonElement };
+  private buttons: { scale: HTMLButtonElement; replace: HTMLButtonElement; depth: HTMLButtonElement };
+  /** What has been found of the room, shown while aiming. */
+  private scan: ArScan;
+  /** Whether this session shares the phone's depth view. */
+  private hasDepth = false;
 
   constructor(
     private renderer: THREE.WebGLRenderer,
@@ -59,8 +64,9 @@ export class ArMode {
     const overlay = document.getElementById('ar-overlay')!;
     this.status = document.getElementById('ar-status')!;
     const arButton = ARButton.createButton(renderer, {
-      optionalFeatures: ['dom-overlay', 'hit-test'],
+      optionalFeatures: ['dom-overlay', 'hit-test', 'depth-sensing'],
       domOverlay: { root: overlay },
+      depthSensing: DEPTH_SENSING,
     });
     arButton.classList.add('ar-button');
     container.appendChild(arButton);
@@ -69,9 +75,10 @@ export class ArMode {
     this.reticle.matrixAutoUpdate = false;
     this.reticle.visible = false;
     scene.add(this.reticle);
+    this.scan = new ArScan(scene);
 
     const button = (id: string) => document.getElementById(id) as HTMLButtonElement;
-    this.buttons = { scale: button('ar-scale'), replace: button('ar-replace') };
+    this.buttons = { scale: button('ar-scale'), replace: button('ar-replace'), depth: button('ar-depth') };
     button('ar-exit').addEventListener('click', () => void renderer.xr.getSession()?.end());
     button('ar-turn-left').addEventListener('click', () => this.turn(AR_TURN_STEP));
     button('ar-turn-right').addEventListener('click', () => this.turn(-AR_TURN_STEP));
@@ -80,6 +87,10 @@ export class ArMode {
       this.update();
     });
     this.buttons.replace.addEventListener('click', () => this.startAiming());
+    this.buttons.depth.addEventListener('click', () => {
+      this.scan.depthWanted = !this.scan.depthWanted;
+      this.update();
+    });
     // A tap on our controls must not also count as a tap on the floor.
     document.getElementById('ar-controls')!.addEventListener('beforexrselect', (e) => e.preventDefault());
 
@@ -90,6 +101,7 @@ export class ArMode {
       this.pivot = this.coursePivot();
       const session = renderer.xr.getSession()!;
       session.addEventListener('select', () => this.putDown());
+      this.hasDepth = ArScan.hasDepth(session);
       this.hitSource = null;
       this.hitPending = true;
       void session
@@ -106,6 +118,7 @@ export class ArMode {
       this.hitSource?.cancel();
       this.hitSource = null;
       this.reticle.visible = false;
+      this.scan.clear();
       this.root.visible = true;
       this.root.matrixAutoUpdate = true;
       this.root.position.set(0, 0, 0);
@@ -126,13 +139,16 @@ export class ArMode {
       this.yaw = headingOf(forward);
       this.faceViewer = false;
     }
-    if (!this.aiming || this.hitPending) return;
+    if (!this.aiming) return;
+    if (this.hasDepth) this.scan.showDepth(frame, viewer?.views[0]);
+    if (this.hitPending) return;
     if (this.hitSource) {
       const pose = frame.getHitTestResults(this.hitSource)[0]?.getPose(space);
       this.reticle.visible = !!pose;
       if (pose) {
         this.reticle.matrix.fromArray(pose.transform.matrix);
         this.at = new THREE.Vector3().setFromMatrixPosition(this.reticle.matrix);
+        this.scan.addDot(this.at);
       }
     } else if (viewer) {
       // No floor finding on this phone: stand the course in front, a little below.
@@ -181,6 +197,9 @@ export class ArMode {
     }
     this.buttons.scale.textContent = `大きさ：${scaleLabel(this.scale)}`;
     this.buttons.replace.hidden = this.aiming;
+    this.scan.visible = this.aiming;
+    this.buttons.depth.hidden = !this.aiming || !this.hasDepth;
+    this.buttons.depth.textContent = this.scan.depthWanted ? '奥行き：表示' : '奥行き：非表示';
     this.status.textContent = !this.aiming
       ? `${scaleLabel(this.scale)}で表示中。「置き直す」で場所を変えられます`
       : this.reticle.visible

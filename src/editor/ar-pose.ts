@@ -42,3 +42,8 @@ export function floorPivot(box: THREE.Box3): THREE.Vector3 {
   const c = box.getCenter(new THREE.Vector3());
   return c.setY(box.min.y);
 }
+
+/** Name of the grid cell (`spacing` m on a side) a scene point falls in, so nearby floor points share one dot. */
+export function dotCell(p: THREE.Vector3, spacing: number): string {
+  return [p.x, p.y, p.z].map((v) => Math.round(v / spacing)).join(',');
+}
