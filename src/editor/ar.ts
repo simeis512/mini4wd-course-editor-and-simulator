@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
 import { MM } from '../course/mesh';
 import { ArGestures } from './ar-gesture';
-import { ArScan, DEPTH_SENSING } from './ar-scan';
+import { ArDepth, DEPTH_SENSING } from './ar-depth';
+import { ArScan } from './ar-scan';
 import { AR_SCALES, AR_TURN_STEP, arPose, floorPivot, headingOf, nextScale, scaleLabel, turnAbout } from './ar-pose';
 
 // Three uses a WebXR Layers projection layer whenever the browser offers one.
@@ -47,9 +48,11 @@ export class ArMode {
   private hitPending = false;
   /** Ring on the floor point being aimed at. */
   private reticle: THREE.Mesh;
-  private buttons: { scale: HTMLButtonElement; replace: HTMLButtonElement; depth: HTMLButtonElement };
+  private buttons: { scale: HTMLButtonElement; replace: HTMLButtonElement; depth: HTMLButtonElement; occlusion: HTMLButtonElement };
   /** What has been found of the room, shown while aiming. */
   private scan: ArScan;
+  /** The phone's depth view, coloured and for occlusion. */
+  private depth: ArDepth;
   /** Whether this session shares the phone's depth view. */
   private hasDepth = false;
   private gestures: ArGestures;
@@ -78,9 +81,10 @@ export class ArMode {
     this.reticle.visible = false;
     scene.add(this.reticle);
     this.scan = new ArScan(scene);
+    this.depth = new ArDepth(scene);
 
     const button = (id: string) => document.getElementById(id) as HTMLButtonElement;
-    this.buttons = { scale: button('ar-scale'), replace: button('ar-replace'), depth: button('ar-depth') };
+    this.buttons = { scale: button('ar-scale'), replace: button('ar-replace'), depth: button('ar-depth'), occlusion: button('ar-occlusion') };
     button('ar-exit').addEventListener('click', () => void renderer.xr.getSession()?.end());
     button('ar-turn-left').addEventListener('click', () => this.turn(AR_TURN_STEP));
     button('ar-turn-right').addEventListener('click', () => this.turn(-AR_TURN_STEP));
@@ -90,7 +94,11 @@ export class ArMode {
     });
     this.buttons.replace.addEventListener('click', () => this.startAiming());
     this.buttons.depth.addEventListener('click', () => {
-      this.scan.depthWanted = !this.scan.depthWanted;
+      this.depth.viewWanted = !this.depth.viewWanted;
+      this.update();
+    });
+    this.buttons.occlusion.addEventListener('click', () => {
+      this.depth.occlusionWanted = !this.depth.occlusionWanted;
       this.update();
     });
     this.gestures = new ArGestures(document.getElementById('ar-touch')!, {
@@ -108,7 +116,7 @@ export class ArMode {
       this.pivot = this.coursePivot();
       const session = renderer.xr.getSession()!;
       session.addEventListener('select', () => this.putDown());
-      this.hasDepth = ArScan.hasDepth(session);
+      this.hasDepth = ArDepth.available(session);
       this.hitSource = null;
       this.hitPending = true;
       void session
@@ -126,6 +134,7 @@ export class ArMode {
       this.hitSource = null;
       this.reticle.visible = false;
       this.scan.clear();
+      this.depth.hide();
       this.gestures.clear();
       this.root.visible = true;
       this.root.matrixAutoUpdate = true;
@@ -147,8 +156,8 @@ export class ArMode {
       this.yaw = headingOf(forward);
       this.faceViewer = false;
     }
+    if (this.hasDepth) this.depth.update(frame, viewer?.views[0], this.aiming);
     if (!this.aiming) return;
-    if (this.hasDepth) this.scan.showDepth(frame, viewer?.views[0]);
     if (this.hitPending) return;
     if (this.hitSource) {
       const pose = frame.getHitTestResults(this.hitSource)[0]?.getPose(space);
@@ -235,7 +244,9 @@ export class ArMode {
     this.buttons.replace.hidden = this.aiming;
     this.scan.visible = this.aiming;
     this.buttons.depth.hidden = !this.aiming || !this.hasDepth;
-    this.buttons.depth.textContent = this.scan.depthWanted ? '奥行き：表示' : '奥行き：非表示';
+    this.buttons.depth.textContent = this.depth.viewWanted ? '奥行き：表示' : '奥行き：非表示';
+    this.buttons.occlusion.hidden = !this.hasDepth;
+    this.buttons.occlusion.textContent = this.depth.occlusionWanted ? '隠れ：オン' : '隠れ：オフ';
     this.status.textContent = !this.aiming
       ? `${scaleLabel(this.scale)}で表示中。ドラッグで移動、2本指で回転、「置き直す」で選び直し`
       : this.reticle.visible
@@ -245,4 +256,5 @@ export class ArMode {
 }
 
 const RETICLE_GEOMETRY = new THREE.RingGeometry(0.06, 0.08, 32).rotateX(-Math.PI / 2);
-const RETICLE_MATERIAL = new THREE.MeshBasicMaterial({ color: 0x3fd0ff });
+// Not hidden by the real floor it lies on (occlusion, see ArDepth).
+const RETICLE_MATERIAL = new THREE.MeshBasicMaterial({ color: 0x3fd0ff, depthTest: false });
