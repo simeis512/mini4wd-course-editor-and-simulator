@@ -37,6 +37,8 @@ export class OrbitView implements EditorView {
   private moving: { plane: THREE.Plane; from: THREE.Vector3; dragged: boolean } | null = null;
   private selection: Selection = null;
   private ar: ArMode;
+  /** Puts the camera back where it was before AR. */
+  private restoreCamera: (() => void) | null = null;
   private runMarks: RunMarks | null = null;
   /** Materials of the pieces a raise would move, which blink. */
   private runMaterials = new Set<THREE.MeshStandardMaterial>();
@@ -79,6 +81,15 @@ export class OrbitView implements EditorView {
 
     this.ar = new ArMode(renderer, container, this.root, this.scene, {
       onStart: () => {
+        // AR moves the camera with the phone, so keep where it was for afterwards.
+        const before = this.camera.clone();
+        const target = this.controls.target.clone();
+        this.restoreCamera = () => {
+          this.camera.copy(before);
+          this.controls.target.copy(target);
+          this.camera.updateProjectionMatrix();
+          this.controls.update();
+        };
         this.scene.background = null;
         this.grid.visible = false;
         this.controls.enabled = false;
@@ -90,6 +101,8 @@ export class OrbitView implements EditorView {
         this.grid.visible = true;
         this.controls.enabled = true;
         this.markers.visible = this.outlines.visible = this.clashMarks.visible = true;
+        this.restoreCamera?.();
+        this.restoreCamera = null;
         // Keep the loop matching the current view now the session is over.
         this.setActive(this.active);
       },
