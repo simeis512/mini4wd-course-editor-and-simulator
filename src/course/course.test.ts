@@ -1,6 +1,6 @@
 import { Matrix4, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { compatible, emptyCourse, layoutCourse, partCounts } from './course';
+import { compatible, emptyCourse, layoutCourse } from './course';
 import { FREE_STRAIGHT_MAX, FREE_STRAIGHT_MIN, getPart, partOf } from './catalog';
 import { addPiece, deletePiece, flipPiece, markIntended, moveGroup, reverseDirection, pieceMiddle, setLength, setVariant, turnAboutMiddle } from './edit';
 import { facingError } from './geometry';
@@ -87,16 +87,6 @@ describe('editing', () => {
     expect(c.pieces[0].variant).toBe(1);
     c = setVariant(c, 0, 0);
     expect(c.pieces[0]).not.toHaveProperty('variant');
-  });
-
-  it('counts parts', () => {
-    expect(Object.fromEntries(partCounts(basicOval()))).toEqual({
-      straight: 2,
-      wave: 1,
-      curve45: 8,
-      'bridge-approach': 2,
-      'lane-change-center': 1,
-    });
   });
 });
 

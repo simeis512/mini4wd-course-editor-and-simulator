@@ -404,10 +404,3 @@ export function movingGroup(layout: Layout, index: number, alone = false): Set<n
 export function groupCount(layout: Layout): number {
   return new Set(layout.group).size;
 }
-
-/** Number of pieces of each part, in catalog order of first use. */
-export function partCounts(course: Course): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const rec of course.pieces) counts.set(rec.part, (counts.get(rec.part) ?? 0) + 1);
-  return counts;
-}

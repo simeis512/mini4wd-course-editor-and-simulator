@@ -46,6 +46,7 @@ import { History } from './history';
 import { bindLevelTools, levelMax, renderLevelTools, type HeightView } from './levels';
 import { buildPalette, placeContext, POSE_FIELDS, renderPanels, runMarks } from './panels';
 import type { Selection } from './selection';
+import { bindShopping } from './shopping';
 import { exportJson, HashSync, readCourseFile, readHash } from './share';
 import type { EditorView } from './view';
 import { TopView } from './view2d';
@@ -390,6 +391,7 @@ export class EditorApp {
 
   private bindUi(): void {
     bindLevelTools((view) => this.setHeightView(view));
+    bindShopping(() => renderCourseInfo(this.course, this.layout, this.checks));
     bindCourseInfo({
       pick: (t) => this.select(this.selectionOf(t)),
       intended: (ref, on) => this.commit(markIntended(this.course, ref, on), this.selection),
