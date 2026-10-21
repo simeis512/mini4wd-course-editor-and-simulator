@@ -56,8 +56,11 @@ export interface PortRef {
 /** Loop-closure tolerance (spec 5.3, provisional). */
 export const CLOSE_DISTANCE = 10;
 export const CLOSE_ANGLE = 3;
-/** Sideways shifts, in lanes, that two loose ports are tried at to close a loop (#60). */
-const CLOSE_SHIFTS = [0, -1, 1];
+/**
+ * Sideways shifts, in lanes, that two loose ports are tried at to close a
+ * loop (#60): as far as three-lane ports still meeting by one lane.
+ */
+const CLOSE_SHIFTS = [0, -1, 1, -2, 2];
 
 export interface PlacedPiece {
   rec: PieceRec;

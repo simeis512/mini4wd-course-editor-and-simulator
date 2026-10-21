@@ -50,9 +50,15 @@ describe('shifted joints', () => {
     expect(layoutCourse(basicOval()).deadEnds).toEqual([]);
   });
 
-  it('only shifts by up to a lane, and never so far that no lane meets', () => {
+  it('shifts as far as one lane still meeting, and no further', () => {
     const c = chain(['straight', 'straight']);
-    expect(setShift(c, { piece: 0, port: 1 }, { piece: 1, port: 0 }, 2)).toBe(c);
+    const two = setShift(c, { piece: 0, port: 1 }, { piece: 1, port: 0 }, 2);
+    expect(two.pieces[1]).toMatchObject({ shift: 2 });
+    expect(pos(layoutCourse(two), 1).x).toBeCloseTo(-240, 9);
+    expect(jointLanes(straight, 1, straight, 0, 2)).toEqual([[2, 0]]);
+    expect(setShift(c, { piece: 0, port: 1 }, { piece: 1, port: 0 }, -2).pieces[1]).toMatchObject({ shift: -2 });
+    expect(setShift(c, { piece: 0, port: 1 }, { piece: 1, port: 0 }, 3)).toBe(c);
+    expect(setShift(c, { piece: 0, port: 1 }, { piece: 1, port: 0 }, -3)).toBe(c);
     // The approach's one-lane upper end meets a straight's middle lane, or an edge lane a lane over; two lanes over is off the road.
     expect(compatible(approach, 2, straight, 0)).toBe(true);
     expect(compatible(approach, 2, straight, 0, 1)).toBe(true);

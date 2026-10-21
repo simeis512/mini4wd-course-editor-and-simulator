@@ -324,9 +324,6 @@ export function reverseDirection(course: Course): Course {
   return next;
 }
 
-/** Most lanes a joint is shifted sideways by (#60). */
-export const MAX_SHIFT = 1;
-
 /** The sideways shift of the joint between two linked ports, in lanes (#60); 0 when they are not linked. */
 export function jointShift(course: Course, a: PortRef, b: PortRef): number {
   const holder = linkHolder(course, a, b);
@@ -337,12 +334,13 @@ export function jointShift(course: Course, a: PortRef, b: PortRef): number {
 /**
  * Shift the joint between two linked ports sideways by whole lanes (#60),
  * + to the right looking out of the port the piece hangs off. The piece
- * placed from the joint moves, with everything beyond. A shift at which no
- * lane would meet is not made.
+ * placed from the joint moves, with everything beyond. It goes as far as
+ * one lane still meeting (user, 2026-10-21); a shift at which no lane
+ * would meet is not made.
  */
 export function setShift(course: Course, a: PortRef, b: PortRef, shift: number): Course {
   const holder = linkHolder(course, a, b);
-  if (holder === null || Math.abs(shift) > MAX_SHIFT) return course;
+  if (holder === null || !Number.isInteger(shift)) return course;
   const rec = course.pieces[holder];
   if (!('to' in rec)) return course;
   const [j, p] = rec.to;
