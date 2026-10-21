@@ -30,6 +30,13 @@ describe('joinPart', () => {
     expect(layoutCourse(climbing!.course).problems).toEqual([]);
   });
 
+  it('joins a bridge approach after the lane change centre by its lower end, carrying on the lane change', () => {
+    const c = chain(['bridge-approach']);
+    c.pieces.push({ part: 'lane-change-center', port: 0, to: [0, 1] });
+    const joined = joinPart(c, 'bridge-approach', { piece: 1, port: 1 });
+    expect(joined?.port).toBe(1);
+  });
+
   it('refuses parts that cannot join', () => {
     expect(joinPart(chain(['bank-approach-20']), 'bank-approach-20', { piece: 0, port: 1 })).toBeNull();
     expect(joinPart(chain(['straight']), 'lane-change-center', { piece: 0, port: 1 })).toBeNull();

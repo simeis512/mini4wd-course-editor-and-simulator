@@ -113,6 +113,15 @@ describe('bridge approach on ordinary parts', () => {
   });
 });
 
+describe('lane change centre', () => {
+  it('meets a bridge approach only by the port of its own kind (#72)', () => {
+    const centre = getPart('lane-change-center');
+    expect(compatible(centre, 1, approach, 0)).toBe(false);
+    expect(compatible(centre, 1, approach, 1)).toBe(true);
+    expect(compatible(approach, 0, centre, 0)).toBe(false);
+  });
+});
+
 describe('under-bridge on its own', () => {
   const under = getPart('under-bridge');
 
