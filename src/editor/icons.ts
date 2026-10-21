@@ -1,5 +1,6 @@
 import { Matrix4, Vector3 } from 'three';
-import { variantOf, type PartDef } from '../course/catalog';
+import { variantOf } from '../course/catalog';
+import type { PartDef } from '../course/part';
 import { attach, partGeometry, pointOnFrame } from '../course/geometry';
 import { crossSection } from '../course/mesh';
 

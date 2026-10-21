@@ -1,5 +1,6 @@
 import { Matrix4, Vector3 } from 'three';
-import { CATALOG_VERSION, getPart, GLOBAL_SPEC, portLaneOffsets, type PartDef, type PortDef } from './catalog';
+import { CATALOG_VERSION, getPart, GLOBAL_SPEC, portLaneOffsets } from './catalog';
+import type { PartDef, PortDef } from './part';
 import { bendAngle, bendMatrix, BEND_LIMIT, pieceGeometry, TWIST_LIMIT, type Bend } from './flex';
 import { attach, FACE, facingError, IDENTITY_POSE, poseToMatrix, type FrameError, type PartGeometry, type Pose } from './geometry';
 

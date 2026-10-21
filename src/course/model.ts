@@ -1,4 +1,4 @@
-import type { PartDef, PortDef } from './catalog';
+import type { PartDef, PortDef } from './part';
 import { modelFor, type Pose } from './geometry';
 
 // Measured models that replace a part's procedural geometry (spec 15).

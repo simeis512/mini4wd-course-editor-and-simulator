@@ -1,5 +1,6 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
-import { portLaneCentre, type PartDef, type PortDef, type Segment } from './catalog';
+import { portLaneCentre } from './catalog';
+import type { PartDef, PortDef, Segment } from './part';
 import type { PartModel } from './model';
 import { lateralProfile } from './profile';
 

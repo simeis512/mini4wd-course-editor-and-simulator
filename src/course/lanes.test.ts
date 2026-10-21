@@ -1,6 +1,7 @@
 import { Matrix4, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { getPart, laneLinks, laneOffset, portLaneOffsets, type PartDef } from './catalog';
+import { getPart, laneLinks, laneOffset, portLaneOffsets } from './catalog';
+import type { PartDef } from './part';
 import { compatible, jointLanes } from './course';
 import { attach, facingError, partGeometry, pointOnFrame } from './geometry';
 import { crossSection, halfWidth } from './mesh';
