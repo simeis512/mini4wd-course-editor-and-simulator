@@ -49,18 +49,17 @@ const DROP = 0.01;
 
 /**
  * Height of an attachment's top `s` mm from the end machines come in by:
- * a thin tab, a curve up, the top climbing straight to its full height,
- * then a drop to the other tab.
+ * a thin tab, the top bending smoothly up out of it and climbing straight
+ * to its full height, then a drop to the other tab.
  */
 export function attachmentHeight(def: AttachmentDef, s: number): number {
   const u = s - def.tab;
   const top = def.length - 2 * def.tab;
   if (u < 0 || u > top) return def.tabThickness;
-  if (u < def.ramp) {
-    const t = u / def.ramp;
-    return def.tabThickness + (def.entryHeight - def.tabThickness) * t * t * (3 - 2 * t);
-  }
-  return def.entryHeight + ((def.height - def.entryHeight) * (u - def.ramp)) / (top - def.ramp);
+  // The gradient grows evenly over `ramp`, then stays, so the climb has no corner.
+  const gradient = (def.height - def.tabThickness) / (top - def.ramp / 2);
+  const rise = u < def.ramp ? (gradient * u * u) / (2 * def.ramp) : gradient * (u - def.ramp / 2);
+  return def.tabThickness + rise;
 }
 
 /** Where an attachment lies on its piece `pc` and the shape of its top (provisional, spec 4). */
@@ -69,7 +68,7 @@ export function attachmentShape(pc: PlacedPiece, a: Attachment): AttachmentShape
   const { samples } = pc.geometry;
   const distances = distancesAlong(samples);
   const mid = offsetWithin(pc, a);
-  // From the entry end: the tab's edge, the top's start, the thick end and the drop past it.
+  // From the entry end: the tab's edge, the end of the bend, the thick end and the drop past it.
   const marks = [def.tab, def.tab + def.ramp, def.length - def.tab, def.length - def.tab + DROP];
   const fromEntry = [...new Set([...Array.from({ length: Math.ceil(def.length / STEP) + 1 }, (_, i) => Math.min(def.length, i * STEP)), ...marks])].sort((x, y) => x - y);
   // Laid along the centreline, entry end first unless reversed.

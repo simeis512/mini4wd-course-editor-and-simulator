@@ -35,8 +35,11 @@ describe('washboards (spec 4, #17)', () => {
     expect(shape.tops[shape.tops.length - 1]).toBe(1);
     const def = getAttachment('washboard-10');
     expect(attachmentHeight(def, 5)).toBe(1);
-    expect(attachmentHeight(def, 20)).toBeCloseTo(5);
-    expect(attachmentHeight(def, 65)).toBeCloseTo(7.5);
+    // No step into the top: it starts at the tab's thickness and climbs ever steeper, then evenly.
+    expect(attachmentHeight(def, 10)).toBe(1);
+    expect(attachmentHeight(def, 10.5)).toBeCloseTo(1, 2);
+    const step = (s: number) => attachmentHeight(def, s + 1) - attachmentHeight(def, s);
+    expect(step(29)).toBeCloseTo(step(60), 2);
     expect(attachmentHeight(def, 110)).toBeCloseTo(10);
     expect(attachmentHeight(def, 115)).toBe(1);
   });
