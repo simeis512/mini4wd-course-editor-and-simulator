@@ -1,5 +1,6 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
-import { portLaneCentre, type PartDef, type PortDef, type Segment } from './catalog';
+import { getPart, portLaneCentre } from './catalog';
+import type { PartDef, PortDef, Segment } from './part';
 import type { PartModel } from './model';
 import { lateralProfile } from './profile';
 
@@ -98,7 +99,7 @@ export interface PartGeometry {
   length: number;
 }
 
-const geometryCache = new Map<string, PartGeometry>();
+const geometryCache = new WeakMap<PartDef, PartGeometry>();
 /** Measured models in use, by part id (spec 15). */
 const models = new Map<string, PartModel>();
 
@@ -115,7 +116,7 @@ export function modelFor(partId: string): PartModel | null {
 export function useModel(partId: string, model: PartModel | null): void {
   if (model) models.set(partId, model);
   else models.delete(partId);
-  geometryCache.delete(partId);
+  geometryCache.delete(getPart(partId));
 }
 
 function portFrame(port: PortDef, samples: Matrix4[]): Matrix4 {
@@ -127,7 +128,7 @@ function portFrame(port: PortDef, samples: Matrix4[]): Matrix4 {
 }
 
 export function partGeometry(part: PartDef): PartGeometry {
-  let geo = geometryCache.get(part.id);
+  let geo = geometryCache.get(part);
   if (!geo) {
     const samples = sampleCenterline(part.segments);
     const tracks: TrackGeometry[] = [{ samples, lanes: part.lanes }];
@@ -143,7 +144,7 @@ export function partGeometry(part: PartDef): PartGeometry {
       ports: ports.map((p) => portFrame(p, samples)),
       length: part.segments.reduce((sum, s) => sum + s.length, 0),
     };
-    geometryCache.set(part.id, geo);
+    geometryCache.set(part, geo);
   }
   return geo;
 }
@@ -200,6 +201,34 @@ export function facingError(a: Matrix4, b: Matrix4): FrameError {
   const qa = new Quaternion().setFromRotationMatrix(a.clone().multiply(FACE));
   const qb = new Quaternion().setFromRotationMatrix(b);
   return { distance: pa.distanceTo(pb), angle: qa.angleTo(qb) / DEG };
+}
+
+/** Distance along sampled frames from the first to each, mm: the length of the path between them. */
+export function distancesAlong(samples: readonly Matrix4[]): number[] {
+  const out = [0];
+  const [a, b] = [new Vector3(), new Vector3()];
+  for (let i = 1; i < samples.length; i++) {
+    a.setFromMatrixPosition(samples[i - 1]);
+    b.setFromMatrixPosition(samples[i]);
+    out.push(out[i - 1] + a.distanceTo(b));
+  }
+  return out;
+}
+
+/**
+ * The frame `s` mm along sampled frames (see `distancesAlong`), blended
+ * between the two samples it falls between; clamped to the ends.
+ */
+export function frameAlong(samples: readonly Matrix4[], distances: readonly number[], s: number): Matrix4 {
+  const last = samples.length - 1;
+  let i = 0;
+  while (i < last - 1 && distances[i + 1] < s) i++;
+  const span = distances[i + 1] - distances[i];
+  const t = span > 0 ? Math.min(1, Math.max(0, (s - distances[i]) / span)) : 0;
+  const [pa, pb, qa, qb, scale] = [new Vector3(), new Vector3(), new Quaternion(), new Quaternion(), new Vector3()];
+  samples[i].decompose(pa, qa, scale);
+  samples[Math.min(i + 1, last)].decompose(pb, qb, scale);
+  return new Matrix4().compose(pa.lerp(pb, t), qa.slerp(qb, t), new Vector3(1, 1, 1));
 }
 
 /** Point on a frame at lateral offset `right` (+ right) and height `up`. */

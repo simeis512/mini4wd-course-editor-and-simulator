@@ -1,4 +1,4 @@
-import { anchorFrame, compatible, layoutCourse, movingGroup, portKey, sameJoint, type Course, type Layout, type PieceRec, type PortRef } from './course';
+import { anchorFrame, compatible, layoutCourse, movingGroup, portKey, sameJoint, settingsOf, type Course, type Layout, type PieceRec, type PortRef } from './course';
 import { clone, freeRec, linkHolder, moveGroup, uncut } from './edit';
 import { bendPose } from './flex';
 import { FACE, facingError, matrixToPose, type Pose } from './geometry';
@@ -90,10 +90,8 @@ export function asLink(course: Course, a: PortRef, b: PortRef): Course {
   if (!closure) return course;
   const rec = course.pieces[later.piece];
   const next = clone(course);
-  const out: PieceRec = { part: rec.part, port: later.port, to: [earlier.piece, earlier.port] };
+  const out: PieceRec = { part: rec.part, port: later.port, to: [earlier.piece, earlier.port], ...settingsOf(rec) };
   if (closure.shift) out.shift = closure.shift;
-  if (rec.variant !== undefined) out.variant = rec.variant;
-  if (rec.twist) out.twist = rec.twist;
   next.pieces[later.piece] = out;
   return next;
 }

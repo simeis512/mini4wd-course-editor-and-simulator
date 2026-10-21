@@ -1,6 +1,7 @@
 import { BoxGeometry, Mesh, MeshBasicMaterial, Object3D, Vector3 } from 'three';
 import { afterEach, describe, expect, it } from 'vitest';
-import { getPart, type PartDef } from './catalog';
+import { getPart } from './catalog';
+import type { PartDef } from './part';
 import { layoutCourse } from './course';
 import { setTwist } from './edit';
 import { matrixToPose, modelFor, partGeometry, useModel } from './geometry';

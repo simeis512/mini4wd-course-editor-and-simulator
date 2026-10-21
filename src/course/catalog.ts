@@ -6,7 +6,7 @@
  * totals and still need measuring against real parts (see `confidence`).
  */
 
-import type { Pose } from './geometry';
+import type { LaneLink, PartDef, PortDef, Variant } from './part';
 import {
   BRIDGE_HEIGHT,
   BRIDGE_OVERLAP,
@@ -17,8 +17,6 @@ import {
   RAMP_RUN,
   WAVE_AMPLITUDE,
 } from './profile';
-
-export type Confidence = 'official' | 'community' | 'inferred' | 'unknown';
 
 /** Track-wide dimensions shared by every part. */
 export const GLOBAL_SPEC = {
@@ -35,140 +33,6 @@ export const GLOBAL_SPEC = {
   roadThickness: 3,
 } as const;
 
-/**
- * One section of a part's centreline (spec 3.1). The angles are the total
- * change over the section and are applied smoothly along its length.
- */
-export interface Segment {
-  length: number;
-  /** Turn to the left, + is left. */
-  yaw?: number;
-  /** Change of gradient, + climbs. */
-  pitch?: number;
-  /** Change of bank angle, + lowers the right side. */
-  roll?: number;
-  /** Id of a sideways swing of the lanes (profile.ts), e.g. the wave's bump. */
-  lateralProfile?: string;
-}
-
-/**
- * Where a port sits (spec 3.3). 'start' and 'end' put it at that end of the
- * centreline, moved sideways to the middle of the lanes it carries. A pose
- * gives the port frame itself in part-local coordinates: forward points out
- * of the part and the origin is the middle of the port's lanes on the road.
- */
-export type PortAnchor = 'start' | 'end' | Pose;
-
-export interface PortDef {
-  id: string;
-  anchor: PortAnchor;
-  /**
-   * Lane positions this port carries (0 = left looking along the
-   * centreline). On a port placed by a pose they are listed left to right
-   * looking out of the port.
-   */
-  lanes: number[];
-  /** Connection kind; only ports of the same kind and lane count connect. */
-  kind?: string;
-  /** This end sits on the floor, so its frame must be level (bank approach). */
-  floor?: boolean;
-  /** The only parts this port joins, when it is limited (the lane change's own ports). */
-  partners?: string[];
-}
-
-/**
- * A stretch of road swept along its own centreline, for parts whose lanes
- * part ways (the lane change's ramp and bridges). Lane positions are
- * measured from this track's centreline.
- */
-/**
- * A stand that comes with the part (spec 3.4, #11), as under the lane
- * change bridge: a leg under each end and a crossbar between, standing
- * square to the part's main centreline where it stands.
- */
-export interface PartSupport {
-  /** Where along the main centreline, as a fraction of its length. */
-  at: number;
-  /** Middle of the stand from the centreline, mm, + right. */
-  offset: number;
-  /** Half its width, to the outside of the legs, mm. */
-  halfWidth: number;
-  /** Height of its top above the centreline, mm. */
-  top: number;
-  /** How deep it is along the centreline, mm. */
-  depth: number;
-}
-
-export interface Track {
-  /** Where the track's centreline starts, in part-local coordinates. */
-  start: Pose;
-  segments: Segment[];
-  lanes: number[];
-}
-
-/**
- * A lane running through a part from one port to another (spec 3.2), e.g.
- * lane 2 of port 0 comes out as lane 0 of port 1.
- */
-export interface LaneLink {
-  from: [port: number, lane: number];
-  to: [port: number, lane: number];
-}
-
-export type Material = 'current' | 'old-gray';
-
-export interface Variant {
-  id: string;
-  name: string;
-  /** Display colour. */
-  color: string;
-  /** Key into the (future) physics material table. */
-  material: Material;
-}
-
-export interface PartDef {
-  id: string;
-  name: string;
-  /** Code in the basic set (A, B, C...). */
-  setCode?: string;
-  segments: Segment[];
-  ports: PortDef[];
-  /** Lane positions the cross-section covers: any 1 to 3 of 0, 1, 2. */
-  lanes: number[];
-  /** Further road swept along centrelines of its own, beside the main one. */
-  tracks?: Track[];
-  /**
-   * Which port lane runs to which (spec 3.2). Left out on a two-ended part,
-   * where each lane runs straight through (see `laneLinks`).
-   */
-  laneLinks?: LaneLink[];
-  variants: Variant[];
-  /** Index into `variants` used when a piece does not choose one. */
-  defaultVariant: number;
-  confidence: Confidence;
-  /**
-   * Turning the part round makes a different shape (a curve turns the other
-   * way, a slope goes down), so the parts list offers it both ways round,
-   * named here: the first joins by port 0, the second by port 1.
-   */
-  ways?: [string, string];
-  /** Parts this part cannot be joined to directly (e.g. two ramps in a row). */
-  cannotJoin?: string[];
-  /**
-   * Stands that are part of the part. A part that has them gets automatic
-   * supports only under its main road, and only when it is raised (#11).
-   */
-  supports?: PartSupport[];
-  /** Shown in the editor when the geometry is a placeholder. */
-  note?: string;
-  /**
-   * Measured model that replaces the procedural geometry (spec 15). When
-   * absent the part is swept from `segments`. Loading is not implemented
-   * yet; the field only reserves the switch.
-   */
-  model?: string;
-}
-
 const PALETTE = {
   gray: { id: 'gray', name: 'グレー（旧）', color: '#9a9ca0', material: 'old-gray' },
   white: { id: 'white', name: 'ホワイト', color: '#f2f2ef', material: 'current' },
@@ -178,6 +42,8 @@ const PALETTE = {
   green: { id: 'green', name: 'グリーン', color: '#2f9a4a', material: 'current' },
   yellow: { id: 'yellow', name: 'イエロー', color: '#f0c419', material: 'current' },
   orange: { id: 'orange', name: 'オレンジ', color: '#ee7d22', material: 'current' },
+  // Not a Tamiya colour: marks pieces made by shops or users (#69).
+  custom: { id: 'custom', name: '自作', color: '#a77bd8', material: 'current' },
 } as const satisfies Record<string, Variant>;
 
 const ALL_LANES = [0, 1, 2];
@@ -191,6 +57,13 @@ function twoEnded(): PortDef[] {
 }
 
 const STRAIGHT_LENGTH = 540;
+/**
+ * Lengths a home-made straight can be set to, mm, in whole mm: up to one
+ * real straight (owner, #69). Its default is a placeholder (provisional).
+ */
+export const FREE_STRAIGHT_MIN = 10;
+export const FREE_STRAIGHT_MAX = STRAIGHT_LENGTH;
+const FREE_STRAIGHT_DEFAULT = 270;
 const CURVE_RADIUS = 540;
 const CURVE_ANGLE = 45;
 /** Short ramp; roughly a third of a straight judging by product photos (inferred). */
@@ -430,6 +303,20 @@ export const PARTS: readonly PartDef[] = [
     confidence: 'inferred',
     note: LANE_CHANGE_NOTE,
   },
+  {
+    // A straight cut to length, as shops make to fit a layout (#69). Not a
+    // Tamiya part: drawn in its own colour and listed apart when buying.
+    id: 'free-straight',
+    name: '自作ストレート',
+    segments: [{ length: FREE_STRAIGHT_DEFAULT }],
+    ports: twoEnded(),
+    lanes: ALL_LANES,
+    lengths: { min: FREE_STRAIGHT_MIN, max: FREE_STRAIGHT_MAX, default: FREE_STRAIGHT_DEFAULT },
+    variants: [PALETTE.custom],
+    defaultVariant: 0,
+    confidence: 'community',
+    note: `長さを ${FREE_STRAIGHT_MIN}〜${FREE_STRAIGHT_MAX}mm で決められる自作のストレート（タミヤの部品ではありません）`,
+  },
 ];
 
 const PART_BY_ID = new Map(PARTS.map((p) => [p.id, p]));
@@ -458,7 +345,84 @@ export const PART_CODES: readonly string[] = [
   'bridge-approach',
   'lane-change-center',
   'under-bridge',
+  'free-straight',
 ];
+
+/** A part's length for a piece, as `setLength` keeps it: whole mm within its range (#69). */
+export function lengthWithin(part: PartDef, length: number): number {
+  const range = part.lengths;
+  if (!range) return part.segments.reduce((sum, s) => sum + s.length, 0);
+  return Math.min(range.max, Math.max(range.min, Math.round(length)));
+}
+
+const sized = new Map<string, PartDef>();
+
+/**
+ * The part a piece is. Mostly its catalog part; a part whose pieces set
+ * their own length (#69) comes as a part of that length, named with it.
+ */
+export function partOf(rec: { part: string; length?: number }): PartDef {
+  const part = getPart(rec.part);
+  if (!part.lengths) return part;
+  const length = lengthWithin(part, rec.length ?? part.lengths.default);
+  const key = `${part.id}@${length}`;
+  let out = sized.get(key);
+  if (!out) {
+    out = { ...part, name: `${part.name} ${length}mm`, segments: [{ length }] };
+    sized.set(key, out);
+  }
+  return out;
+}
+
+/**
+ * Something laid on the road (spec 4): a washboard. A long plate laid
+ * along the lane, its top a flat slope that climbs from the end machines
+ * come in by, smoothly out of the thin tab there, to its full height at the
+ * end they leave by, each end a thin tab that is taped to the road (69572 manual and photos, user 2026-10-21).
+ */
+export interface AttachmentDef {
+  id: string;
+  name: string;
+  /** Height of its top at the thick end, mm (official). */
+  height: number;
+  /** Length along the lane, tabs included, mm (official: 120, 69572). */
+  length: number;
+  /** Width across the lane, mm (official: 49 / 55). */
+  width: number;
+  /** Length over which the top bends smoothly up from the entry tab into its straight climb, mm. */
+  ramp: number;
+  /** Length and thickness of the thin tab at each end, mm. */
+  tab: number;
+  tabThickness: number;
+}
+
+/**
+ * The bend at the thin end and the tabs are not measured: guesses from the
+ * manual's drawing (spec 4, #1, provisional).
+ */
+const WASHBOARD_TAB = 10;
+const WASHBOARD_TAB_THICKNESS = 1;
+const WASHBOARD_RAMP = 20;
+
+export const ATTACHMENTS: readonly AttachmentDef[] = [5, 10].map((height, i) => ({
+  id: `washboard-${height}`,
+  name: `ウォッシュボード ${height}mm`,
+  height,
+  length: 120,
+  width: [49, 55][i],
+  ramp: WASHBOARD_RAMP,
+  tab: WASHBOARD_TAB,
+  tabThickness: WASHBOARD_TAB_THICKNESS,
+}));
+
+/** Attachment number in shared URLs. Append only, as PART_CODES. */
+export const ATTACHMENT_CODES: readonly string[] = ['washboard-5', 'washboard-10'];
+
+export function getAttachment(id: string): AttachmentDef {
+  const def = ATTACHMENTS.find((a) => a.id === id);
+  if (!def) throw new Error(`unknown attachment: ${id}`);
+  return def;
+}
 
 export function variantOf(part: PartDef, index: number | undefined): Variant {
   return part.variants[index ?? part.defaultVariant] ?? part.variants[part.defaultVariant];

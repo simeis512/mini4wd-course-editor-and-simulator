@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
-import { laneLinks, laneOffset, portLaneOffsets, type PartDef } from './catalog';
+import { laneLinks, laneOffset, portLaneOffsets } from './catalog';
+import type { PartDef } from './part';
 import { jointLanes, portKey, type Layout, type PlacedPiece, type PortRef } from './course';
 import { pointOnFrame, type PartGeometry } from './geometry';
 

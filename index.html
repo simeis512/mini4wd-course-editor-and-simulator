@@ -73,9 +73,15 @@
       #info table.laps th { color: var(--muted); font-weight: 400; text-align: left; padding-right: 10px; }
       #info table.laps td { padding: 1px 10px 1px 0; }
       #info .num { text-align: right; font-variant-numeric: tabular-nums; }
+      #info .owned select { max-width: 100%; min-height: 28px; padding: 2px 6px; font-size: 12px; }
+      #info .owned input { width: 48px; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
+      #info details summary { font-size: 12px; }
       .err { color: #ff6b6b; }
       .ok { color: var(--ok); }
       .warn { color: var(--warn); }
+      .attach-list { list-style: none; padding: 0; margin: 4px 0 0; }
+      .attach-list li { display: flex; gap: 4px; align-items: center; margin-top: 4px; }
+      .attach-list input { width: 64px; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
       .angle input#raise-count { width: 48px; }
       .angle input { width: 64px; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
       #trash-zone { grid-area: panel; z-index: 5; pointer-events: none; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 15px; font-weight: 600; color: #fff; background: rgba(216, 50, 58, 0.82); border: 3px dashed #fff; }
@@ -134,6 +140,11 @@
             <button id="flip" title="反転 (F)">反転</button>
             <button id="delete" title="削除 (Delete)">削除</button>
           </div>
+          <div id="length-row" class="row angle" hidden>
+            <label for="piece-length" title="自作ストレートの長さ。後ろにつながるピースもずれます">長さ</label>
+            <input id="piece-length" type="number" step="1" /> mm
+            <span id="length-range" class="muted"></span>
+          </div>
           <div class="row">
             <button id="rot-left" title="左に15°回す (Q、Shift で 1°)">⟲15°</button>
             <button id="rot-right" title="右に15°回す (E、Shift で 1°)">⟳15°</button>
@@ -147,6 +158,14 @@
             <button id="twist-plus" title="0.5° 右下がりへ（Shift で 0.1°）">＋</button>
           </div>
           <div id="twist-warn" class="hint warn" hidden></div>
+          <div id="attach-box">
+            <div class="row angle">
+              <label title="路面に貼るウォッシュボード。レーンと位置を決めて置きます">ウォッシュボード</label>
+              <button data-attach="washboard-5" title="高さ 5mm のウォッシュボードを貼る">＋5mm</button>
+              <button data-attach="washboard-10" title="高さ 10mm のウォッシュボードを貼る">＋10mm</button>
+            </div>
+            <ul id="attach-list" class="attach-list"></ul>
+          </div>
           <div class="row">
             <label title="10mm / 15°刻みで動かす。Shift を押している間は解除"><input id="snap" type="checkbox" checked /> スナップ</label>
             <label title="つながっているピースを置いて、このピースだけ動かす"><input id="move-alone" type="checkbox" /> このピースだけ動かす</label>

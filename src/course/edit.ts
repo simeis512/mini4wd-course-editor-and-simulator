@@ -1,5 +1,6 @@
 import { Matrix4, Vector3 } from 'three';
-import { getPart, GLOBAL_SPEC } from './catalog';
+import { withoutPiece } from './attachments';
+import { getPart, GLOBAL_SPEC, lengthWithin, partOf } from './catalog';
 import {
   anchorFrame,
   anchorRef,
@@ -8,6 +9,7 @@ import {
   layoutCourse,
   placementOf,
   portKey,
+  settingsOf,
   type Course,
   type Layout,
   type PieceRec,
@@ -99,10 +101,7 @@ export function freeSpot(course: Course, partId: string, port: number, x: number
 
 /** `rec` re-anchored as a free piece at `pose` from the port `base` (null: the world). */
 export function freeRec(rec: PieceRec, base: PortRef | null, pose: Pose): PieceRec {
-  const out: PieceRec = { part: rec.part, port: 'port' in rec ? rec.port : 0, free: base && [base.piece, base.port], pose };
-  if (rec.variant !== undefined) out.variant = rec.variant;
-  if (rec.twist) out.twist = rec.twist;
-  return out;
+  return { part: rec.part, port: 'port' in rec ? rec.port : 0, free: base && [base.piece, base.port], pose, ...settingsOf(rec) };
 }
 
 /**
@@ -132,6 +131,10 @@ export function deletePiece(course: Course, index: number): Course {
     next.intended = renumber(course.intended);
     if (!next.intended.length) delete next.intended;
   }
+  if (course.attachments) {
+    next.attachments = withoutPiece(course.attachments, index);
+    if (!next.attachments.length) delete next.attachments;
+  }
   return tidyCuts(next);
 }
 
@@ -142,7 +145,7 @@ export function deletePiece(course: Course, index: number): Course {
 export function flipPiece(course: Course, index: number): Course {
   const next = clone(course);
   const rec = next.pieces[index];
-  const part = getPart(rec.part);
+  const part = partOf(rec);
   if (part.ports.length !== 2) return next;
   const oldPort = 'port' in rec ? rec.port : 0;
   const newPort = 1 - oldPort;
@@ -169,9 +172,61 @@ export function flipPiece(course: Course, index: number): Course {
 export function setVariant(course: Course, index: number, variant: number): Course {
   const next = clone(course);
   const rec = next.pieces[index];
-  if (variant === getPart(rec.part).defaultVariant) delete rec.variant;
+  if (variant === partOf(rec).defaultVariant) delete rec.variant;
   else rec.variant = variant;
   return next;
+}
+
+/**
+ * Set the length of a piece whose part takes one (#69), in whole mm within
+ * its range. Pieces beyond its far port follow it.
+ */
+export function setLength(course: Course, index: number, length: number): Course {
+  const part = getPart(course.pieces[index].part);
+  if (!part.lengths) return course;
+  const next = clone(course);
+  const rec = next.pieces[index];
+  const mm = lengthWithin(part, length);
+  if (mm === part.lengths.default) delete rec.length;
+  else rec.length = mm;
+  return withFarSide(course, next, index);
+}
+
+/**
+ * `next`, a change to piece `index` that moves its far end, with the pieces
+ * that only meet that end (a loop closed by placing them there, not a stored
+ * link) moved along with it, as the pieces hanging off it are. Everything
+ * reached from the far end goes, except the pieces the changed one hangs
+ * off: where the far side comes round to them, the loop opens there.
+ */
+function withFarSide(course: Course, next: Course, index: number): Course {
+  const before = layoutCourse(course);
+  const after = layoutCourse(next);
+  const rec = course.pieces[index];
+  const near = 'port' in rec ? rec.port : 0;
+  const far = before.pieces[index].ports.map((_, p) => p).filter((p) => p !== near);
+  if (far.length !== 1) return next;
+  const delta = after.pieces[index].ports[far[0]].clone().multiply(before.pieces[index].ports[far[0]].clone().invert());
+  // Pieces it hangs off stay; pieces hanging off it already follow.
+  const stay = new Set([index]);
+  for (let ref = anchorRef(rec); ref; ref = anchorRef(course.pieces[ref[0]])) stay.add(ref[0]);
+  const hangsOff = (i: number): boolean => {
+    for (let ref = anchorRef(course.pieces[i]); ref; ref = anchorRef(course.pieces[ref[0]])) if (ref[0] === index) return true;
+    return false;
+  };
+  const reached = new Set<number>();
+  const queue = before.joints.flatMap((j) => [[j.a, j.b], [j.b, j.a]]).filter(([x]) => x.piece === index && x.port === far[0]).map(([, y]) => y.piece);
+  while (queue.length) {
+    const i = queue.pop()!;
+    if (stay.has(i) || reached.has(i)) continue;
+    reached.add(i);
+    for (const j of before.joints) {
+      if (j.a.piece === i) queue.push(j.b.piece);
+      if (j.b.piece === i) queue.push(j.a.piece);
+    }
+  }
+  const moving = new Set([...reached].filter((i) => !hangsOff(i)));
+  return moving.size ? tidyCuts(moveGroup(next, moving, delta)) : next;
 }
 
 /** Round an angle to the 0.1° kept in URLs. */
@@ -344,7 +399,7 @@ export function setShift(course: Course, a: PortRef, b: PortRef, shift: number):
   const rec = course.pieces[holder];
   if (!('to' in rec)) return course;
   const [j, p] = rec.to;
-  if (!compatible(getPart(course.pieces[j].part), p, getPart(rec.part), rec.port, shift)) return course;
+  if (!compatible(partOf(course.pieces[j]), p, partOf(rec), rec.port, shift)) return course;
   const next = clone(course);
   const out = next.pieces[holder] as typeof rec;
   if (shift) out.shift = shift;

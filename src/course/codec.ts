@@ -1,21 +1,22 @@
-import { CATALOG_VERSION, hasPart, PART_CODES } from './catalog';
-import { validateCourse, type Course, type PieceRec } from './course';
+import { ATTACHMENT_CODES, CATALOG_VERSION, hasPart, PART_CODES } from './catalog';
+import { validateCourse, type Attachment, type Course, type PieceRec } from './course';
 import { isZeroBend } from './flex';
 
 /**
  * Course ⇄ URL hash (spec 6): `#c=<format>.<payload>`, where the payload is
  * a compact binary course, deflate-raw compressed and base64url encoded.
  *
- * Format 2, all integers as LEB128 varints (signed ones zigzag encoded):
+ * Format 5, all integers as LEB128 varints (signed ones zigzag encoded):
  *   catalog version
  *   flags: bit0 dir = -1, bit1 has name, bit2 has split marks,
- *          bit3 has ports left open on purpose
+ *          bit3 has ports left open on purpose, bit4 has attachments
  *   [name: byte length, UTF-8]
  *   piece count
  *   per piece:
  *     part code (index into PART_CODES)
  *     head: bits0-1 anchor (0 origin, 1 to, 2 free in world, 3 free from port),
- *           bit2 has variant, bit3 has bend, bit4 has twist, bit5 has shift
+ *           bit2 has variant, bit3 has bend, bit4 has twist, bit5 has shift,
+ *           bit6 has length
  *     [variant]
  *     [port]                         unless origin
  *     [piece, port]                  to / free from port
@@ -23,16 +24,20 @@ import { isZeroBend } from './flex';
  *     [shift (lanes)]                sideways shift of a `to` joint (#60)
  *     [x, y, z (0.1 mm), yaw, pitch, roll (0.1°)]  free
  *     [twist (0.1°)]                 (spec 16.5)
+ *     [length (mm)]                  of a home-made straight (#69)
  *   [split mark count, then piece, port for each]  when flagged
  *   [open-on-purpose mark count, then piece, port for each]  when flagged (#13)
+ *   [attachment count, then for each: kind (index into ATTACHMENT_CODES),
+ *    piece, lane, offset (mm), side (mm, signed),
+ *    flags: bit0 reversed, bit1 on a fence, bit2 the right one]  when flagged (spec 4)
  *
- * Format 3 is the same without shifts, format 2 also without the
- * open-on-purpose marks, and format 1 without bends and twists too, so all
- * still read.
+ * Format 4 is the same without lengths and attachments, format 3 also without shifts,
+ * format 2 also without the open-on-purpose marks, and format 1 without
+ * bends and twists too, so all still read.
  */
-export const FORMAT_VERSION = 4;
+export const FORMAT_VERSION = 5;
 /** Older formats that still read. */
-const READABLE_VERSIONS = [1, 2, 3, FORMAT_VERSION];
+const READABLE_VERSIONS = [1, 2, 3, 4, FORMAT_VERSION];
 const HASH_KEY = 'c';
 
 class Writer {
@@ -88,7 +93,8 @@ export function courseToBytes(course: Course): Uint8Array {
   w.uint(course.catalog);
   const cuts = course.cuts ?? [];
   const intended = course.intended ?? [];
-  w.uint((course.dir === -1 ? 1 : 0) | (course.name ? 2 : 0) | (cuts.length ? 4 : 0) | (intended.length ? 8 : 0));
+  const attachments = course.attachments ?? [];
+  w.uint((course.dir === -1 ? 1 : 0) | (course.name ? 2 : 0) | (cuts.length ? 4 : 0) | (intended.length ? 8 : 0) | (attachments.length ? 16 : 0));
   if (course.name) {
     const name = new TextEncoder().encode(course.name);
     w.uint(name.length);
@@ -102,7 +108,8 @@ export function courseToBytes(course: Course): Uint8Array {
     const anchor = 'at' in rec ? 0 : 'to' in rec ? 1 : rec.free ? 3 : 2;
     const bend = 'to' in rec && !isZeroBend(rec.bend) ? rec.bend! : null;
     const shift = 'to' in rec ? (rec.shift ?? 0) : 0;
-    w.uint(anchor | (rec.variant !== undefined ? 4 : 0) | (bend ? 8 : 0) | (rec.twist ? 16 : 0) | (shift ? 32 : 0));
+    const length = rec.length !== undefined ? 64 : 0;
+    w.uint(anchor | (rec.variant !== undefined ? 4 : 0) | (bend ? 8 : 0) | (rec.twist ? 16 : 0) | (shift ? 32 : 0) | length);
     if (rec.variant !== undefined) w.uint(rec.variant);
     if ('port' in rec) w.uint(rec.port);
     if ('to' in rec) {
@@ -122,6 +129,7 @@ export function courseToBytes(course: Course): Uint8Array {
       for (const x of rec.pose.rot) w.tenths(x);
     }
     if (rec.twist) w.tenths(rec.twist);
+    if (rec.length !== undefined) w.uint(rec.length);
   }
   for (const marks of [cuts, intended]) {
     if (!marks.length) continue;
@@ -129,6 +137,16 @@ export function courseToBytes(course: Course): Uint8Array {
     for (const [piece, port] of marks) {
       w.uint(piece);
       w.uint(port);
+    }
+  }
+  if (attachments.length) {
+    w.uint(attachments.length);
+    for (const a of attachments) {
+      const code = ATTACHMENT_CODES.indexOf(a.kind);
+      if (code < 0) throw new Error(`attachment has no code: ${a.kind}`);
+      for (const n of [code, a.piece, a.lane, Math.round(a.offset)]) w.uint(n);
+      w.int(Math.round(a.side));
+      w.uint((a.reverse ? 1 : 0) | (a.wall ? 2 : 0) | (a.wall === 'right' ? 4 : 0));
     }
   }
   return new Uint8Array(w.bytes);
@@ -172,11 +190,23 @@ export function courseFromBytes(bytes: Uint8Array): Course {
     }
     if (variant !== undefined) rec.variant = variant;
     if (head & 16) rec.twist = r.tenths();
+    if (head & 64) rec.length = r.uint();
     course.pieces.push(rec);
   }
   const marks = (): [number, number][] => Array.from({ length: r.uint() }, () => [r.uint(), r.uint()]);
   if (flags & 4) course.cuts = marks();
   if (flags & 8) course.intended = marks();
+  if (flags & 16) {
+    course.attachments = Array.from({ length: r.uint() }, () => {
+      const kind = ATTACHMENT_CODES[r.uint()];
+      if (!kind) throw new Error('unknown attachment code');
+      const a: Attachment = { kind, piece: r.uint(), lane: r.uint(), offset: r.uint(), side: r.int() };
+      const flags = r.uint();
+      if (flags & 1) a.reverse = true;
+      if (flags & 2) a.wall = flags & 4 ? 'right' : 'left';
+      return a;
+    });
+  }
   if (r.pos !== bytes.length) throw new Error('unexpected data after course');
   validateCourse(course);
   return course;

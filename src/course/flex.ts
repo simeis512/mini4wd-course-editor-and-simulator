@@ -1,5 +1,5 @@
 import { Matrix4, Vector3, type BufferAttribute } from 'three';
-import type { PartDef } from './catalog';
+import type { PartDef } from './part';
 import { partGeometry, poseToMatrix, type PartGeometry, type Pose } from './geometry';
 
 // Joint bend and piece twist (spec 16): the pieces stay rigid, a joint may

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { dropJoin, joinPart, nextOpenPort } from './add';
 import { emptyCourse, layoutCourse, type Course } from './course';
-import { addPiece, footprint } from './edit';
+import { addFreePiece, addPiece, footprint, setPose } from './edit';
 import { chain } from './presets';
 
 /** Middle of the last piece's footprint, world X/Z. */
@@ -68,5 +68,28 @@ describe('dropJoin', () => {
     const [x, z] = middle(closing);
     const next = dropJoin(seven, 'curve45', undefined, x, z, 150);
     expect(layoutCourse(next!).open).toEqual([]);
+  });
+});
+
+describe('fitLength (#69)', () => {
+  /** A straight, and another placed on its own `gap` mm beyond it, facing it. */
+  const gapped = (gap: number, side = 0) => {
+    const c = addPiece(emptyCourse(), 'straight', null);
+    return setPose(addFreePiece(c, 'straight', 0, 0, 0), 1, { pos: [side, 0, 540 + gap], rot: [0, 0, 0] });
+  };
+
+  it('makes a home-made straight joined to a port just long enough to close the gap ahead', () => {
+    const joined = joinPart(gapped(333.4), 'free-straight', { piece: 0, port: 1 })!;
+    expect(joined.course.pieces[2].length).toBe(333);
+    const layout = layoutCourse(joined.course);
+    expect(layout.open).toHaveLength(2);
+    expect(layout.closures.some((c) => [c.a, c.b].some((r) => r.piece === 2))).toBe(true);
+  });
+
+  it('keeps its usual length when no port lines up within its reach', () => {
+    for (const c of [gapped(700), gapped(300, 50)]) {
+      const joined = joinPart(c, 'free-straight', { piece: 0, port: 1 })!;
+      expect(joined.course.pieces[2]).not.toHaveProperty('length');
+    }
   });
 });

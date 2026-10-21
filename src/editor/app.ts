@@ -1,5 +1,6 @@
 import { Matrix4 } from 'three';
 import { joinPart, nextOpenPort } from '../course/add';
+import { addAttachment, moveAttachment, removeAttachment } from '../course/attachments';
 import { LEVEL_HEIGHT } from '../course/catalog';
 import {
   emptyCourse,
@@ -23,6 +24,7 @@ import {
   moveGroup,
   reverseDirection,
   setBend,
+  setLength,
   setPose,
   setShift,
   setTwist,
@@ -36,6 +38,7 @@ import { checkLaps } from '../course/laps';
 import type { Pose } from '../course/geometry';
 import { basicOval } from '../course/presets';
 import { raiseRun } from '../course/raise';
+import { bindAttachments } from './attach';
 import { bindCourseInfo, renderCourseInfo, type CourseChecks } from './checks';
 import { $, toast } from './dom';
 import { PaletteDrag, PieceDrag, SNAP_STEP, type DragHost } from './drag';
@@ -43,6 +46,7 @@ import { History } from './history';
 import { bindLevelTools, levelMax, renderLevelTools, type HeightView } from './levels';
 import { buildPalette, placeContext, POSE_FIELDS, renderPanels, runMarks } from './panels';
 import type { Selection } from './selection';
+import { bindShopping } from './shopping';
 import { exportJson, HashSync, readCourseFile, readHash } from './share';
 import type { EditorView } from './view';
 import { TopView } from './view2d';
@@ -331,6 +335,12 @@ export class EditorApp {
     if (other) this.commit(joinPorts(this.course, s.ref, other), { kind: 'joint', a: s.ref, b: other });
   }
 
+  /** Apply an edit to the selected piece, keeping it selected. */
+  private editSelected(edit: (index: number) => Course): void {
+    const s = this.selection;
+    if (s?.kind === 'piece') this.commit(edit(s.index), s);
+  }
+
   private setPoseFromFields(): void {
     const s = this.selection;
     if (s?.kind !== 'piece') return;
@@ -381,6 +391,7 @@ export class EditorApp {
 
   private bindUi(): void {
     bindLevelTools((view) => this.setHeightView(view));
+    bindShopping(() => renderCourseInfo(this.course, this.layout, this.checks));
     bindCourseInfo({
       pick: (t) => this.select(this.selectionOf(t)),
       intended: (ref, on) => this.commit(markIntended(this.course, ref, on), this.selection),
@@ -412,9 +423,16 @@ export class EditorApp {
     $('flip').addEventListener('click', () => this.flipSelected());
     $('delete').addEventListener('click', () => this.deleteSelected());
     $<HTMLSelectElement>('variant').addEventListener('change', (e) => {
-      const s = this.selection;
-      if (s?.kind !== 'piece') return;
-      this.commit(setVariant(this.course, s.index, Number((e.target as HTMLSelectElement).value)), s);
+      this.editSelected((i) => setVariant(this.course, i, Number((e.target as HTMLSelectElement).value)));
+    });
+    $('piece-length').addEventListener('change', (e) => {
+      const mm = Number((e.target as HTMLInputElement).value);
+      if (mm) this.editSelected((i) => setLength(this.course, i, mm));
+    });
+    bindAttachments({
+      add: (kind) => this.editSelected((i) => addAttachment(this.course, kind, i)),
+      move: (n, to) => this.editSelected(() => moveAttachment(this.course, n, to)),
+      remove: (n) => this.editSelected(() => removeAttachment(this.course, n)),
     });
     $('rot-left').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? 1 : 15));
     $('rot-right').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? -1 : -15));

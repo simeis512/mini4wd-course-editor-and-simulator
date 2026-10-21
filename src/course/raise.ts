@@ -1,6 +1,6 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
-import { getPart } from './catalog';
-import { anchorFrame, anchorRef, layoutCourse, placementOf, type Course, type Layout, type PieceRec, type PortRef } from './course';
+import { partOf } from './catalog';
+import { anchorFrame, anchorRef, layoutCourse, placementOf, settingsOf, type Course, type Layout, type PieceRec, type PortRef } from './course';
 import { clone, freeRec, jointBend, linkHolder, setBend, setTwist } from './edit';
 import { FACE, matrixToPose, type Pose } from './geometry';
 
@@ -29,7 +29,7 @@ function childAt(course: Course, ref: PortRef): PortRef | null {
   return piece < 0 ? null : { piece, port: (course.pieces[piece] as { port: number }).port };
 }
 
-const twoEnded = (course: Course, piece: number) => getPart(course.pieces[piece].part).ports.length === 2;
+const twoEnded = (course: Course, piece: number) => partOf(course.pieces[piece]).ports.length === 2;
 
 /**
  * Up to `count` pieces from the joint between `from` and `into`, going into
@@ -108,9 +108,7 @@ function rootAt(course: Course, piece: number): { course: Course; turned: Set<nu
     const [parent, port] = rec.to;
     const turn = exactPose(poseOn(layout, { piece: child, port: rec.port }, { piece: parent, port }));
     const up = course.pieces[parent];
-    const out: PieceRec = { part: up.part, port, to: [child, rec.port], bend: { pitch: turn.rot[1], yaw: turn.rot[0] } };
-    if (up.variant !== undefined) out.variant = up.variant;
-    if (up.twist) out.twist = up.twist;
+    const out: PieceRec = { part: up.part, port, to: [child, rec.port], bend: { pitch: turn.rot[1], yaw: turn.rot[0] }, ...settingsOf(up) };
     // A shifted joint is shifted the same seen from either side (#60).
     if (rec.shift) out.shift = rec.shift;
     next.pieces[parent] = out;

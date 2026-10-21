@@ -1,6 +1,8 @@
-import { getPart } from './catalog';
+import { Vector3 } from 'three';
+import { getPart, partOf } from './catalog';
 import { compatible, layoutCourse, portKey, type Course, type PortRef } from './course';
-import { addPiece, footprint } from './edit';
+import { addPiece, footprint, setLength } from './edit';
+import { FACE } from './geometry';
 
 /**
  * Join `partId` to the open port `at`. `port` fixes which of its ports
@@ -10,7 +12,7 @@ import { addPiece, footprint } from './edit';
  */
 export function joinPart(course: Course, partId: string, at: PortRef, port?: number): { course: Course; port: number } | null {
   const part = getPart(partId);
-  const target = getPart(course.pieces[at.piece].part);
+  const target = partOf(course.pieces[at.piece]);
   const ports = part.ports
     .map((_, p) => p)
     .filter((p) => (port === undefined || p === port) && compatible(target, at.port, part, p));
@@ -20,7 +22,34 @@ export function joinPart(course: Course, partId: string, at: PortRef, port?: num
     const index = c.pieces.length - 1;
     return !layoutCourse(c).problems.some((pr) => pr.piece === index);
   });
-  return { course: tries[Math.max(0, fits)], port: ports[Math.max(0, fits)] };
+  const chosen = tries[Math.max(0, fits)];
+  return { course: fitLength(chosen, chosen.pieces.length - 1), port: ports[Math.max(0, fits)] };
+}
+
+/**
+ * A piece of a part that sets its own length (#69) made as long as it takes
+ * for its far end to meet an open port straight ahead, closing the gap there
+ * (loop closure, spec 5.3); the nearest such port when there are several.
+ * The course as it is when no port within its range lines up.
+ */
+export function fitLength(course: Course, index: number): Course {
+  const rec = course.pieces[index];
+  const range = getPart(rec.part).lengths;
+  if (!range || !('port' in rec)) return course;
+  const layout = layoutCourse(course);
+  const far = 1 - rec.port;
+  // Looking from the near end into the piece: + Z ahead.
+  const ahead = layout.pieces[index].ports[rec.port].clone().multiply(FACE).invert();
+  const lengths = layout.open
+    .filter((r) => r.piece !== index)
+    .map((r) => Math.round(new Vector3().setFromMatrixPosition(layout.pieces[r.piece].ports[r.port]).applyMatrix4(ahead).z))
+    .filter((z) => z >= range.min && z <= range.max)
+    .sort((a, b) => a - b);
+  for (const length of lengths) {
+    const next = setLength(course, index, length);
+    if (layoutCourse(next).closures.some((c) => [c.a, c.b].some((r) => r.piece === index && r.port === far))) return next;
+  }
+  return course;
 }
 
 /**
@@ -29,7 +58,7 @@ export function joinPart(course: Course, partId: string, at: PortRef, port?: num
  */
 export function nextOpenPort(course: Course, port: number): PortRef | null {
   const index = course.pieces.length - 1;
-  const part = getPart(course.pieces[index].part);
+  const part = partOf(course.pieces[index]);
   const open = new Set(layoutCourse(course).open.map(portKey));
   const far = part.ports.findIndex((_, p) => p !== port && open.has(portKey({ piece: index, port: p })));
   return far >= 0 ? { piece: index, port: far } : null;

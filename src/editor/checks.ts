@@ -1,9 +1,9 @@
-import { getPart } from '../course/catalog';
 import { MACHINE_CLEARANCE, type Clash } from '../course/clash';
-import { groupCount, partCounts, portKey, type Course, type Layout, type PortRef, type Problem } from '../course/course';
+import { groupCount, portKey, type Course, type Layout, type PortRef, type Problem } from '../course/course';
 import { BEND_LIMIT, TWIST_LIMIT } from '../course/flex';
 import type { LapCheck } from '../course/laps';
 import { $ } from './dom';
+import { shoppingHtml } from './shopping';
 
 // The course box: what the course is made of and what the checks found (spec 7).
 
@@ -135,8 +135,7 @@ export function renderCourseInfo(course: Course, layout: Layout, checks: CourseC
     info.push(`<div class="muted">ループ閉じ（#${c.a.piece + 1}–#${c.b.piece + 1}）: 誤差 ${c.distance.toFixed(1)}mm / ${c.angle.toFixed(1)}°</div>`);
   }
   if (checks.laps) info.push(...lapLines(layout, checks.laps));
-  const counts = [...partCounts(course)].map(([id, n]) => `<li>${getPart(id).name} × ${n}</li>`);
-  if (counts.length) info.push('<h3>使用パーツ</h3>', `<ul>${counts.join('')}</ul>`);
+  info.push(...shoppingHtml(course));
   $('info').innerHTML = info.join('');
 
   // The folded course box still shows the gist (#45).

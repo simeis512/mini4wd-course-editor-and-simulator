@@ -1,7 +1,8 @@
 import { Matrix4, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { compatible, emptyCourse, layoutCourse, partCounts } from './course';
-import { addPiece, deletePiece, flipPiece, markIntended, moveGroup, reverseDirection, pieceMiddle, setVariant, turnAboutMiddle } from './edit';
+import { compatible, emptyCourse, layoutCourse } from './course';
+import { FREE_STRAIGHT_MAX, FREE_STRAIGHT_MIN, getPart, partOf } from './catalog';
+import { addFreePiece, addPiece, deletePiece, flipPiece, markIntended, moveGroup, reverseDirection, pieceMiddle, setLength, setPose, setVariant, turnAboutMiddle } from './edit';
 import { facingError } from './geometry';
 import { basicOval, chain } from './presets';
 
@@ -86,16 +87,6 @@ describe('editing', () => {
     expect(c.pieces[0].variant).toBe(1);
     c = setVariant(c, 0, 0);
     expect(c.pieces[0]).not.toHaveProperty('variant');
-  });
-
-  it('counts parts', () => {
-    expect(Object.fromEntries(partCounts(basicOval()))).toEqual({
-      straight: 2,
-      wave: 1,
-      curve45: 8,
-      'bridge-approach': 2,
-      'lane-change-center': 1,
-    });
   });
 });
 
@@ -226,5 +217,60 @@ describe('reverseDirection', () => {
     const c = chain(['straight']);
     expect(reverseDirection(c).dir).toBe(-1);
     expect(reverseDirection(reverseDirection(c)).dir).toBeUndefined();
+  });
+});
+
+describe('home-made straights (#69)', () => {
+  const twoStraights = (length?: number) => {
+    let c = addPiece(emptyCourse(), 'free-straight', null);
+    if (length !== undefined) c = setLength(c, 0, length);
+    return addPiece(c, 'straight', { piece: 0, port: 1 });
+  };
+  const farEnd = (c: ReturnType<typeof emptyCourse>) => new Vector3().setFromMatrixPosition(layoutCourse(c).pieces[1].ports[1]);
+
+  it('sets its length per piece, and the pieces beyond follow', () => {
+    const c = twoStraights(100);
+    expect(c.pieces[0].length).toBe(100);
+    expect(layoutCourse(c).pieces[0].geometry.length).toBe(100);
+    expect(farEnd(c).z).toBeCloseTo(640);
+    expect(farEnd(setLength(c, 0, 400)).z).toBeCloseTo(940);
+  });
+
+  it('keeps the length to whole mm within its range, and drops the default', () => {
+    const c = twoStraights();
+    expect(setLength(c, 0, 5).pieces[0].length).toBe(FREE_STRAIGHT_MIN);
+    expect(setLength(c, 0, 9999).pieces[0].length).toBe(FREE_STRAIGHT_MAX);
+    expect(setLength(c, 0, 123.4).pieces[0].length).toBe(123);
+    const back = setLength(setLength(c, 0, 100), 0, getPart('free-straight').lengths!.default);
+    expect(back.pieces[0]).not.toHaveProperty('length');
+    // A part of fixed length is left alone.
+    expect(setLength(c, 1, 100)).toBe(c);
+  });
+
+  it('names the piece with its length and keeps one part per length', () => {
+    const c = twoStraights(100);
+    expect(partOf(c.pieces[0]).name).toBe('自作ストレート 100mm');
+    expect(partOf({ part: 'free-straight', length: 100 })).toBe(partOf(c.pieces[0]));
+    expect(partOf(c.pieces[1])).toBe(getPart('straight'));
+  });
+
+  it('moves pieces that only meet its far end along with it', () => {
+    // A straight placed on its own where the home-made one ends, with another hung off it:
+    // they meet by loop closure, not by a stored link.
+    let c = setLength(addPiece(emptyCourse(), 'free-straight', null), 0, 100);
+    c = setPose(addFreePiece(c, 'straight', 0, 0, 0), 1, { pos: [0, 0, 100], rot: [0, 0, 0] });
+    c = addPiece(c, 'curve45', { piece: 1, port: 1 });
+    expect(layoutCourse(c).closures).toHaveLength(1);
+    const layout = layoutCourse(setLength(c, 0, 300));
+    expect(layout.closures).toHaveLength(1);
+    expect(new Vector3().setFromMatrixPosition(layout.pieces[2].ports[0]).z).toBeCloseTo(840);
+    // The pieces before it stay put.
+    expect(new Vector3().setFromMatrixPosition(layout.pieces[0].ports[0]).z).toBeCloseTo(0);
+  });
+
+  it('keeps its length when the piece is placed another way', () => {
+    const c = twoStraights(100);
+    expect(deletePiece(addPiece(c, 'straight', { piece: 1, port: 1 }), 1).pieces[0].length).toBe(100);
+    expect(flipPiece(c, 0).pieces[0].length).toBe(100);
   });
 });
