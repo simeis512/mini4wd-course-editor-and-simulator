@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLOBAL_SPEC, laneOffset, variantOf } from './catalog';
-import type { Layout, PlacedPiece } from './course';
+import { attachmentShape } from './attachments';
+import type { Attachment, Layout, PlacedPiece } from './course';
 import { Twist } from './flex';
 import { partGeometry, partStands, pointOnFrame, STAND_BEAM, STAND_DEPTH, STAND_LEG, type PartGeometry, type Stand } from './geometry';
 import { shapeSource } from './model';
@@ -85,16 +86,18 @@ export function halfWidth(laneCount: number): number {
 }
 
 /**
- * Sweep a rectangle (lateral `x0..x1`, height `y0..y1`) along the frames.
- * Each side gets its own vertices so the corners stay sharp.
+ * Sweep a rectangle (lateral `x0..x1`, height `y0..y1`) along the frames;
+ * `y1` may give the top at each frame. Each side gets its own vertices so
+ * the corners stay sharp.
  */
-function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y1: number): THREE.BufferGeometry {
-  // Corners anticlockwise when looking along the centreline.
-  const corners: [number, number][] = [
+function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y1: number | readonly number[]): THREE.BufferGeometry {
+  const top = (i: number) => (typeof y1 === 'number' ? y1 : y1[i]);
+  // Corners anticlockwise when looking along the centreline; null height is the top.
+  const corners: [number, number | null][] = [
     [x0, y0],
     [x1, y0],
-    [x1, y1],
-    [x0, y1],
+    [x1, null],
+    [x0, null],
   ];
   const positions: number[] = [];
   const indices: number[] = [];
@@ -104,24 +107,24 @@ function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y
     const [ax, ay] = corners[side];
     const [bx, by] = corners[(side + 1) % 4];
     const base = positions.length / 3;
-    for (const f of frames) {
-      pointOnFrame(f, ax, ay, p);
+    frames.forEach((f, i) => {
+      pointOnFrame(f, ax, ay ?? top(i), p);
       positions.push(p.x, p.y, p.z);
-      pointOnFrame(f, bx, by, p);
+      pointOnFrame(f, bx, by ?? top(i), p);
       positions.push(p.x, p.y, p.z);
-    }
+    });
     for (let i = 0; i < n - 1; i++) {
       const a = base + i * 2;
       indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
     }
   }
-  for (const [f, flip] of [
-    [frames[0], true],
-    [frames[n - 1], false],
+  for (const [i, flip] of [
+    [0, true],
+    [n - 1, false],
   ] as const) {
     const base = positions.length / 3;
     for (const [x, y] of corners) {
-      pointOnFrame(f, x, y, p);
+      pointOnFrame(frames[i], x, y ?? top(i), p);
       positions.push(p.x, p.y, p.z);
     }
     if (flip) indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
@@ -213,10 +216,25 @@ export function buildCourseMeshes(layout: Layout, visuals: ModelVisuals = new Ma
     // Stands that come with the part are part of the piece, in its colour (#11).
     const stands = partStands(pc.part, pc.geometry);
     if (stands.length) group.add(buildSupportMesh(stands, material(color, 0.9, true)));
+    for (const a of layout.attachments) if (a.piece === i) group.add(attachmentMesh(pc, a));
     group.matrixAutoUpdate = false;
     group.matrix.copy(pc.matrix);
     return group;
   });
+}
+
+/** Washboards are dark grey: their colour is not known (spec 4, provisional). */
+export const ATTACHMENT_COLOR = '#55595f';
+/** Thinnest a washboard is drawn, mm, so it shows over the road between its bumps (cosmetic). */
+const ATTACHMENT_PLATE = 1;
+
+/** A washboard on its piece, part-local; it sits on the road and its bumps rise from it. */
+function attachmentMesh(pc: PlacedPiece, a: Attachment): THREE.Mesh {
+  const { frames, tops, half } = attachmentShape(pc, a);
+  const top = tops.map((t) => Math.max(t, ATTACHMENT_PLATE));
+  const mesh = new THREE.Mesh(sweepBox(frames, -half, half, -ATTACHMENT_PLATE, top), material(ATTACHMENT_COLOR, 1));
+  mesh.name = 'attachment';
+  return mesh;
 }
 
 /** Automatic supports are wood-coloured (#11). */

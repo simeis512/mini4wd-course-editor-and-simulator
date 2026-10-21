@@ -1,5 +1,6 @@
 import { Matrix4 } from 'three';
 import { joinPart, nextOpenPort } from '../course/add';
+import { addAttachment, moveAttachment, removeAttachment } from '../course/attachments';
 import { LEVEL_HEIGHT } from '../course/catalog';
 import {
   emptyCourse,
@@ -37,6 +38,7 @@ import { checkLaps } from '../course/laps';
 import type { Pose } from '../course/geometry';
 import { basicOval } from '../course/presets';
 import { raiseRun } from '../course/raise';
+import { bindAttachments } from './attach';
 import { bindCourseInfo, renderCourseInfo, type CourseChecks } from './checks';
 import { $, toast } from './dom';
 import { PaletteDrag, PieceDrag, SNAP_STEP, type DragHost } from './drag';
@@ -332,6 +334,12 @@ export class EditorApp {
     if (other) this.commit(joinPorts(this.course, s.ref, other), { kind: 'joint', a: s.ref, b: other });
   }
 
+  /** Apply an edit to the selected piece, keeping it selected. */
+  private editSelected(edit: (index: number) => Course): void {
+    const s = this.selection;
+    if (s?.kind === 'piece') this.commit(edit(s.index), s);
+  }
+
   private setPoseFromFields(): void {
     const s = this.selection;
     if (s?.kind !== 'piece') return;
@@ -413,14 +421,16 @@ export class EditorApp {
     $('flip').addEventListener('click', () => this.flipSelected());
     $('delete').addEventListener('click', () => this.deleteSelected());
     $<HTMLSelectElement>('variant').addEventListener('change', (e) => {
-      const s = this.selection;
-      if (s?.kind !== 'piece') return;
-      this.commit(setVariant(this.course, s.index, Number((e.target as HTMLSelectElement).value)), s);
+      this.editSelected((i) => setVariant(this.course, i, Number((e.target as HTMLSelectElement).value)));
     });
     $('piece-length').addEventListener('change', (e) => {
-      const s = this.selection;
       const mm = Number((e.target as HTMLInputElement).value);
-      if (s?.kind === 'piece' && mm) this.commit(setLength(this.course, s.index, mm), s);
+      if (mm) this.editSelected((i) => setLength(this.course, i, mm));
+    });
+    bindAttachments({
+      add: (kind) => this.editSelected((i) => addAttachment(this.course, kind, i)),
+      move: (n, to) => this.editSelected(() => moveAttachment(this.course, n, to)),
+      remove: (n) => this.editSelected(() => removeAttachment(this.course, n)),
     });
     $('rot-left').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? 1 : 15));
     $('rot-right').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? -1 : -15));

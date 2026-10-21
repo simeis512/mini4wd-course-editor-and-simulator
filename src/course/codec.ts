@@ -1,4 +1,4 @@
-import { CATALOG_VERSION, hasPart, PART_CODES } from './catalog';
+import { ATTACHMENT_CODES, CATALOG_VERSION, hasPart, PART_CODES } from './catalog';
 import { validateCourse, type Course, type PieceRec } from './course';
 import { isZeroBend } from './flex';
 
@@ -9,7 +9,7 @@ import { isZeroBend } from './flex';
  * Format 5, all integers as LEB128 varints (signed ones zigzag encoded):
  *   catalog version
  *   flags: bit0 dir = -1, bit1 has name, bit2 has split marks,
- *          bit3 has ports left open on purpose
+ *          bit3 has ports left open on purpose, bit4 has attachments
  *   [name: byte length, UTF-8]
  *   piece count
  *   per piece:
@@ -27,8 +27,10 @@ import { isZeroBend } from './flex';
  *     [length (mm)]                  of a home-made straight (#69)
  *   [split mark count, then piece, port for each]  when flagged
  *   [open-on-purpose mark count, then piece, port for each]  when flagged (#13)
+ *   [attachment count, then for each: kind (index into ATTACHMENT_CODES),
+ *    piece, lane, offset (mm)]                                  when flagged (spec 4)
  *
- * Format 4 is the same without lengths, format 3 also without shifts,
+ * Format 4 is the same without lengths and attachments, format 3 also without shifts,
  * format 2 also without the open-on-purpose marks, and format 1 without
  * bends and twists too, so all still read.
  */
@@ -90,7 +92,8 @@ export function courseToBytes(course: Course): Uint8Array {
   w.uint(course.catalog);
   const cuts = course.cuts ?? [];
   const intended = course.intended ?? [];
-  w.uint((course.dir === -1 ? 1 : 0) | (course.name ? 2 : 0) | (cuts.length ? 4 : 0) | (intended.length ? 8 : 0));
+  const attachments = course.attachments ?? [];
+  w.uint((course.dir === -1 ? 1 : 0) | (course.name ? 2 : 0) | (cuts.length ? 4 : 0) | (intended.length ? 8 : 0) | (attachments.length ? 16 : 0));
   if (course.name) {
     const name = new TextEncoder().encode(course.name);
     w.uint(name.length);
@@ -133,6 +136,14 @@ export function courseToBytes(course: Course): Uint8Array {
     for (const [piece, port] of marks) {
       w.uint(piece);
       w.uint(port);
+    }
+  }
+  if (attachments.length) {
+    w.uint(attachments.length);
+    for (const a of attachments) {
+      const code = ATTACHMENT_CODES.indexOf(a.kind);
+      if (code < 0) throw new Error(`attachment has no code: ${a.kind}`);
+      for (const n of [code, a.piece, a.lane, Math.round(a.offset)]) w.uint(n);
     }
   }
   return new Uint8Array(w.bytes);
@@ -182,6 +193,13 @@ export function courseFromBytes(bytes: Uint8Array): Course {
   const marks = (): [number, number][] => Array.from({ length: r.uint() }, () => [r.uint(), r.uint()]);
   if (flags & 4) course.cuts = marks();
   if (flags & 8) course.intended = marks();
+  if (flags & 16) {
+    course.attachments = Array.from({ length: r.uint() }, () => {
+      const kind = ATTACHMENT_CODES[r.uint()];
+      if (!kind) throw new Error('unknown attachment code');
+      return { kind, piece: r.uint(), lane: r.uint(), offset: r.uint() };
+    });
+  }
   if (r.pos !== bytes.length) throw new Error('unexpected data after course');
   validateCourse(course);
   return course;

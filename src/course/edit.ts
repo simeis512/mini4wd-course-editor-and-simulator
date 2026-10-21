@@ -1,4 +1,5 @@
 import { Matrix4, Vector3 } from 'three';
+import { withoutPiece } from './attachments';
 import { getPart, GLOBAL_SPEC, lengthWithin, partOf } from './catalog';
 import {
   anchorFrame,
@@ -129,6 +130,10 @@ export function deletePiece(course: Course, index: number): Course {
   if (course.intended) {
     next.intended = renumber(course.intended);
     if (!next.intended.length) delete next.intended;
+  }
+  if (course.attachments) {
+    next.attachments = withoutPiece(course.attachments, index);
+    if (!next.attachments.length) delete next.attachments;
   }
   return tidyCuts(next);
 }

@@ -374,6 +374,41 @@ export function partOf(rec: { part: string; length?: number }): PartDef {
   return out;
 }
 
+/** Something laid on the road (spec 4): a washboard. */
+export interface AttachmentDef {
+  id: string;
+  name: string;
+  /** Height of its bumps above the road, mm (official). */
+  height: number;
+  /** Length along the lane, mm (official: 120, 69572). */
+  length: number;
+  /** Width across the lane, mm. */
+  width: number;
+  /** Number of bumps along it. */
+  bumps: number;
+}
+
+/**
+ * Bumps along a washboard and its width across the lane: not measured,
+ * so the lane's width and a guess (spec 4, #1, provisional).
+ */
+const WASHBOARD_BUMPS = 5;
+const WASHBOARD_WIDTH = GLOBAL_SPEC.laneWidth;
+
+export const ATTACHMENTS: readonly AttachmentDef[] = [
+  { id: 'washboard-5', name: 'ウォッシュボード 5mm', height: 5, length: 120, width: WASHBOARD_WIDTH, bumps: WASHBOARD_BUMPS },
+  { id: 'washboard-10', name: 'ウォッシュボード 10mm', height: 10, length: 120, width: WASHBOARD_WIDTH, bumps: WASHBOARD_BUMPS },
+];
+
+/** Attachment number in shared URLs. Append only, as PART_CODES. */
+export const ATTACHMENT_CODES: readonly string[] = ['washboard-5', 'washboard-10'];
+
+export function getAttachment(id: string): AttachmentDef {
+  const def = ATTACHMENTS.find((a) => a.id === id);
+  if (!def) throw new Error(`unknown attachment: ${id}`);
+  return def;
+}
+
 export function variantOf(part: PartDef, index: number | undefined): Variant {
   return part.variants[index ?? part.defaultVariant] ?? part.variants[part.defaultVariant];
 }

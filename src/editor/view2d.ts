@@ -4,7 +4,8 @@ import type { Clash } from '../course/clash';
 import { portKey, sameJoint, type Layout, type PortRef } from '../course/course';
 import { pointOnFrame } from '../course/geometry';
 import { atLevel, pieceHeights, type HeightRange } from '../course/height';
-import { halfWidth, insidePolygon, worldTracks } from '../course/mesh';
+import { attachmentOutline } from '../course/attachments';
+import { ATTACHMENT_COLOR, halfWidth, insidePolygon, worldTracks } from '../course/mesh';
 import { colorRange, heightColor, type HeightView } from './levels';
 import { lowestFirst, outlinesOf, xz, type Outline } from './outline2d';
 import { JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
@@ -187,6 +188,7 @@ export class TopView implements EditorView {
     };
 
     const range = colorRange(this.topHeight);
+    const drawnMarks = new Set<number>();
     for (const i of this.order) {
       const o = this.outlines[i];
       if (!this.shown(o.piece)) {
@@ -223,6 +225,22 @@ export class TopView implements EditorView {
       }
       path(o.polygon, true);
       ctx.stroke();
+      // Washboards on the piece's road, under anything higher (spec 4).
+      if (!drawnMarks.has(o.piece)) {
+        drawnMarks.add(o.piece);
+        for (const a of layout.attachments) {
+          if (a.piece !== o.piece) continue;
+          const { outline, crests } = attachmentOutline(pc, a);
+          path(outline.map(xz), true);
+          ctx.fillStyle = ATTACHMENT_COLOR;
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+          for (const crest of crests) {
+            path(crest.map(xz), false);
+            ctx.stroke();
+          }
+        }
+      }
     }
 
     const sel = this.selection;

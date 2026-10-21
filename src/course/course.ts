@@ -1,5 +1,5 @@
 import { Matrix4, Vector3 } from 'three';
-import { CATALOG_VERSION, GLOBAL_SPEC, lengthWithin, partOf, portLaneOffsets } from './catalog';
+import { CATALOG_VERSION, getAttachment, GLOBAL_SPEC, lengthWithin, partOf, portLaneOffsets } from './catalog';
 import type { PartDef, PortDef } from './part';
 import { bendAngle, bendMatrix, BEND_LIMIT, pieceGeometry, TWIST_LIMIT, type Bend } from './flex';
 import { attach, FACE, facingError, IDENTITY_POSE, poseToMatrix, type FrameError, type PartGeometry, type Pose } from './geometry';
@@ -42,6 +42,20 @@ export type PieceRec =
    */
   | (RecBase & { port: number; free: [piece: number, port: number] | null; pose: Pose });
 
+/**
+ * Something laid on a piece's road, such as a washboard (spec 4, #17):
+ * which lane of the piece's main road, and where its middle is along it.
+ */
+export interface Attachment {
+  /** Id in ATTACHMENTS (attachments.ts). */
+  kind: string;
+  piece: number;
+  /** Lane position on the main road, 0 = left looking along its centreline. */
+  lane: number;
+  /** From the start of the main centreline to the attachment's middle, mm. */
+  offset: number;
+}
+
 export interface Course {
   v: 1;
   catalog: number;
@@ -58,6 +72,8 @@ export interface Course {
    * not warned about (spec 7, #13).
    */
   intended?: [piece: number, port: number][];
+  /** Washboards and the like on the road (spec 4). */
+  attachments?: Attachment[];
 }
 
 export function emptyCourse(): Course {
@@ -136,6 +152,8 @@ export interface Layout {
   intended: PortRef[];
   /** Lanes that end at a joint because the port they meet has no lane there (#60). */
   deadEnds: DeadEnd[];
+  /** The course's attachments, as stored (spec 4). */
+  attachments: Attachment[];
 }
 
 /**
@@ -185,6 +203,12 @@ export function validateCourse(course: Course): void {
       if (p < 0 || p >= other.ports.length) throw new Error(`piece ${i}: no port ${p} on piece ${j}`);
     }
   });
+  for (const a of course.attachments ?? []) {
+    const rec = course.pieces[a.piece];
+    getAttachment(a.kind);
+    if (!rec || !partOf(rec).lanes.includes(a.lane)) throw new Error(`${a.kind} on missing lane ${a.piece}:${a.lane}`);
+    if (!(a.offset >= 0)) throw new Error(`${a.kind} at ${a.offset}mm`);
+  }
   for (const [what, marks] of [['split', course.cuts], ['open', course.intended]] as const) {
     for (const [piece, port] of marks ?? []) {
       const rec = course.pieces[piece];
@@ -345,7 +369,8 @@ export function layoutCourse(course: Course): Layout {
       if (lanes.length) deadEnds.push({ ...ref, lanes, intended: meant.has(portKey(ref)) });
     }
   }
-  return { pieces, problems, connected, closures, open, joints, group, split, intended, deadEnds };
+  const attachments = course.attachments ?? [];
+  return { pieces, problems, connected, closures, open, joints, group, split, intended, deadEnds, attachments };
 }
 
 /** The frame a piece's anchoring port faces, in world space. */

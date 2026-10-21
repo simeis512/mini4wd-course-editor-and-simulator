@@ -203,6 +203,34 @@ export function facingError(a: Matrix4, b: Matrix4): FrameError {
   return { distance: pa.distanceTo(pb), angle: qa.angleTo(qb) / DEG };
 }
 
+/** Distance along sampled frames from the first to each, mm: the length of the path between them. */
+export function distancesAlong(samples: readonly Matrix4[]): number[] {
+  const out = [0];
+  const [a, b] = [new Vector3(), new Vector3()];
+  for (let i = 1; i < samples.length; i++) {
+    a.setFromMatrixPosition(samples[i - 1]);
+    b.setFromMatrixPosition(samples[i]);
+    out.push(out[i - 1] + a.distanceTo(b));
+  }
+  return out;
+}
+
+/**
+ * The frame `s` mm along sampled frames (see `distancesAlong`), blended
+ * between the two samples it falls between; clamped to the ends.
+ */
+export function frameAlong(samples: readonly Matrix4[], distances: readonly number[], s: number): Matrix4 {
+  const last = samples.length - 1;
+  let i = 0;
+  while (i < last - 1 && distances[i + 1] < s) i++;
+  const span = distances[i + 1] - distances[i];
+  const t = span > 0 ? Math.min(1, Math.max(0, (s - distances[i]) / span)) : 0;
+  const [pa, pb, qa, qb, scale] = [new Vector3(), new Vector3(), new Quaternion(), new Quaternion(), new Vector3()];
+  samples[i].decompose(pa, qa, scale);
+  samples[Math.min(i + 1, last)].decompose(pb, qb, scale);
+  return new Matrix4().compose(pa.lerp(pb, t), qa.slerp(qb, t), new Vector3(1, 1, 1));
+}
+
 /** Point on a frame at lateral offset `right` (+ right) and height `up`. */
 export function pointOnFrame(frame: Matrix4, right: number, up: number, out = new Vector3()): Vector3 {
   return out.set(-right, up, 0).applyMatrix4(frame);

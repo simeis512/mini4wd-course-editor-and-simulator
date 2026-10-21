@@ -76,6 +76,9 @@
       .err { color: #ff6b6b; }
       .ok { color: var(--ok); }
       .warn { color: var(--warn); }
+      .attach-list { list-style: none; padding: 0; margin: 4px 0 0; }
+      .attach-list li { display: flex; gap: 4px; align-items: center; margin-top: 4px; }
+      .attach-list input { width: 64px; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
       .angle input#raise-count { width: 48px; }
       .angle input { width: 64px; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
       #trash-zone { grid-area: panel; z-index: 5; pointer-events: none; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 15px; font-weight: 600; color: #fff; background: rgba(216, 50, 58, 0.82); border: 3px dashed #fff; }
@@ -152,6 +155,14 @@
             <button id="twist-plus" title="0.5° 右下がりへ（Shift で 0.1°）">＋</button>
           </div>
           <div id="twist-warn" class="hint warn" hidden></div>
+          <div id="attach-box">
+            <div class="row angle">
+              <label title="路面に貼るウォッシュボード。レーンと位置を決めて置きます">ウォッシュボード</label>
+              <button data-attach="washboard-5" title="高さ 5mm のウォッシュボードを貼る">＋5mm</button>
+              <button data-attach="washboard-10" title="高さ 10mm のウォッシュボードを貼る">＋10mm</button>
+            </div>
+            <ul id="attach-list" class="attach-list"></ul>
+          </div>
           <div class="row">
             <label title="10mm / 15°刻みで動かす。Shift を押している間は解除"><input id="snap" type="checkbox" checked /> スナップ</label>
             <label title="つながっているピースを置いて、このピースだけ動かす"><input id="move-alone" type="checkbox" /> このピースだけ動かす</label>
