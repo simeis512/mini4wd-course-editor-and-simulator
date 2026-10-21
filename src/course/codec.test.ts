@@ -18,6 +18,7 @@ function sample(): Course {
   c = setLength(c, c.pieces.length - 1, 123);
   c = addAttachment(c, 'washboard-10', 3, 2, 50);
   c = moveAttachment(c, 0, { reverse: true, side: 10 });
+  c = moveAttachment(addAttachment(c, 'washboard-5', 3, 0, 300), 1, { wall: 'right' });
   return { ...c, name: 'テストコース', dir: -1 };
 }
 

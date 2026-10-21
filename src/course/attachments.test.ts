@@ -4,6 +4,7 @@ import { addAttachment, attachmentHeight, attachmentShape, moveAttachment, offse
 import { getAttachment, laneOffset } from './catalog';
 import { emptyCourse, layoutCourse, validateCourse } from './course';
 import { addPiece, deletePiece, setLength } from './edit';
+import { pointOnFrame } from './geometry';
 
 /** Two straights in a row. */
 function straights() {
@@ -52,6 +53,29 @@ describe('washboards (spec 4, #17)', () => {
     expect(shape.edges[2]).toBeLessThan(shape.edges[0]);
     expect(shape.tops[shape.edges[2]]).toBeCloseTo(5);
     expect(moveAttachment(c, 0, { reverse: false }).attachments![0]).not.toHaveProperty('reverse');
+  });
+
+  it('stands on edge against a fence, reaching into the lane by its thickness', () => {
+    // Lane 0's centre is 120mm to the left (+X); its fences 57.5mm either side.
+    for (const [wall, face, inward] of [['left', 177.5, -1], ['right', 62.5, 1]] as const) {
+      const c = moveAttachment(addAttachment(straights(), 'washboard-10', 0, 0, 100), 0, { wall });
+      expect(c.attachments![0].wall).toBe(wall);
+      const shape = attachmentShape(layoutCourse(c).pieces[0], c.attachments![0]);
+      const i = shape.edges[2];
+      const f = shape.frames[i];
+      // Width up from the road, thickness out from the fence face.
+      const corners = [pointOnFrame(f, -shape.half, 0), pointOnFrame(f, shape.half, 0), pointOnFrame(f, shape.half, shape.tops[i])];
+      expect(Math.abs(corners[0].y - corners[1].y)).toBeCloseTo(55);
+      expect(Math.min(corners[0].y, corners[1].y)).toBeCloseTo(0);
+      expect(corners[2].y).toBeCloseTo(corners[1].y);
+      expect(corners[0].x).toBeCloseTo(face);
+      expect(corners[1].x).toBeCloseTo(face);
+      expect(corners[2].x).toBeCloseTo(face + inward * 10);
+    }
+    // Choosing a place across the lane lays it back down.
+    const c = moveAttachment(addAttachment(straights(), 'washboard-5', 0), 0, { wall: 'left' });
+    expect(moveAttachment(c, 0, { side: 0 }).attachments![0]).not.toHaveProperty('wall');
+    expect(moveAttachment(c, 0, { wall: null }).attachments![0]).not.toHaveProperty('wall');
   });
 
   it('stays between the fences', () => {

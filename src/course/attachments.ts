@@ -1,4 +1,4 @@
-import type { Matrix4, Vector3 } from 'three';
+import { Matrix4, type Vector3 } from 'three';
 import { getAttachment, GLOBAL_SPEC, laneOffset, partOf, type AttachmentDef } from './catalog';
 import type { Attachment, Course, PlacedPiece } from './course';
 import { distancesAlong, frameAlong, pointOnFrame } from './geometry';
@@ -38,6 +38,9 @@ export function sideLimit(kind: string): number {
   return Math.max(0, (GLOBAL_SPEC.laneWidth - getAttachment(kind).width) / 2);
 }
 
+/** The inner face of a lane's fence from the lane's centre, mm, + right. */
+const wallSide = (wall: 'left' | 'right') => (wall === 'left' ? -1 : 1) * (GLOBAL_SPEC.laneWidth / 2);
+
 /** Where across the lane an attachment can be: between the fences, whole mm. */
 export function sideWithin(a: Pick<Attachment, 'kind' | 'side'>): number {
   const limit = sideLimit(a.kind);
@@ -75,10 +78,13 @@ export function attachmentShape(pc: PlacedPiece, a: Attachment): AttachmentShape
   const along = a.reverse ? fromEntry.map((s) => def.length - s).reverse() : fromEntry;
   const entryAt = (x: number) => (a.reverse ? def.length - x : x);
   // Across to the lane and its place in it; + X is left.
-  const across = laneOffset(a.lane) + sideWithin(a);
+  const across = laneOffset(a.lane) + (a.wall ? wallSide(a.wall) : sideWithin(a));
+  // On a fence the board stands on edge: its width goes up and its thickness into the lane.
+  const stand = a.wall ? new Matrix4().makeTranslation(0, def.width / 2, 0).multiply(new Matrix4().makeRotationZ(a.wall === 'left' ? Math.PI / 2 : -Math.PI / 2)) : null;
   const frames = along.map((x) => {
     const f = frameAlong(samples, distances, mid - def.length / 2 + x);
-    return f.setPosition(pointOnFrame(f, across, 0));
+    f.setPosition(pointOnFrame(f, across, 0));
+    return stand ? f.multiply(stand) : f;
   });
   return {
     frames,
@@ -97,10 +103,11 @@ export function attachmentOutline(
   pc: PlacedPiece,
   a: Attachment,
 ): { outline: Vector3[]; tabs: Vector3[][]; top: [Vector3, Vector3]; thick: [Vector3, Vector3] } {
-  const { frames, half, edges } = attachmentShape(pc, a);
+  const { frames, tops, half, edges } = attachmentShape(pc, a);
   const world = frames.map((f) => pc.matrix.clone().multiply(f));
-  const edge = (x: number) => world.map((f) => pointOnFrame(f, x, 0));
-  const [left, right] = [edge(-half), edge(half)];
+  // On the road, its two sides; on a fence, the fence face and how far it reaches into the lane.
+  const edge = (x: number, y: (i: number) => number) => world.map((f, i) => pointOnFrame(f, x, y(i)));
+  const [left, right] = a.wall ? [edge(half, () => 0), edge(half, (i) => tops[i])] : [edge(-half, () => 0), edge(half, () => 0)];
   const part = (i: number, j: number) => [...left.slice(Math.min(i, j), Math.max(i, j) + 1), ...right.slice(Math.min(i, j), Math.max(i, j) + 1).reverse()];
   const [tabIn, topIn, thick] = edges;
   const [first, last] = [0, world.length - 1];
@@ -133,12 +140,14 @@ export function addAttachment(course: Course, kind: string, piece: number, lane?
 }
 
 /** Change an attachment's lane, its place along or across it (whole mm), or which way it faces. */
-export function moveAttachment(course: Course, index: number, to: { lane?: number; offset?: number; side?: number; reverse?: boolean }): Course {
+export function moveAttachment(course: Course, index: number, to: { lane?: number; offset?: number; side?: number; reverse?: boolean; wall?: 'left' | 'right' | null }): Course {
   const next = structuredClone(course);
   const a = next.attachments![index];
   if (to.lane !== undefined && partOf(next.pieces[a.piece]).lanes.includes(to.lane)) a.lane = to.lane;
   if (to.offset !== undefined) a.offset = Math.max(0, Math.round(to.offset));
   if (to.side !== undefined) a.side = sideWithin({ kind: a.kind, side: to.side });
+  if (to.wall) a.wall = to.wall;
+  else if (to.wall === null || to.side !== undefined) delete a.wall;
   if (to.reverse) a.reverse = true;
   else if (to.reverse === false) delete a.reverse;
   return next;

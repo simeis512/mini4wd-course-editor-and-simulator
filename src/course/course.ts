@@ -58,6 +58,12 @@ export interface Attachment {
   side: number;
   /** Machines come in by the end nearer the far end of the centreline: the thick end faces its start. */
   reverse?: boolean;
+  /**
+   * Stood on edge against that fence instead of laid on the road, so it
+   * pushes the machine's rollers in (Tamiya tip, user 2026-10-21); `side`
+   * is then unused.
+   */
+  wall?: 'left' | 'right';
 }
 
 export interface Course {
@@ -212,6 +218,7 @@ export function validateCourse(course: Course): void {
     getAttachment(a.kind);
     if (!rec || !partOf(rec).lanes.includes(a.lane)) throw new Error(`${a.kind} on missing lane ${a.piece}:${a.lane}`);
     if (!(a.offset >= 0) || !Number.isFinite(a.side)) throw new Error(`${a.kind} at ${a.offset}mm, ${a.side}mm across`);
+    if (a.wall !== undefined && a.wall !== 'left' && a.wall !== 'right') throw new Error(`${a.kind} on wall ${a.wall}`);
   }
   for (const [what, marks] of [['split', course.cuts], ['open', course.intended]] as const) {
     for (const [piece, port] of marks ?? []) {
