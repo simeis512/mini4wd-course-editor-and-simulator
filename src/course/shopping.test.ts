@@ -13,19 +13,41 @@ describe('shoppingList (#18)', () => {
     expect(counts(shoppingList(basicOval()).used)).toEqual({
       'straight/white': 2,
       'wave/white': 1,
-      'curve45/red': 8,
+      'curve45/red': 4,
+      'curve45/blue': 4,
       'bridge-approach/white': 2,
       'over-bridge/white': 2,
       'under-bridge/white': 1,
     });
   });
 
-  it('buys the lane change set and counts the straights and wave that come with it', () => {
+  it('buys a basic set for its own oval', () => {
     const list = shoppingList(basicOval());
-    // 8 red curves: two packs of four of each colour, leaving 8 blue ones.
-    expect(bought(list)).toEqual({ '69579': 1, '69578': 2 });
-    expect(counts(list.spare)).toEqual({ 'curve45/blue': 8 });
+    expect(bought(list)).toEqual({ '94892': 1 });
+    expect(list.spare).toEqual([]);
     expect(list.missing).toEqual([]);
+  });
+
+  it('buys a basic set in place of the lane change set and a pack of curves', () => {
+    // All 8 curves red: the lane change set and two packs of four each would
+    // do, but a basic set is those two at once.
+    const c = basicOval();
+    c.pieces.forEach((p) => delete p.variant);
+    const list = shoppingList(c);
+    expect(bought(list)).toEqual({ '94892': 1, '69578': 1 });
+    expect(counts(list.spare)).toEqual({ 'curve45/blue': 8 });
+  });
+
+  it('buys the lane change set alone when no curves are needed', () => {
+    const list = shoppingList(chain(['bridge-approach', 'lane-change-center', 'straight']));
+    expect(bought(list)).toEqual({ '69579': 1 });
+    expect(counts(list.spare)).toMatchObject({ 'straight/white': 1, 'wave/white': 1 });
+  });
+
+  it('buys the yellow basic set for the sections only it has', () => {
+    let c = chain(['curve45', 'curve45']);
+    for (const i of [0, 1]) c = setVariant(c, i, 5);
+    expect(bought(shoppingList(c))).toEqual({ '95677': 1 });
   });
 
   it('fills up big packs first and buys the rest in small ones', () => {
@@ -39,9 +61,8 @@ describe('shoppingList (#18)', () => {
 
   it('takes an owned basic set off first', () => {
     const list = shoppingList(basicOval(), [{ item: '94892', count: 1 }]);
-    // The set's 4 red curves fall 4 short; its 4 blue ones are left over.
-    expect(bought(list)).toEqual({ '69578': 1 });
-    expect(counts(list.spare)).toEqual({ 'curve45/blue': 8 });
+    expect(list.buy).toEqual([]);
+    expect(list.spare).toEqual([]);
   });
 
   it('lists what no item on sale has', () => {

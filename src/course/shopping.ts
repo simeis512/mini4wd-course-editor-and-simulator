@@ -23,8 +23,14 @@ export interface Product {
   item: string;
   name: string;
   contents: Record<string, number>;
-  /** A basic set: only counted as owned, not suggested to buy. */
+  /**
+   * A basic set: can be counted as owned, and is looked for before the rest
+   * as the best value (user 2026-10-21): bought for the sections only it
+   * has, and in place of other items that together bring all of it.
+   */
   base?: boolean;
+  /** No longer sold: only counted as owned. */
+  discontinued?: boolean;
   /** The sections it is bought for; the rest come with it. All of them when left out. */
   for?: string[];
   /** Bought only as many times as it is filled up, leaving the rest to a smaller pack after it. */
@@ -44,11 +50,11 @@ function basicSet(straight: string, curves: [string, number][], rest: string): R
 
 const LANE_CHANGE_WHITE = ['bridge-approach', 'over-bridge', 'under-bridge'].map((s) => sectionKey(s, 'white'));
 
-/** Items in the order they are worked through: the lane change set first, as it brings straights and a wave. */
+/** Items in the order they are worked through: the basic sets first, then the lane change set, as it brings straights and a wave. */
 export const PRODUCTS: readonly Product[] = [
   { item: '94892', name: 'ジャパンカップ ジュニアサーキット（レッド/ブルー/ホワイト）', contents: basicSet('white', [['red', 4], ['blue', 4]], 'white'), base: true },
   { item: '95677', name: 'ジャパンカップ ジュニアサーキット スペシャルカラー（イエロー）', contents: basicSet('black', [['yellow', 8]], 'black'), base: true },
-  { item: '69506', name: 'ジャパンカップ ジュニアサーキット（グレー）', contents: basicSet('gray', [['gray', 8]], 'gray'), base: true },
+  { item: '69506', name: 'ジャパンカップ ジュニアサーキット（グレー）', contents: basicSet('gray', [['gray', 8]], 'gray'), base: true, discontinued: true },
   {
     item: '69579',
     name: 'レーンチェンジ拡張セット（ホワイト）',
@@ -103,10 +109,44 @@ export function sectionName(key: string): string {
 const add = <K>(map: Map<K, number>, key: K, n: number) => map.set(key, (map.get(key) ?? 0) + n);
 const lines = (map: Map<string, number>): Line[] => [...map].map(([key, count]) => ({ key, name: sectionName(key), count }));
 
+const take = (need: Map<string, number>, product: Product, times: number) => {
+  for (const [key, n] of Object.entries(product.contents)) add(need, key, -n * times);
+};
+
+/** Items other than basic sets, each bought as many times as the sections it is for still need; takes them off `need`. */
+function buyItems(need: Map<string, number>): ShoppingList['buy'] {
+  const buy: ShoppingList['buy'] = [];
+  for (const product of PRODUCTS) {
+    if (product.base) continue;
+    const keys = product.for ?? Object.keys(product.contents);
+    const round = product.bulk ? Math.floor : Math.ceil;
+    const count = Math.max(0, ...keys.map((k) => round(Math.max(0, need.get(k) ?? 0) / product.contents[k])));
+    if (!count) continue;
+    buy.push({ product, count });
+    take(need, product, count);
+  }
+  return buy;
+}
+
+/**
+ * Times to buy a basic set: enough for the sections no other item has, or
+ * as many times as the other items still to buy would bring all of it
+ * anyway (69579 and 69578 together are one 94892).
+ */
+function basicSetCount(set: Product, need: Map<string, number>): number {
+  const others = PRODUCTS.filter((p) => !p.base);
+  const supply = new Map<string, number>();
+  for (const { product, count } of buyItems(new Map(need))) for (const [k, n] of Object.entries(product.contents)) add(supply, k, n * count);
+  const entries = Object.entries(set.contents);
+  const only = entries.filter(([k]) => !others.some((p) => k in p.contents));
+  const forOnly = Math.max(0, ...only.map(([k, n]) => Math.ceil(Math.max(0, need.get(k) ?? 0) / n)));
+  const instead = Math.min(...entries.map(([k, n]) => Math.floor((supply.get(k) ?? 0) / n)));
+  return Math.max(forOnly, instead);
+}
+
 /**
  * What to buy for a course, given the sets already owned (item and how
- * many). Each item is bought as many times as the sections it is for
- * still need, taking what comes with it off the rest.
+ * many): basic sets first (`basicSetCount`), then the other items.
  */
 export function shoppingList(course: Course, owned: readonly { item: string; count: number }[] = []): ShoppingList {
   const used = new Map<string, number>();
@@ -123,23 +163,18 @@ export function shoppingList(course: Course, owned: readonly { item: string; cou
   for (const a of course.attachments ?? []) add(used, sectionKey(a.kind), 1);
 
   const need = new Map(used);
-  const take = (product: Product, times: number) => {
-    for (const [key, n] of Object.entries(product.contents)) add(need, key, -n * times);
-  };
   for (const { item, count } of owned) {
     const product = PRODUCTS.find((p) => p.item === item);
-    if (product) take(product, count);
+    if (product) take(need, product, count);
   }
   const buy: ShoppingList['buy'] = [];
-  for (const product of PRODUCTS) {
-    if (product.base) continue;
-    const keys = product.for ?? Object.keys(product.contents);
-    const round = product.bulk ? Math.floor : Math.ceil;
-    const count = Math.max(0, ...keys.map((k) => round(Math.max(0, need.get(k) ?? 0) / product.contents[k])));
+  for (const set of BASE_SETS) {
+    const count = set.discontinued ? 0 : basicSetCount(set, need);
     if (!count) continue;
-    buy.push({ product, count });
-    take(product, count);
+    buy.push({ product: set, count });
+    take(need, set, count);
   }
+  buy.push(...buyItems(need));
   const left = (sign: 1 | -1) => new Map([...need].filter(([, n]) => n * sign > 0).map(([k, n]) => [k, n * sign]));
   return {
     used: lines(used),
