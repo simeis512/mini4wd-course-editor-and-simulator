@@ -106,3 +106,41 @@ describe('bridge approach on ordinary parts', () => {
     expect(right.broken).toEqual({ piece: 1, port: 2 });
   });
 });
+
+describe('under-bridge on its own', () => {
+  const under = getPart('under-bridge');
+
+  it('is the lane change centre without its bridge', () => {
+    const centre = getPart('lane-change-center');
+    expect(under.segments).toEqual(centre.segments);
+    expect(under.tracks).toBeUndefined();
+    expect(under.ports.map((p) => p.anchor)).toEqual(centre.ports.slice(0, 2).map((p) => p.anchor));
+  });
+
+  it('joins ordinary parts and bridge approaches, moving both lanes one over', () => {
+    expect(compatible(straight, 1, under, 0)).toBe(true);
+    expect(compatible(approach, 1, under, 0)).toBe(true);
+    const c: Course = {
+      v: 1,
+      catalog: 1,
+      pieces: [
+        { part: 'straight', at: 'origin' },
+        { part: 'under-bridge', port: 0, to: [0, 1], shift: -1 },
+        { part: 'straight', port: 0, to: [1, 1], shift: -1 },
+      ],
+    };
+    const layout = layoutCourse(c);
+    expect(layout.problems).toEqual([]);
+    // On the left two lanes it carries them over to the middle and right, so the
+    // next straight, shifted back a lane, lines up with the first.
+    expect(pos(layout, 2).x).toBeCloseTo(0, 6);
+    expect(jointLanes(straight, 1, under, 0, -1)).toEqual([
+      [0, 0],
+      [1, 1],
+    ]);
+    expect(jointLanes(under, 1, straight, 0, -1)).toEqual([
+      [1, 1],
+      [2, 2],
+    ]);
+  });
+});
