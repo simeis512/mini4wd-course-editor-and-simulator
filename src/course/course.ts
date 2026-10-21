@@ -239,7 +239,8 @@ export function compatible(a: PartDef, ap: number, b: PartDef, bp: number, shift
   if (a.cannotJoin?.includes(b.id) || b.cannotJoin?.includes(a.id)) return false;
   if ((pa.partners && !pa.partners.includes(b.id)) || (pb.partners && !pb.partners.includes(a.id))) return false;
   const [ka, kb] = [pa.kind ?? 'std', pb.kind ?? 'std'];
-  if (ka !== kb && ka !== 'std' && kb !== 'std') return false;
+  // A port kept to its partners (the lane change centre's) meets only their ports of its own kind.
+  if (ka !== kb && (pa.partners || pb.partners || (ka !== 'std' && kb !== 'std'))) return false;
   return jointLanes(a, ap, b, bp, shift).length > 0;
 }
 
