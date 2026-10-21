@@ -18,7 +18,7 @@ const SECTIONS_OF: Record<string, [section: string, count: number][]> = {
 /** Names of sections that are not parts of their own. */
 const SECTION_NAMES: Record<string, string> = { 'over-bridge': 'オーバーブリッジ' };
 
-/** A Tamiya item and the sections in it, by `sectionKey` (jcjc-parts.json, products). */
+/** A Tamiya item and the sections in it, by `sectionKey` (jcjc-parts.json, products; slopes and bank approaches come in twos, user 2026-10-21). */
 export interface Product {
   item: string;
   name: string;
@@ -68,11 +68,11 @@ export const PRODUCTS: readonly Product[] = [
   { item: '69574', name: 'ストレート（ホワイト）4枚セット', contents: { 'straight/white': 4 } },
   { item: '95506', name: 'ストレート（ブラック）4枚セット', contents: { 'straight/black': 4 } },
   { item: '69575', name: 'ウェーブ（ホワイト）4枚セット', contents: { 'wave/white': 4 } },
-  { item: '69570', name: 'スロープセクション（レッド）', contents: { 'slope/red': 1 } },
-  { item: '95447', name: 'スロープセクション（オレンジ）', contents: { 'slope/orange': 1 } },
-  { item: '69571', name: 'バンクアプローチ20（レッド）', contents: { 'bank-approach-20/red': 1 } },
-  { item: '95448', name: 'バンクアプローチ20（オレンジ）', contents: { 'bank-approach-20/orange': 1 } },
-  { item: '95591', name: 'バンクアプローチ20（ブラック）', contents: { 'bank-approach-20/black': 1 } },
+  { item: '69570', name: 'スロープセクション（レッド）', contents: { 'slope/red': 2 } },
+  { item: '95447', name: 'スロープセクション（オレンジ）', contents: { 'slope/orange': 2 } },
+  { item: '69571', name: 'バンクアプローチ20（レッド）', contents: { 'bank-approach-20/red': 2 } },
+  { item: '95448', name: 'バンクアプローチ20（オレンジ）', contents: { 'bank-approach-20/orange': 2 } },
+  { item: '95591', name: 'バンクアプローチ20（ブラック）', contents: { 'bank-approach-20/black': 2 } },
   { item: '69572', name: 'ウォッシュボードセクション 5mm・10mm 各2枚', contents: { 'washboard-5': 2, 'washboard-10': 2 } },
 ];
 

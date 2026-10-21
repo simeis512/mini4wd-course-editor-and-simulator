@@ -73,6 +73,12 @@ describe('shoppingList (#18)', () => {
     expect(bought(shoppingList(c, [{ item: '69506', count: 1 }]))).toEqual({ '69574': 1 });
   });
 
+  it('buys slopes and bank approaches in twos', () => {
+    const list = shoppingList(chain(['slope', 'slope', 'slope', 'bank-approach-20']));
+    expect(bought(list)).toEqual({ '69570': 2, '69571': 1 });
+    expect(counts(list.spare)).toEqual({ 'slope/red': 1, 'bank-approach-20/red': 1 });
+  });
+
   it('buys washboards in their pack', () => {
     let c = chain(['straight']);
     for (const kind of ['washboard-10', 'washboard-10', 'washboard-10', 'washboard-5']) c = addAttachment(c, kind, 0);
