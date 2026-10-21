@@ -124,8 +124,12 @@ export function deletePiece(course: Course, index: number): Course {
     pieces.push(out);
   });
   const next: Course = { ...clone(course), pieces };
-  if (course.cuts) {
-    next.cuts = course.cuts.filter(([p]) => p !== index).map(([p, port]): [number, number] => [p > index ? p - 1 : p, port]);
+  const renumber = (marks: [number, number][]) =>
+    marks.filter(([p]) => p !== index).map(([p, port]): [number, number] => [p > index ? p - 1 : p, port]);
+  if (course.cuts) next.cuts = renumber(course.cuts);
+  if (course.intended) {
+    next.intended = renumber(course.intended);
+    if (!next.intended.length) delete next.intended;
   }
   return tidyCuts(next);
 }
@@ -152,8 +156,12 @@ export function flipPiece(course: Course, index: number): Course {
     const ref = anchorRef(other);
     if (ref && ref[0] === index) ref[1] = ref[1] === oldPort ? newPort : oldPort;
   });
-  // The piece has turned round, so its old joints are gone.
+  // The piece has turned round, so its old joints are gone, and its open ends are new.
   if (next.cuts) next.cuts = next.cuts.filter(([p]) => p !== index);
+  if (next.intended) {
+    next.intended = next.intended.filter(([p]) => p !== index);
+    if (!next.intended.length) delete next.intended;
+  }
   return tidyCuts(next);
 }
 
@@ -294,4 +302,23 @@ export function tidyCuts(course: Course): Course {
     return true;
   });
   return withCuts(course, cuts);
+}
+
+/** Mark an open port as left open on purpose, or clear the mark (spec 7, #13). */
+export function markIntended(course: Course, ref: PortRef, on: boolean): Course {
+  const key = portKey(ref);
+  const marks = (course.intended ?? []).filter(([piece, port]) => portKey({ piece, port }) !== key);
+  if (on) marks.push([ref.piece, ref.port]);
+  const next = clone(course);
+  if (marks.length) next.intended = marks;
+  else delete next.intended;
+  return next;
+}
+
+/** Run the course the other way round (spec 5.1 `dir`): laps then start by the first piece's other port. */
+export function reverseDirection(course: Course): Course {
+  const next = clone(course);
+  if (course.dir === -1) delete next.dir;
+  else next.dir = -1;
+  return next;
 }

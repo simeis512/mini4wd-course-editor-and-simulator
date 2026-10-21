@@ -18,7 +18,9 @@ import {
   flipPiece,
   freeSpot,
   jointBend,
+  markIntended,
   moveGroup,
+  reverseDirection,
   setBend,
   setPose,
   setTwist,
@@ -26,10 +28,13 @@ import {
   tidyCuts,
   turnAboutMiddle,
 } from '../course/edit';
+import { findClashes } from '../course/clash';
 import { asLink, joinableNear, joinPorts, splitJoint } from '../course/joining';
+import { checkLaps } from '../course/laps';
 import type { Pose } from '../course/geometry';
 import { basicOval } from '../course/presets';
 import { raiseRun } from '../course/raise';
+import { bindCourseInfo, renderCourseInfo, type CourseChecks } from './checks';
 import { $, toast } from './dom';
 import { PaletteDrag, PieceDrag, SNAP_STEP, type DragHost } from './drag';
 import { History } from './history';
@@ -46,6 +51,7 @@ const HISTORY_LIMIT = 200;
 export class EditorApp {
   private course: Course = emptyCourse();
   private layout: Layout = layoutCourse(this.course);
+  private checks: CourseChecks = { clashes: [], laps: null };
   private selection: Selection = null;
   /** Pieces lit up for the selection, which its settings keep off. */
   private lit: number[] = [];
@@ -157,8 +163,11 @@ export class EditorApp {
     if (s?.kind === 'port' && !this.layout.open.some((r) => portKey(r) === portKey(s.ref))) this.selection = null;
     if (s?.kind === 'piece' && s.index >= this.course.pieces.length) this.selection = null;
     if (s?.kind === 'joint' && !this.layout.joints.some((j) => sameJoint(s, j))) this.selection = null;
-    this.top.setData(this.layout, this.selection);
-    this.orbit.setData(this.layout, this.selection);
+    this.checks = { clashes: findClashes(this.layout), laps: checkLaps(this.layout, this.course.dir) };
+    for (const view of [this.top, this.orbit]) {
+      view.setData(this.layout, this.selection);
+      view.setClashes(this.checks.clashes);
+    }
     this.setHeightView(this.heightView);
     this.renderPanel();
     if (writeUrl) this.hashSync.write(this.course);
@@ -354,6 +363,11 @@ export class EditorApp {
 
   private bindUi(): void {
     bindLevelTools((view) => this.setHeightView(view));
+    bindCourseInfo({
+      pick: (t) => this.select('port' in t ? { kind: 'port', ref: t } : { kind: 'piece', index: t.piece }),
+      intended: (ref, on) => this.commit(markIntended(this.course, ref, on), this.selection),
+      reverse: () => this.commit(reverseDirection(this.course), this.selection),
+    });
     // Views capture the pointer while dragging, so its moves still bubble up here.
     window.addEventListener('pointermove', (e) => this.pieceDrag.overPanel(e));
     $<HTMLDetailsElement>('course-info').addEventListener('toggle', () => this.placeContext());
@@ -444,6 +458,7 @@ export class EditorApp {
     $<HTMLButtonElement>('undo').disabled = !this.history.canUndo;
     $<HTMLButtonElement>('redo').disabled = !this.history.canRedo;
     renderPanels(this.course, this.layout, this.selection);
+    renderCourseInfo(this.course, this.layout, this.checks);
     this.showRun();
     this.placeContext();
   }

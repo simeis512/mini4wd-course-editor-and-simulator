@@ -34,6 +34,11 @@ export interface Course {
    * to a port they touch. Only kept while something still touches them.
    */
   cuts?: [piece: number, port: number][];
+  /**
+   * Open ports left open on purpose, such as a jump's take-off: they are
+   * not warned about (spec 7, #13).
+   */
+  intended?: [piece: number, port: number][];
 }
 
 export function emptyCourse(): Course {
@@ -99,6 +104,8 @@ export interface Layout {
   group: number[];
   /** Open ports marked as split from a port they touch. */
   split: PortRef[];
+  /** Open ports marked as left open on purpose (#13). */
+  intended: PortRef[];
 }
 
 export const portKey = (r: PortRef): string => `${r.piece}:${r.port}`;
@@ -134,9 +141,11 @@ export function validateCourse(course: Course): void {
       if (p < 0 || p >= other.ports.length) throw new Error(`piece ${i}: no port ${p} on piece ${j}`);
     }
   });
-  for (const [piece, port] of course.cuts ?? []) {
-    const rec = course.pieces[piece];
-    if (!rec || port < 0 || port >= getPart(rec.part).ports.length) throw new Error(`split mark on missing port ${piece}:${port}`);
+  for (const [what, marks] of [['split', course.cuts], ['open', course.intended]] as const) {
+    for (const [piece, port] of marks ?? []) {
+      const rec = course.pieces[piece];
+      if (!rec || port < 0 || port >= getPart(rec.part).ports.length) throw new Error(`${what} mark on missing port ${piece}:${port}`);
+    }
   }
 }
 
@@ -242,7 +251,9 @@ export function layoutCourse(course: Course): Layout {
   for (const j of joints) parent[find(j.a.piece)] = find(j.b.piece);
   const group = pieces.map((_, i) => find(i));
   const split = open.filter((r) => cut.has(portKey(r)));
-  return { pieces, problems, connected, closures, open, joints, group, split };
+  const meant = new Set((course.intended ?? []).map(([piece, port]) => portKey({ piece, port })));
+  const intended = open.filter((r) => meant.has(portKey(r)));
+  return { pieces, problems, connected, closures, open, joints, group, split, intended };
 }
 
 /** The frame a piece's anchoring port faces, in world space. */

@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
+import type { Clash } from '../course/clash';
 import { portKey, sameJoint, type Layout, type PlacedPiece } from '../course/course';
 import { GLOBAL_SPEC } from '../course/catalog';
 import { supports } from '../course/height';
 import { buildCourseMeshes, buildSupportMesh, MM, pieceTracks, roadOutline } from '../course/mesh';
 import { JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
-import { blink, drawShortMark, type EditorView, type RunMarks } from './view';
+import { blink, drawClashMark, drawShortMark, type EditorView, type RunMarks } from './view';
 
 const BACKGROUND = new THREE.Color(0x1b1d22);
 
@@ -49,6 +50,8 @@ export class OrbitView implements EditorView {
   private runMaterials = new Set<THREE.MeshStandardMaterial>();
   /** The count shown at the end of a short run. */
   private shortMark: THREE.Sprite | null = null;
+  /** Marks where pieces are in each other's way. */
+  private clashMarks = new THREE.Group();
 
   constructor(
     private container: HTMLElement,
@@ -73,6 +76,7 @@ export class OrbitView implements EditorView {
     this.root.scale.setScalar(MM);
     this.root.add(this.markers);
     this.root.add(this.outlines);
+    this.root.add(this.clashMarks);
     this.scene.add(this.root);
 
     this.camera.position.set(2, 2.5, -2);
@@ -218,9 +222,12 @@ export class OrbitView implements EditorView {
     }
     this.markers.clear();
     const split = new Set(layout.split.map(portKey));
+    const intended = new Set(layout.intended.map(portKey));
     for (const ref of layout.open) {
-      const selected = selection?.kind === 'port' && portKey(selection.ref) === portKey(ref);
-      const m = new THREE.Mesh(MARKER_GEOMETRY, selected ? MARKER_SELECTED : split.has(portKey(ref)) ? MARKER_SPLIT : MARKER_OPEN);
+      const key = portKey(ref);
+      const selected = selection?.kind === 'port' && portKey(selection.ref) === key;
+      const material = selected ? MARKER_SELECTED : split.has(key) ? MARKER_SPLIT : intended.has(key) ? MARKER_INTENDED : MARKER_OPEN;
+      const m = new THREE.Mesh(MARKER_GEOMETRY, material);
       m.applyMatrix4(layout.pieces[ref.piece].ports[ref.port]);
       m.userData.port = ref;
       this.markers.add(m);
@@ -231,6 +238,19 @@ export class OrbitView implements EditorView {
       m.applyMatrix4(layout.pieces[j.a.piece].ports[j.a.port]);
       m.userData.joint = { a: j.a, b: j.b };
       this.markers.add(m);
+    }
+  }
+
+  setClashes(clashes: readonly Clash[]): void {
+    for (const sprite of this.clashMarks.children as THREE.Sprite[]) sprite.material.dispose();
+    this.clashMarks.clear();
+    for (const c of clashes) {
+      const sprite = new THREE.Sprite(CLASH_MATERIALS[c.kind]());
+      // The course is scaled to metres, which would shrink the mark too.
+      sprite.scale.setScalar(CLASH_MARK_SIZE / MM);
+      sprite.renderOrder = 10;
+      sprite.position.set(c.at.x, c.at.y + GLOBAL_SPEC.fenceHeight, c.at.z);
+      this.clashMarks.add(sprite);
     }
   }
 
@@ -418,6 +438,32 @@ const MARKER_OPEN = new THREE.MeshStandardMaterial({ color: 0xff9a2e, emissive: 
 const MARKER_SELECTED = new THREE.MeshStandardMaterial({ color: 0x3fd0ff, emissive: 0x114455 });
 const MARKER_SPLIT = new THREE.MeshStandardMaterial({ color: 0xff5a5a, emissive: 0x551111 });
 const MARKER_JOINT = new THREE.MeshStandardMaterial({ color: 0x39c26b, emissive: 0x0d3d1f });
+/** A port left open on purpose (#13). */
+const MARKER_INTENDED = new THREE.MeshStandardMaterial({ color: 0x8a9099, emissive: 0x22252a });
+
+/** Size of a clash mark on screen, as a share of the view's height. */
+const CLASH_MARK_SIZE = 0.05;
+
+/** A sprite material showing the clash mark, drawn once per kind and shared. */
+function clashMaterial(kind: Clash['kind']): () => THREE.SpriteMaterial {
+  let map: THREE.CanvasTexture | null = null;
+  return () => {
+    if (!map) {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 64;
+      const ctx = canvas.getContext('2d')!;
+      ctx.scale(2, 2);
+      drawClashMark(ctx, 16, 16, kind);
+      map = new THREE.CanvasTexture(canvas);
+      map.colorSpace = THREE.SRGBColorSpace;
+    }
+    return new THREE.SpriteMaterial({ map, depthTest: false, sizeAttenuation: false });
+  };
+}
+const CLASH_MATERIALS: Record<Clash['kind'], () => THREE.SpriteMaterial> = {
+  interference: clashMaterial('interference'),
+  clearance: clashMaterial('clearance'),
+};
 /** Height of a marker's middle above its port, mm, where picking aims. */
 const MARKER_PICK_HEIGHT = 10;
 /** A flat bar across the middle of a joint, standing just above the road. */

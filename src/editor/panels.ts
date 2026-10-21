@@ -1,5 +1,5 @@
 import { getPart, PARTS, variantOf } from '../course/catalog';
-import { compatible, groupCount, movingGroup, partCounts, placementOf, portKey, type Course, type Layout, type PortRef, type Problem } from '../course/course';
+import { compatible, movingGroup, placementOf, portKey, type Course, type Layout, type PortRef } from '../course/course';
 import { footprint, jointBend } from '../course/edit';
 import { BEND_LIMIT, TWIST_LIMIT } from '../course/flex';
 import { bendable, joinableNear } from '../course/joining';
@@ -129,8 +129,6 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
   $('join-row').hidden = !near;
   if (near) $('join-name').textContent = `近くの口（${pieceLabel(layout, near.piece)}）`;
 
-  renderCourseInfo(course, layout);
-
   // Settings for the selection float over the editor, next to it (#45).
   $('context').hidden = s === null;
 }
@@ -162,38 +160,6 @@ function showLimit(id: string, deg: number, limit: number, what: string): void {
   const warn = $(id);
   warn.hidden = Math.abs(deg) <= limit;
   warn.textContent = `${what}が上限の目安 ${limit}° を超えています（目安は実測待ちの仮の値です）`;
-}
-
-const PROBLEM_TEXT: Record<Problem['kind'], string> = {
-  'not-level': '床側の端が水平ではありません（向きが逆かもしれません）',
-  'cannot-join': 'このパーツ同士はつなげません',
-  'bend-limit': `つなぎ目の折れ角が上限の目安 ${BEND_LIMIT}° を超えています`,
-  'twist-limit': `ねじれが上限の目安 ${TWIST_LIMIT}° を超えています`,
-};
-
-function renderCourseInfo(course: Course, layout: Layout): void {
-  const info: string[] = [];
-  const islands = groupCount(layout);
-  if (islands > 1) info.push(`<div class="muted">つながりのまとまり: ${islands} 個</div>`);
-  const counts = [...partCounts(course)].map(([id, n]) => `<li>${getPart(id).name} × ${n}</li>`);
-  if (counts.length) info.push(`<ul>${counts.join('')}</ul>`);
-  if (layout.open.length > 0) {
-    info.push(`<div class="warn">未接続の口: ${layout.open.length}</div>`);
-  } else if (course.pieces.length > 0) {
-    info.push('<div class="ok">コースは閉じています</div>');
-  }
-  for (const pr of layout.problems) {
-    info.push(`<div class="warn">${pieceLabel(layout, pr.piece)}: ${PROBLEM_TEXT[pr.kind]}</div>`);
-  }
-  for (const c of layout.closures) {
-    // Ports placed exactly together are simply joined; only real gaps are worth showing.
-    if (c.distance < 0.05 && c.angle < 0.05) continue;
-    info.push(`<div class="muted">ループ閉じ（#${c.a.piece + 1}–#${c.b.piece + 1}）: 誤差 ${c.distance.toFixed(1)}mm / ${c.angle.toFixed(1)}°</div>`);
-  }
-  $('info').innerHTML = info.join('');
-  // The folded course box still shows the gist (#45).
-  const status = course.pieces.length === 0 ? '' : layout.open.length > 0 ? `・未接続の口 ${layout.open.length}` : '・閉じています';
-  $('course-summary').innerHTML = `コース: ${course.pieces.length} ピース<span class="${layout.open.length || layout.problems.length ? 'warn' : 'ok'}">${status}</span>${layout.problems.length ? '<span class="warn">・問題あり</span>' : ''}`;
 }
 
 /** Where a piece lies on screen, roughly: its footprint between its lowest and highest port. */

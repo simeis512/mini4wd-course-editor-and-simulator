@@ -8,7 +8,8 @@ import { isZeroBend } from './flex';
  *
  * Format 2, all integers as LEB128 varints (signed ones zigzag encoded):
  *   catalog version
- *   flags: bit0 dir = -1, bit1 has name, bit2 has split marks
+ *   flags: bit0 dir = -1, bit1 has name, bit2 has split marks,
+ *          bit3 has ports left open on purpose
  *   [name: byte length, UTF-8]
  *   piece count
  *   per piece:
@@ -22,12 +23,14 @@ import { isZeroBend } from './flex';
  *     [x, y, z (0.1 mm), yaw, pitch, roll (0.1°)]  free
  *     [twist (0.1°)]                 (spec 16.5)
  *   [split mark count, then piece, port for each]  when flagged
+ *   [open-on-purpose mark count, then piece, port for each]  when flagged (#13)
  *
- * Format 1 is the same without bends and twists, so it still reads.
+ * Format 2 is the same without the open-on-purpose marks, and format 1
+ * without bends and twists too, so both still read.
  */
-export const FORMAT_VERSION = 2;
+export const FORMAT_VERSION = 3;
 /** Older formats that still read. */
-const READABLE_VERSIONS = [1, FORMAT_VERSION];
+const READABLE_VERSIONS = [1, 2, FORMAT_VERSION];
 const HASH_KEY = 'c';
 
 class Writer {
@@ -82,7 +85,8 @@ export function courseToBytes(course: Course): Uint8Array {
   const w = new Writer();
   w.uint(course.catalog);
   const cuts = course.cuts ?? [];
-  w.uint((course.dir === -1 ? 1 : 0) | (course.name ? 2 : 0) | (cuts.length ? 4 : 0));
+  const intended = course.intended ?? [];
+  w.uint((course.dir === -1 ? 1 : 0) | (course.name ? 2 : 0) | (cuts.length ? 4 : 0) | (intended.length ? 8 : 0));
   if (course.name) {
     const name = new TextEncoder().encode(course.name);
     w.uint(name.length);
@@ -115,9 +119,10 @@ export function courseToBytes(course: Course): Uint8Array {
     }
     if (rec.twist) w.tenths(rec.twist);
   }
-  if (cuts.length) {
-    w.uint(cuts.length);
-    for (const [piece, port] of cuts) {
+  for (const marks of [cuts, intended]) {
+    if (!marks.length) continue;
+    w.uint(marks.length);
+    for (const [piece, port] of marks) {
       w.uint(piece);
       w.uint(port);
     }
@@ -164,11 +169,9 @@ export function courseFromBytes(bytes: Uint8Array): Course {
     if (head & 16) rec.twist = r.tenths();
     course.pieces.push(rec);
   }
-  if (flags & 4) {
-    const n = r.uint();
-    course.cuts = [];
-    for (let i = 0; i < n; i++) course.cuts.push([r.uint(), r.uint()]);
-  }
+  const marks = (): [number, number][] => Array.from({ length: r.uint() }, () => [r.uint(), r.uint()]);
+  if (flags & 4) course.cuts = marks();
+  if (flags & 8) course.intended = marks();
   if (r.pos !== bytes.length) throw new Error('unexpected data after course');
   validateCourse(course);
   return course;
