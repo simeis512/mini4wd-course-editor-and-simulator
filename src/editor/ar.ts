@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
 import { MM } from '../course/mesh';
+import { ArGestures } from './ar-gesture';
 import { ArScan, DEPTH_SENSING } from './ar-scan';
 import { AR_SCALES, AR_TURN_STEP, arPose, floorPivot, headingOf, nextScale, scaleLabel } from './ar-pose';
 
@@ -51,6 +52,7 @@ export class ArMode {
   private scan: ArScan;
   /** Whether this session shares the phone's depth view. */
   private hasDepth = false;
+  private gestures: ArGestures;
 
   constructor(
     private renderer: THREE.WebGLRenderer,
@@ -91,6 +93,14 @@ export class ArMode {
       this.scan.depthWanted = !this.scan.depthWanted;
       this.update();
     });
+    this.gestures = new ArGestures(document.getElementById('ar-touch')!, {
+      enabled: () => !this.aiming && !!this.at,
+      onDrag: (from, to) => this.drag(from, to),
+      onTwist: (turn) => {
+        this.yaw -= turn;
+        this.update();
+      },
+    });
     // A tap on our controls must not also count as a tap on the floor.
     document.getElementById('ar-controls')!.addEventListener('beforexrselect', (e) => e.preventDefault());
 
@@ -119,6 +129,7 @@ export class ArMode {
       this.hitSource = null;
       this.reticle.visible = false;
       this.scan.clear();
+      this.gestures.clear();
       this.root.visible = true;
       this.root.matrixAutoUpdate = true;
       this.root.position.set(0, 0, 0);
@@ -175,6 +186,25 @@ export class ArMode {
     this.update();
   }
 
+  /** Slide the course so the floor under the finger follows it. */
+  private drag(from: { x: number; y: number }, to: { x: number; y: number }): void {
+    if (!this.at) return;
+    const a = this.floorUnder(from, this.at.y);
+    const b = this.floorUnder(to, this.at.y);
+    if (!a || !b) return;
+    this.at.add(b.sub(a));
+    this.update();
+  }
+
+  /** Scene point at height `y` under a point on the (full-screen) AR view, or null above the horizon. */
+  private floorUnder(p: { x: number; y: number }, y: number): THREE.Vector3 | null {
+    const xr = this.renderer.xr.getCamera();
+    const camera = xr.cameras[0] ?? xr;
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2((p.x / window.innerWidth) * 2 - 1, -(p.y / window.innerHeight) * 2 + 1), camera);
+    return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), new THREE.Vector3());
+  }
+
   private turn(degrees: number): void {
     this.yaw += THREE.MathUtils.degToRad(degrees);
     this.update();
@@ -201,7 +231,7 @@ export class ArMode {
     this.buttons.depth.hidden = !this.aiming || !this.hasDepth;
     this.buttons.depth.textContent = this.scan.depthWanted ? '奥行き：表示' : '奥行き：非表示';
     this.status.textContent = !this.aiming
-      ? `${scaleLabel(this.scale)}で表示中。「置き直す」で場所を変えられます`
+      ? `${scaleLabel(this.scale)}で表示中。ドラッグで移動、2本指で回転、「置き直す」で選び直し`
       : this.reticle.visible
           ? '床をタップするとコースをそこに置きます'
           : 'スマホを床に向けて、ゆっくり動かしてください';

@@ -47,3 +47,16 @@ export function floorPivot(box: THREE.Box3): THREE.Vector3 {
 export function dotCell(p: THREE.Vector3, spacing: number): string {
   return [p.x, p.y, p.z].map((v) => Math.round(v / spacing)).join(',');
 }
+
+/** Direction on the screen from one finger to the other, radians (screen y points down). */
+export function twistAngle(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  return Math.atan2(b.y - a.y, b.x - a.x);
+}
+
+/** The smallest turn from angle `from` to angle `to`, radians, in (−π, π]. */
+export function angleDelta(from: number, to: number): number {
+  let d = (to - from) % (2 * Math.PI);
+  if (d > Math.PI) d -= 2 * Math.PI;
+  if (d <= -Math.PI) d += 2 * Math.PI;
+  return d;
+}

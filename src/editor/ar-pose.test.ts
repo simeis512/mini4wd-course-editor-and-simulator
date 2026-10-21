@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { MM } from '../course/mesh';
-import { AR_SCALES, arPose, dotCell, floorPivot, headingOf, nextScale, scaleLabel } from './ar-pose';
+import { angleDelta, AR_SCALES, arPose, dotCell, floorPivot, headingOf, nextScale, scaleLabel, twistAngle } from './ar-pose';
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
@@ -65,5 +65,16 @@ describe('dotCell', () => {
   it('gives nearby points one cell and farther ones another', () => {
     expect(dotCell(v(0.01, -1.2, 0.51), 0.05)).toBe(dotCell(v(0.0, -1.21, 0.49), 0.05));
     expect(dotCell(v(0.1, -1.2, 0.5), 0.05)).not.toBe(dotCell(v(0, -1.2, 0.5), 0.05));
+  });
+});
+
+describe('twist', () => {
+  it('measures the fingers turning, the short way round', () => {
+    const before = twistAngle({ x: 0, y: 0 }, { x: 100, y: 0 });
+    const after = twistAngle({ x: 0, y: 0 }, { x: 0, y: 100 });
+    expect(angleDelta(before, after)).toBeCloseTo(Math.PI / 2);
+    expect(angleDelta(after, before)).toBeCloseTo(-Math.PI / 2);
+    expect(angleDelta(Math.PI - 0.1, -Math.PI + 0.1)).toBeCloseTo(0.2);
+    expect(angleDelta(-Math.PI + 0.1, Math.PI - 0.1)).toBeCloseTo(-0.2);
   });
 });

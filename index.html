@@ -94,6 +94,7 @@
       #ar-overlay { color-scheme: normal; color: #fff; }
       #ar-overlay { position: fixed; inset: 0; pointer-events: none; }
       #ar-overlay button { pointer-events: auto; font-size: 15px; padding: 10px 14px; border-radius: 10px; border: 0; color: #fff; background: #000a; }
+      #ar-touch { position: absolute; inset: 0; pointer-events: auto; touch-action: none; }
       #ar-exit { position: absolute; top: 16px; right: 16px; }
       #ar-controls { position: absolute; left: 12px; right: 12px; bottom: 56px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
       #ar-status { position: absolute; left: 12px; right: 12px; bottom: 16px; padding: 6px 10px; border-radius: 8px; background: #000a; font-size: 13px; }
@@ -246,6 +247,7 @@
     <div id="trash-zone" hidden></div>
     <div id="toast"></div>
     <div id="ar-overlay" hidden>
+      <div id="ar-touch"></div>
       <button id="ar-exit">AR終了</button>
       <div id="ar-controls">
         <button id="ar-turn-left" aria-label="左に回す">⟲ 15°</button>
