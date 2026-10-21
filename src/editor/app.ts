@@ -18,11 +18,13 @@ import {
   flipPiece,
   freeSpot,
   jointBend,
+  jointShift,
   markIntended,
   moveGroup,
   reverseDirection,
   setBend,
   setPose,
+  setShift,
   setTwist,
   setVariant,
   tidyCuts,
@@ -151,6 +153,13 @@ export class EditorApp {
     this.refresh(true);
   }
 
+  /** What to select for a piece or port named in the course box: a joined port selects its joint. */
+  private selectionOf(t: { piece: number } | PortRef): Selection {
+    if (!('port' in t)) return { kind: 'piece', index: t.piece };
+    const joint = this.layout.joints.find((j) => [j.a, j.b].some((r) => portKey(r) === portKey(t)));
+    return joint ? { kind: 'joint', a: joint.a, b: joint.b } : { kind: 'port', ref: t };
+  }
+
   private select(selection: Selection): void {
     this.selection = selection;
     this.refresh(false);
@@ -268,6 +277,15 @@ export class EditorApp {
     this.commit(setBend(course, s.a, s.b, { ...bend, pitch: (deg ?? bend.pitch ?? 0) + by }), s);
   }
 
+  /** Shift the selected joint sideways by `by` lanes (#60). */
+  private shiftSelected(by: number): void {
+    const s = this.selection;
+    if (s?.kind !== 'joint') return;
+    const course = asLink(this.course, s.a, s.b);
+    const next = setShift(course, s.a, s.b, jointShift(course, s.a, s.b) + by);
+    if (next !== course) this.commit(next, s);
+  }
+
   /**
    * The selected joint as the side a raise leaves from and the side it goes
    * into, as chosen, with the course holding it as a link (spec 16.3).
@@ -364,7 +382,7 @@ export class EditorApp {
   private bindUi(): void {
     bindLevelTools((view) => this.setHeightView(view));
     bindCourseInfo({
-      pick: (t) => this.select('port' in t ? { kind: 'port', ref: t } : { kind: 'piece', index: t.piece }),
+      pick: (t) => this.select(this.selectionOf(t)),
       intended: (ref, on) => this.commit(markIntended(this.course, ref, on), this.selection),
       reverse: () => this.commit(reverseDirection(this.course), this.selection),
     });
@@ -419,6 +437,8 @@ export class EditorApp {
     $('bend-plus').addEventListener('click', (e) => this.bendSelected(null, step(e)));
     $('bend-pitch').addEventListener('change', (e) => this.bendSelected(Number((e.target as HTMLInputElement).value) || 0));
     $('raise-run').addEventListener('click', () => this.raiseFromSelected());
+    $('shift-left').addEventListener('click', () => this.shiftSelected(-1));
+    $('shift-right').addEventListener('click', () => this.shiftSelected(1));
     $('raise-flip').addEventListener('click', () => {
       const dir = $('raise-dir');
       dir.dataset.side = dir.dataset.side === 'a' ? 'b' : 'a';

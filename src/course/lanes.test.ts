@@ -175,12 +175,17 @@ describe('lane change', () => {
     expect(pos(top).z).toBeCloseTo(270, 6);
   });
 
-  it('only joins the lane change ports to each other', () => {
+  it('joins the centre only to bridge approaches, upper to upper and lower to lower', () => {
     expect(compatible(f, 1, c, 0)).toBe(true);
     expect(compatible(f, 2, c, 2)).toBe(true);
-    expect(compatible(f, 2, f, 2)).toBe(false);
-    expect(compatible(f, 1, getPart('straight'), 0)).toBe(false);
+    expect(compatible(f, 1, c, 2)).toBe(false);
+    expect(compatible(getPart('straight'), 1, c, 0)).toBe(false);
     expect(compatible(f, 0, getPart('straight'), 1)).toBe(true);
+  });
+
+  it('joins the approach’s lower and upper ends to ordinary parts too (#60)', () => {
+    expect(compatible(f, 1, getPart('straight'), 0)).toBe(true);
+    expect(compatible(f, 2, getPart('straight'), 0)).toBe(true);
   });
 
   it('meets the bridge ends of the centre exactly with the approaches', () => {

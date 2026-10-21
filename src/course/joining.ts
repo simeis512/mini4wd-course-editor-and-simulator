@@ -1,7 +1,7 @@
-import { compatible, layoutCourse, movingGroup, portKey, sameJoint, type Course, type Layout, type PieceRec, type PortRef } from './course';
+import { anchorFrame, compatible, layoutCourse, movingGroup, portKey, sameJoint, type Course, type Layout, type PieceRec, type PortRef } from './course';
 import { clone, freeRec, linkHolder, moveGroup, uncut } from './edit';
 import { bendPose } from './flex';
-import { FACE, facingError } from './geometry';
+import { FACE, facingError, matrixToPose, type Pose } from './geometry';
 
 // Joining, splitting and the magnet that pulls ports together (spec 5.2, 5.3, 8).
 
@@ -86,10 +86,12 @@ export function asLink(course: Course, a: PortRef, b: PortRef): Course {
   const later = linkable(course, a, b);
   if (!later) return course;
   const earlier = later === a ? b : a;
-  if (!layoutCourse(course).closures.some((c) => sameJoint(c, { a, b }))) return course;
+  const closure = layoutCourse(course).closures.find((c) => sameJoint(c, { a, b }));
+  if (!closure) return course;
   const rec = course.pieces[later.piece];
   const next = clone(course);
   const out: PieceRec = { part: rec.part, port: later.port, to: [earlier.piece, earlier.port] };
+  if (closure.shift) out.shift = closure.shift;
   if (rec.variant !== undefined) out.variant = rec.variant;
   if (rec.twist) out.twist = rec.twist;
   next.pieces[later.piece] = out;
@@ -105,11 +107,19 @@ export function splitJoint(course: Course, a: PortRef, b: PortRef): Course {
   const holder = linkHolder(course, a, b);
   if (holder !== null) {
     const rec = course.pieces[holder];
-    // A bent joint stays bent where it is (spec 16.1).
-    next.pieces[holder] = freeRec(rec, holder === a.piece ? b : a, bendPose('to' in rec ? rec.bend : undefined));
+    // A bent or shifted joint stays where it is (spec 16.1, #60).
+    const base = holder === a.piece ? b : a;
+    const pose = 'to' in rec && rec.shift ? shiftedPose(course, base, holder) : bendPose('to' in rec ? rec.bend : undefined);
+    next.pieces[holder] = freeRec(rec, base, pose);
   }
   next.cuts = [...(course.cuts ?? []), [a.piece, a.port], [b.piece, b.port]];
   return next;
+}
+
+/** Where a piece hangs off the port `base`, as a pose from it: for a shifted joint. */
+function shiftedPose(course: Course, base: PortRef, piece: number): Pose {
+  const layout = layoutCourse(course);
+  return matrixToPose(layout.pieces[base.piece].ports[base.port].clone().invert().multiply(anchorFrame(layout, piece)));
 }
 
 /** Join two ports that meet, undoing a split; ports a little apart are pulled together first. */

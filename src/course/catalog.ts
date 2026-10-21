@@ -324,13 +324,14 @@ export const PARTS: readonly PartDef[] = [
     ],
     ports: [
       { id: 'a', anchor: 'start', lanes: ALL_LANES },
-      { id: 'lower', anchor: 'end', lanes: [0, 1], kind: 'lc-lower', partners: ['lane-change-center'] },
+      // Its lower and upper ends also join ordinary parts, for home-made
+      // lane changes and one-lane jumps (#60).
+      { id: 'lower', anchor: 'end', lanes: [0, 1], kind: 'lc-lower' },
       {
         id: 'upper',
         anchor: { pos: [RIGHT_LANE_X, JOINT_HEIGHT, RAMP_RUN], rot: [0, JOINT_PITCH, 0] },
         lanes: [2],
         kind: 'lc-upper',
-        partners: ['lane-change-center'],
       },
     ],
     laneLinks: [
@@ -407,6 +408,28 @@ export const PARTS: readonly PartDef[] = [
     confidence: 'inferred',
     note: LANE_CHANGE_NOTE,
   },
+  {
+    // The lane change's under-bridge (D) on its own: the two lower lanes
+    // move one lane over in an S, with no bridge above. Used as a two-lane
+    // piece, e.g. after a bridge approach (user, 2026-10-21).
+    id: 'under-bridge',
+    name: 'アンダーブリッジ',
+    setCode: 'D',
+    segments: [{ length: LANE_CHANGE_LENGTH, lateralProfile: 'lc-under' }],
+    lanes: [0, 1],
+    ports: [
+      { id: 'a', anchor: 'start', lanes: [0, 1] },
+      { id: 'b', anchor: { pos: [-laneOffset(1) - GLOBAL_SPEC.lanePitch / 2, 0, LANE_CHANGE_LENGTH], rot: [0, 0, 0] }, lanes: [1, 2] },
+    ],
+    laneLinks: [
+      { from: [0, 0], to: [1, 1] },
+      { from: [0, 1], to: [1, 2] },
+    ],
+    variants: [PALETTE.white, PALETTE.gray, PALETTE.black],
+    defaultVariant: 0,
+    confidence: 'inferred',
+    note: LANE_CHANGE_NOTE,
+  },
 ];
 
 const PART_BY_ID = new Map(PARTS.map((p) => [p.id, p]));
@@ -434,6 +457,7 @@ export const PART_CODES: readonly string[] = [
   'slope',
   'bridge-approach',
   'lane-change-center',
+  'under-bridge',
 ];
 
 export function variantOf(part: PartDef, index: number | undefined): Variant {

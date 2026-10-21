@@ -15,22 +15,24 @@ import { isZeroBend } from './flex';
  *   per piece:
  *     part code (index into PART_CODES)
  *     head: bits0-1 anchor (0 origin, 1 to, 2 free in world, 3 free from port),
- *           bit2 has variant, bit3 has bend, bit4 has twist
+ *           bit2 has variant, bit3 has bend, bit4 has twist, bit5 has shift
  *     [variant]
  *     [port]                         unless origin
  *     [piece, port]                  to / free from port
  *     [pitch, yaw (0.1°)]            bend of a `to` joint (spec 16.5)
+ *     [shift (lanes)]                sideways shift of a `to` joint (#60)
  *     [x, y, z (0.1 mm), yaw, pitch, roll (0.1°)]  free
  *     [twist (0.1°)]                 (spec 16.5)
  *   [split mark count, then piece, port for each]  when flagged
  *   [open-on-purpose mark count, then piece, port for each]  when flagged (#13)
  *
- * Format 2 is the same without the open-on-purpose marks, and format 1
- * without bends and twists too, so both still read.
+ * Format 3 is the same without shifts, format 2 also without the
+ * open-on-purpose marks, and format 1 without bends and twists too, so all
+ * still read.
  */
-export const FORMAT_VERSION = 3;
+export const FORMAT_VERSION = 4;
 /** Older formats that still read. */
-const READABLE_VERSIONS = [1, 2, FORMAT_VERSION];
+const READABLE_VERSIONS = [1, 2, 3, FORMAT_VERSION];
 const HASH_KEY = 'c';
 
 class Writer {
@@ -99,7 +101,8 @@ export function courseToBytes(course: Course): Uint8Array {
     w.uint(code);
     const anchor = 'at' in rec ? 0 : 'to' in rec ? 1 : rec.free ? 3 : 2;
     const bend = 'to' in rec && !isZeroBend(rec.bend) ? rec.bend! : null;
-    w.uint(anchor | (rec.variant !== undefined ? 4 : 0) | (bend ? 8 : 0) | (rec.twist ? 16 : 0));
+    const shift = 'to' in rec ? (rec.shift ?? 0) : 0;
+    w.uint(anchor | (rec.variant !== undefined ? 4 : 0) | (bend ? 8 : 0) | (rec.twist ? 16 : 0) | (shift ? 32 : 0));
     if (rec.variant !== undefined) w.uint(rec.variant);
     if ('port' in rec) w.uint(rec.port);
     if ('to' in rec) {
@@ -109,6 +112,7 @@ export function courseToBytes(course: Course): Uint8Array {
         w.tenths(bend.pitch ?? 0);
         w.tenths(bend.yaw ?? 0);
       }
+      if (shift) w.int(shift);
     } else if ('free' in rec) {
       if (rec.free) {
         w.uint(rec.free[0]);
@@ -158,6 +162,7 @@ export function courseFromBytes(bytes: Uint8Array): Course {
           if (pitch) rec.bend.pitch = pitch;
           if (yaw) rec.bend.yaw = yaw;
         }
+        if (head & 32) rec.shift = r.int();
       } else {
         const free: [number, number] | null = anchor === 3 ? [r.uint(), r.uint()] : null;
         const pos: [number, number, number] = [r.tenths(), r.tenths(), r.tenths()];

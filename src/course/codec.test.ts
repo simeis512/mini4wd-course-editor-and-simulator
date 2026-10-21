@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { courseFromBytes, courseFromHash, courseFromJson, courseToBytes, courseToHash, decodeCourse, encodeCourse } from './codec';
 import { type Course } from './course';
-import { deletePiece, flipPiece, markIntended, setVariant } from './edit';
+import { deletePiece, flipPiece, markIntended, setShift, setVariant } from './edit';
 import { splitJoint } from './joining';
 import { basicOval } from './presets';
 
@@ -12,6 +12,7 @@ function sample(): Course {
   c = deletePiece(c, 6);
   c = splitJoint(c, { piece: 0, port: 1 }, { piece: 1, port: 0 });
   c = markIntended(c, { piece: 1, port: 0 }, true);
+  c = setShift(c, { piece: 2, port: 1 }, { piece: 3, port: 0 }, -1);
   return { ...c, name: 'テストコース', dir: -1 };
 }
 
@@ -24,15 +25,14 @@ describe('codec', () => {
   it('round-trips through the URL hash', async () => {
     const c = sample();
     const hash = await courseToHash(c);
-    expect(hash).toMatch(/^#c=3\.[A-Za-z0-9_-]+$/);
+    expect(hash).toMatch(/^#c=4\.[A-Za-z0-9_-]+$/);
     expect(await courseFromHash(hash)).toEqual(c);
   });
 
-  it('still reads format 1 and 2 links', async () => {
-    // Format 2 is format 3 without open-on-purpose marks; format 1 also without bends and twists.
+  it('still reads format 1, 2 and 3 links', async () => {
+    // Each older format is the newer one without shifts, open-on-purpose marks, bends and twists in turn.
     const payload = (await encodeCourse(basicOval())).split('.')[1];
-    expect(await decodeCourse(`1.${payload}`)).toEqual(basicOval());
-    expect(await decodeCourse(`2.${payload}`)).toEqual(basicOval());
+    for (const v of [1, 2, 3]) expect(await decodeCourse(`${v}.${payload}`)).toEqual(basicOval());
   });
 
   it('keeps the basic oval short', async () => {

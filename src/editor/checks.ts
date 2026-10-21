@@ -59,6 +59,19 @@ function openPorts(layout: Layout): string[] {
 }
 
 /** Overlaps first: they cannot be built, while a low crossing only stops machines. */
+/** Lanes that end at a joint, each with a box to mark it as made that way (#60). */
+function deadEnds(layout: Layout): string[] {
+  if (!layout.deadEnds.length) return [];
+  const items = layout.deadEnds.map((d) => {
+    const lanes = d.lanes.length > 1 ? `${d.lanes.length} レーン` : '1 レーン';
+    return `<li class="${d.intended ? 'muted' : 'warn'}"><span>${portLink(layout, d)} で ${lanes}</span>
+      <label class="mark" title="ずらした接続などで、わざと行き止まりにしたレーンは警告しません"><input type="checkbox" data-intended="${d.piece}:${d.port}"${d.intended ? ' checked' : ''}>意図的</label></li>`;
+  });
+  const warned = layout.deadEnds.filter((d) => !d.intended).length;
+  const head = warned ? `<div class="warn">行き止まりのレーン: ${warned}</div>` : '<div class="ok">行き止まりのレーンはすべて意図的です</div>';
+  return [head, `<ul class="checks">${items.join('')}</ul>`];
+}
+
 function clashLines(layout: Layout, clashes: readonly Clash[]): string[] {
   const order = [...clashes].sort((a, b) => Number(a.kind === 'clearance') - Number(b.kind === 'clearance'));
   return order.map((c) =>
@@ -112,6 +125,7 @@ export function renderCourseInfo(course: Course, layout: Layout, checks: CourseC
   const islands = groupCount(layout);
   if (islands > 1) info.push(`<div class="muted">つながりのまとまり: ${islands} 個</div>`);
   info.push(...openPorts(layout));
+  info.push(...deadEnds(layout));
   if (course.pieces.length > 0 && layout.open.length === 0) info.push('<div class="ok">コースは閉じています</div>');
   for (const pr of layout.problems) info.push(`<div class="warn">${pieceLink(layout, pr.piece)}: ${PROBLEM_TEXT[pr.kind]}</div>`);
   info.push(...clashLines(layout, checks.clashes));
@@ -128,12 +142,18 @@ export function renderCourseInfo(course: Course, layout: Layout, checks: CourseC
   // The folded course box still shows the gist (#45).
   const open = layout.open.length - layout.intended.length;
   const errors = layout.problems.length + checks.clashes.length;
+  const ends = layout.deadEnds.filter((d) => !d.intended).length;
   const lanesOk = !checks.laps || checks.laps.allLanes;
   const status =
     course.pieces.length === 0
       ? ''
-      : [open ? `・未接続の口 ${open}` : '・閉じています', errors ? `・問題 ${errors}` : '', lanesOk ? '' : '・全レーンを走りません'].join('');
-  const bad = open || errors || !lanesOk;
+      : [
+          open ? `・未接続の口 ${open}` : '・閉じています',
+          ends ? `・行き止まり ${ends}` : '',
+          errors ? `・問題 ${errors}` : '',
+          lanesOk ? '' : '・全レーンを走りません',
+        ].join('');
+  const bad = open || ends || errors || !lanesOk;
   $('course-summary').innerHTML = `コース: ${course.pieces.length} ピース<span class="${bad ? 'warn' : 'ok'}">${status}</span>`;
 }
 

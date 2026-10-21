@@ -1,5 +1,5 @@
 import { Matrix4, Vector3 } from 'three';
-import { CATALOG_VERSION, getPart, portLaneOffsets, type PartDef } from './catalog';
+import { CATALOG_VERSION, getPart, GLOBAL_SPEC, portLaneOffsets, type PartDef, type PortDef } from './catalog';
 import { bendAngle, bendMatrix, BEND_LIMIT, pieceGeometry, TWIST_LIMIT, type Bend } from './flex';
 import { attach, FACE, facingError, IDENTITY_POSE, poseToMatrix, type FrameError, type PartGeometry, type Pose } from './geometry';
 
@@ -14,8 +14,11 @@ interface RecBase {
 /** A placed piece. Pieces only refer to pieces before them (spec 5.1). */
 export type PieceRec =
   | (RecBase & { at: 'origin' })
-  /** Joined to a port; the joint may bend a little (spec 16.1). */
-  | (RecBase & { port: number; to: [piece: number, port: number]; bend?: Bend })
+  /**
+   * Joined to a port; the joint may bend a little (spec 16.1) and be moved
+   * sideways by whole lanes (`shift`, see `jointOffset`, #60).
+   */
+  | (RecBase & { port: number; to: [piece: number, port: number]; bend?: Bend; shift?: number })
   /**
    * Free placement: this piece's `port` faces the frame `pose`, which is
    * relative to the port `free` (or to the world when null). A zero pose
@@ -53,6 +56,11 @@ export interface PortRef {
 /** Loop-closure tolerance (spec 5.3, provisional). */
 export const CLOSE_DISTANCE = 10;
 export const CLOSE_ANGLE = 3;
+/**
+ * Sideways shifts, in lanes, that two loose ports are tried at to close a
+ * loop (#60): as far as three-lane ports still meeting by one lane.
+ */
+const CLOSE_SHIFTS = [0, -1, 1, -2, 2];
 
 export interface PlacedPiece {
   rec: PieceRec;
@@ -68,6 +76,8 @@ export interface PlacedPiece {
 export interface Closure extends FrameError {
   a: PortRef;
   b: PortRef;
+  /** Lanes the ports meet moved sideways by (#60). */
+  shift: number;
 }
 
 /** Two ports that are joined, by the stored graph or by meeting (spec 5.3). */
@@ -76,6 +86,8 @@ export interface Joint {
   b: PortRef;
   /** `link`: stored as a connection; `closure`: two loose ports that meet. */
   kind: 'link' | 'closure';
+  /** Lanes `b` is moved sideways by from `a`; the same seen from either side (#60). */
+  shift: number;
 }
 
 /**
@@ -106,6 +118,19 @@ export interface Layout {
   split: PortRef[];
   /** Open ports marked as left open on purpose (#13). */
   intended: PortRef[];
+  /** Lanes that end at a joint because the port they meet has no lane there (#60). */
+  deadEnds: DeadEnd[];
+}
+
+/**
+ * Lanes of a joined port that meet no lane across the joint: a shifted
+ * joint, or ports of different widths (#60). The road ends there.
+ */
+export interface DeadEnd extends PortRef {
+  /** The part's lanes at that port that end. */
+  lanes: number[];
+  /** Marked as made that way on purpose, as for open ports (#13). */
+  intended: boolean;
 }
 
 export const portKey = (r: PortRef): string => `${r.piece}:${r.port}`;
@@ -149,25 +174,50 @@ export function validateCourse(course: Course): void {
   }
 }
 
-/** Ports two pieces can be joined by: same kind and lane count, and partners that allow each other. */
-export function compatible(a: PartDef, ap: number, b: PartDef, bp: number): boolean {
+/**
+ * Ports two pieces can be joined by: kinds that go together (the same kind,
+ * or an ordinary port), partners that allow each other, and at least one
+ * lane that meets across the joint with this sideways `shift` (#60).
+ */
+export function compatible(a: PartDef, ap: number, b: PartDef, bp: number, shift = 0): boolean {
   const pa = a.ports[ap];
   const pb = b.ports[bp];
   if (a.cannotJoin?.includes(b.id) || b.cannotJoin?.includes(a.id)) return false;
   if ((pa.partners && !pa.partners.includes(b.id)) || (pb.partners && !pb.partners.includes(a.id))) return false;
-  return (pa.kind ?? 'std') === (pb.kind ?? 'std') && pa.lanes.length === pb.lanes.length;
+  const [ka, kb] = [pa.kind ?? 'std', pb.kind ?? 'std'];
+  if (ka !== kb && ka !== 'std' && kb !== 'std') return false;
+  return jointLanes(a, ap, b, bp, shift).length > 0;
+}
+
+/**
+ * How far sideways (+ right, mm, looking out of port `pa`) the port `pb`
+ * faces it when the joint is shifted by `shift` lanes (#60). Ports with an
+ * odd and an even number of lanes meet half a lane apart, so their lanes
+ * line up; unshifted, the wider one sticks out on the right.
+ */
+export function jointOffset(pa: PortDef, pb: PortDef, shift = 0): number {
+  const half = pa.lanes.length % 2 !== pb.lanes.length % 2 ? 0.5 : 0;
+  return (shift + half) * GLOBAL_SPEC.lanePitch;
+}
+
+/** The frame a port's partner faces when the joint is shifted sideways (#60); + X is left. */
+export function shiftedFrame(frame: Matrix4, pa: PortDef, pb: PortDef, shift = 0): Matrix4 {
+  const d = jointOffset(pa, pb, shift);
+  return d ? frame.clone().multiply(new Matrix4().makeTranslation(-d, 0, 0)) : frame.clone();
 }
 
 /**
  * Lanes that meet at a joint between port `ap` of `a` and port `bp` of `b`,
  * as [lane on a, lane on b]. The ports face each other, so the lane on the
- * right of one is on the left of the other.
+ * right of one is on the left of the other. A shifted joint moves `b`'s
+ * lanes right by `jointOffset`; seen from `b` it is the same shift (#60).
  */
-export function jointLanes(a: PartDef, ap: number, b: PartDef, bp: number): [number, number][] {
+export function jointLanes(a: PartDef, ap: number, b: PartDef, bp: number, shift = 0): [number, number][] {
   const others = portLaneOffsets(b.ports[bp]);
+  const d = jointOffset(a.ports[ap], b.ports[bp], shift);
   const out: [number, number][] = [];
   for (const { lane, right } of portLaneOffsets(a.ports[ap])) {
-    const match = others.find((o) => Math.abs(o.right + right) < 1e-6);
+    const match = others.find((o) => Math.abs(o.right + right - d) < 1e-6);
     if (match) out.push([lane, match.lane]);
   }
   return out;
@@ -195,12 +245,15 @@ export function layoutCourse(course: Course): Layout {
     if ('to' in rec) {
       const [j, p] = rec.to;
       // A bent joint turns about the joint itself (spec 16.1).
-      matrix = attach(pieces[j].ports[p].clone().multiply(bendMatrix(rec.bend)), geo.ports[rec.port]);
-      if (!compatible(pieces[j].part, p, part, rec.port)) problems.push({ kind: 'cannot-join', piece: i, port: rec.port });
+      const shift = rec.shift ?? 0;
+      // A shifted joint moves sideways first, then bends about where it now is.
+      const base = shiftedFrame(pieces[j].ports[p], pieces[j].part.ports[p], part.ports[rec.port], shift);
+      matrix = attach(base.multiply(bendMatrix(rec.bend)), geo.ports[rec.port]);
+      if (!compatible(pieces[j].part, p, part, rec.port, shift)) problems.push({ kind: 'cannot-join', piece: i, port: rec.port });
       if (bendAngle(rec.bend) > BEND_LIMIT) problems.push({ kind: 'bend-limit', piece: i, port: rec.port });
       connected.add(portKey({ piece: j, port: p }));
       connected.add(portKey({ piece: i, port: rec.port }));
-      links.push({ a: { piece: j, port: p }, b: { piece: i, port: rec.port }, kind: 'link' });
+      links.push({ a: { piece: j, port: p }, b: { piece: i, port: rec.port }, kind: 'link', shift });
     } else if ('free' in rec) {
       const base = rec.free ? pieces[rec.free[0]].ports[rec.free[1]] : new Matrix4();
       matrix = attach(base.clone().multiply(poseToMatrix(rec.pose)), geo.ports[rec.port]);
@@ -228,9 +281,17 @@ export function layoutCourse(course: Course): Layout {
       const a = loose[x];
       const b = loose[y];
       if (a.piece === b.piece || cut.has(portKey(a)) || cut.has(portKey(b))) continue;
-      if (!compatible(pieces[a.piece].part, a.port, pieces[b.piece].part, b.port)) continue;
-      const err = facingError(pieces[a.piece].ports[a.port], pieces[b.piece].ports[b.port]);
-      if (err.distance <= CLOSE_DISTANCE && err.angle <= CLOSE_ANGLE) candidates.push({ a, b, ...err });
+      const [pa, pb] = [pieces[a.piece], pieces[b.piece]];
+      // Ports that meet straight on, or else a lane to either side (#60).
+      for (const shift of CLOSE_SHIFTS) {
+        if (!compatible(pa.part, a.port, pb.part, b.port, shift)) continue;
+        const frame = shiftedFrame(pa.ports[a.port], pa.part.ports[a.port], pb.part.ports[b.port], shift);
+        const err = facingError(frame, pb.ports[b.port]);
+        if (err.distance <= CLOSE_DISTANCE && err.angle <= CLOSE_ANGLE) {
+          candidates.push({ a, b, shift, ...err });
+          break;
+        }
+      }
     }
   }
   candidates.sort((p, q) => p.distance - q.distance);
@@ -243,7 +304,7 @@ export function layoutCourse(course: Course): Layout {
     closures.push(c);
   }
   const open = loose.filter((r) => !closed.has(portKey(r)));
-  const joints: Joint[] = [...links, ...closures.map((c): Joint => ({ a: c.a, b: c.b, kind: 'closure' }))];
+  const joints: Joint[] = [...links, ...closures.map((c): Joint => ({ a: c.a, b: c.b, kind: 'closure', shift: c.shift }))];
 
   // Group joined pieces (union-find).
   const parent = pieces.map((_, i) => i);
@@ -253,7 +314,19 @@ export function layoutCourse(course: Course): Layout {
   const split = open.filter((r) => cut.has(portKey(r)));
   const meant = new Set((course.intended ?? []).map(([piece, port]) => portKey({ piece, port })));
   const intended = open.filter((r) => meant.has(portKey(r)));
-  return { pieces, problems, connected, closures, open, joints, group, split, intended };
+  const deadEnds: DeadEnd[] = [];
+  for (const j of joints) {
+    const [pa, pb] = [pieces[j.a.piece].part, pieces[j.b.piece].part];
+    const meet = jointLanes(pa, j.a.port, pb, j.b.port, j.shift);
+    for (const [ref, part, side] of [
+      [j.a, pa, 0],
+      [j.b, pb, 1],
+    ] as const) {
+      const lanes = part.ports[ref.port].lanes.filter((l) => !meet.some((m) => m[side] === l));
+      if (lanes.length) deadEnds.push({ ...ref, lanes, intended: meant.has(portKey(ref)) });
+    }
+  }
+  return { pieces, problems, connected, closures, open, joints, group, split, intended, deadEnds };
 }
 
 /** The frame a piece's anchoring port faces, in world space. */
