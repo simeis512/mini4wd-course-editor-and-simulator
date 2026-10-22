@@ -8,6 +8,7 @@ import { attachmentOutline } from '../course/attachments';
 import { ATTACHMENT_COLOR, halfWidth, insidePolygon, worldTracks } from '../course/mesh';
 import { colorRange, heightColor, type HeightView } from './levels';
 import { lowestFirst, outlinesOf, xz, type Outline } from './outline2d';
+import { TopCamera } from './top-camera';
 import { JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
 import { blink, drawClashMark, drawShortMark, type EditorView, type RunMarks } from './view';
 
@@ -26,9 +27,7 @@ export class TopView implements EditorView {
   private heights: HeightRange[] = [];
   private heightView: HeightView = { colors: false, level: 0 };
   /** World point (mm) at the canvas centre, and zoom in px per mm. */
-  private cx = 0;
-  private cz = 0;
-  private scale = 0.2;
+  private camera = new TopCamera();
   private pointers = new Map<number, { x: number; y: number }>();
   private dragged = false;
   private downAt = { x: 0, y: 0 };
@@ -104,12 +103,12 @@ export class TopView implements EditorView {
 
   /** Current zoom, px per mm. */
   get pxPerMm(): number {
-    return this.scale;
+    return this.camera.scale;
   }
 
   /** World point (mm) at the middle of the view. */
   get centre(): [number, number] {
-    return [this.cx, this.cz];
+    return [this.camera.cx, this.camera.cz];
   }
 
   /** Point on the page over the world point (mm). */
@@ -129,31 +128,21 @@ export class TopView implements EditorView {
 
   /** Zoom and pan so the whole course fits. */
   fit(): void {
-    const pts = this.outlines.flatMap((o) => o.polygon);
-    const w = this.canvas.clientWidth || 1;
-    const h = this.canvas.clientHeight || 1;
-    if (pts.length === 0) {
-      this.cx = 0;
-      this.cz = 0;
-      this.scale = Math.min(w, h) / 2000;
-    } else {
-      const xs = pts.map((p) => p[0]);
-      const zs = pts.map((p) => p[1]);
-      const [x0, x1, z0, z1] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)];
-      this.cx = (x0 + x1) / 2;
-      this.cz = (z0 + z1) / 2;
-      this.scale = Math.min(w / (x1 - x0 + 400), h / (z1 - z0 + 400));
-    }
+    this.camera.fit(
+      this.outlines.flatMap((o) => o.polygon),
+      200,
+      this.canvas.clientWidth || 1,
+      this.canvas.clientHeight || 1,
+    );
     this.draw();
   }
 
-  // Screen right is world −X and screen up is world +Z, so this is the view from above.
   private toScreen(x: number, z: number): [number, number] {
-    return [this.canvas.clientWidth / 2 - (x - this.cx) * this.scale, this.canvas.clientHeight / 2 - (z - this.cz) * this.scale];
+    return this.camera.toScreen(x, z, this.canvas.clientWidth, this.canvas.clientHeight);
   }
 
   private toWorld(sx: number, sy: number): [number, number] {
-    return [this.cx - (sx - this.canvas.clientWidth / 2) / this.scale, this.cz - (sy - this.canvas.clientHeight / 2) / this.scale];
+    return this.camera.toWorld(sx, sy, this.canvas.clientWidth, this.canvas.clientHeight);
   }
 
   draw(): void {
@@ -366,7 +355,7 @@ export class TopView implements EditorView {
       [100, 'rgba(255,255,255,0.04)'],
       [1000, 'rgba(255,255,255,0.09)'],
     ] as const) {
-      if (step * this.scale < 8) continue;
+      if (step * this.camera.scale < 8) continue;
       const [xa, za] = this.toWorld(w, h);
       const [xb, zb] = this.toWorld(0, 0);
       ctx.strokeStyle = color;
@@ -455,7 +444,7 @@ export class TopView implements EditorView {
       if (this.moving) this.handlers.onDragEnd(false);
       this.moving = false;
       this.dragged = true;
-      this.pinch = { dist: this.pinchDistance(), scale: this.scale };
+      this.pinch = { dist: this.pinchDistance(), scale: this.camera.scale };
     }
   }
 
@@ -474,8 +463,7 @@ export class TopView implements EditorView {
     if (this.dragged) {
       // Pan by the movement of this pointer (halved while pinching with two).
       const k = this.pointers.size;
-      this.cx += (p.x - prev.x) / this.scale / k;
-      this.cz += (p.y - prev.y) / this.scale / k;
+      this.camera.pan(prev, { x: prev.x + (p.x - prev.x) / k, y: prev.y + (p.y - prev.y) / k }, this.canvas.clientWidth, this.canvas.clientHeight);
     }
     this.pointers.set(e.pointerId, p);
     if (this.pinch && this.pointers.size === 2) {
@@ -502,16 +490,12 @@ export class TopView implements EditorView {
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
     const p = this.local(e);
-    this.zoomAt(p.x, p.y, this.scale * Math.exp(-e.deltaY * 0.0015));
+    this.zoomAt(p.x, p.y, this.camera.scale * Math.exp(-e.deltaY * 0.0015));
     this.draw();
   }
 
   private zoomAt(sx: number, sy: number, scale: number): void {
-    const [x, z] = this.toWorld(sx, sy);
-    this.scale = Math.min(5, Math.max(0.01, scale));
-    const [x2, z2] = this.toWorld(sx, sy);
-    this.cx += x - x2;
-    this.cz += z - z2;
+    this.camera.zoomAt(sx, sy, scale, this.canvas.clientWidth, this.canvas.clientHeight);
   }
 
   private pinchDistance(): number {
