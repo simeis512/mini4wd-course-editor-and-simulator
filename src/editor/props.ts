@@ -97,7 +97,8 @@ export class PropTools {
     return true;
   }
 
-  private showStoppers(): void {
+  /** Put the hoses and boxes on show, as when one is added or picked. */
+  showStoppers(): void {
     const box = $<HTMLInputElement>('show-stoppers');
     if (box.checked) return;
     box.checked = true;

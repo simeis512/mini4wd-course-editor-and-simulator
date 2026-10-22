@@ -519,6 +519,7 @@ function clashMaterial(kind: Clash['kind']): () => THREE.SpriteMaterial {
 const CLASH_MATERIALS: Record<Clash['kind'], () => THREE.SpriteMaterial> = {
   interference: clashMaterial('interference'),
   clearance: clashMaterial('clearance'),
+  stopper: clashMaterial('stopper'),
 };
 /** A ball on each point of the selected hose, to drag. */
 const HANDLE_GEOMETRY = new THREE.SphereGeometry(18, 16, 12);

@@ -33,6 +33,7 @@ import {
   turnAboutMiddle,
 } from '../course/edit';
 import { findClashes } from '../course/clash';
+import { stopperContacts } from '../course/stopper-contact';
 import { asLink, joinableNear, joinPorts, splitJoint } from '../course/joining';
 import { checkLaps } from '../course/laps';
 import type { Pose } from '../course/geometry';
@@ -215,7 +216,8 @@ export class EditorApp {
   }
 
   /** What to select for a piece or port named in the course box: a joined port selects its joint. */
-  private selectionOf(t: { piece: number } | PortRef): Selection {
+  private selectionOf(t: { piece: number } | PortRef | { stopper: number }): Selection {
+    if ('stopper' in t) return { kind: 'stopper', index: t.stopper };
     if (!('port' in t)) return { kind: 'piece', index: t.piece };
     const joint = this.layout.joints.find((j) => [j.a, j.b].some((r) => portKey(r) === portKey(t)));
     return joint ? { kind: 'joint', a: joint.a, b: joint.b } : { kind: 'port', ref: t };
@@ -239,7 +241,7 @@ export class EditorApp {
       if (!stopper) this.selection = null;
       else if (s.point !== undefined && (stopper.kind !== 'hose' || s.point >= stopper.points.length)) this.selection = { kind: 'stopper', index: s.index };
     }
-    this.checks = { clashes: findClashes(this.layout), laps: checkLaps(this.layout, this.course.dir) };
+    this.checks = { clashes: [...findClashes(this.layout), ...stopperContacts(this.layout)], laps: checkLaps(this.layout, this.course.dir) };
     for (const view of [this.top, this.orbit]) {
       view.setData(this.layout, this.selection);
       view.setClashes(this.checks.clashes);
@@ -470,7 +472,10 @@ export class EditorApp {
     bindTurnTools(this.top);
     bindShopping(() => renderCourseInfo(this.course, this.layout, this.checks));
     bindCourseInfo({
-      pick: (t) => this.select(this.selectionOf(t)),
+      pick: (t) => {
+        if ('stopper' in t) this.props.showStoppers();
+        this.select(this.selectionOf(t));
+      },
       intended: (ref, on) => this.commit(markIntended(this.course, ref, on), this.selection),
       reverse: () => this.commit(reverseDirection(this.course), this.selection),
     });
