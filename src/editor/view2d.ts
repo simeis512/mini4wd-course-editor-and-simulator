@@ -161,19 +161,30 @@ export class TopView implements EditorView {
     this.handlers.onViewChange?.();
   }
 
-  private paint(): void {
-    const { canvas, ctx } = this;
-    const dpr = window.devicePixelRatio || 1;
+  /** The course as it is in view now, without selection, joints, ports or marks, `width` × `height` pixels (the view's shape). */
+  snapshot(width: number, height: number): HTMLCanvasElement {
+    const out = document.createElement('canvas');
+    out.width = width;
+    out.height = height;
+    this.paint({ ctx: out.getContext('2d')!, ratio: width / (this.canvas.clientWidth || 1) });
+    return out;
+  }
+
+  /** Draw the view on the page, or only the course onto `target` at `ratio` pixels to the view's pixel. */
+  private paint(target?: { ctx: CanvasRenderingContext2D; ratio: number }): void {
+    const { canvas } = this;
+    const ctx = target?.ctx ?? this.ctx;
+    const dpr = target?.ratio ?? (window.devicePixelRatio || 1);
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
-    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    if (!target && (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr))) {
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#1b1d22';
     ctx.fillRect(0, 0, w, h);
-    this.drawGrid(w, h);
+    this.drawGrid(ctx, w, h);
     const layout = this.layout;
     if (!layout) return;
 
@@ -256,6 +267,7 @@ export class TopView implements EditorView {
       }
     }
 
+    if (target) return;
     const sel = this.selection;
     if (sel?.kind === 'piece') {
       // The pieces joined to the selection move with it: outline them too.
@@ -348,8 +360,7 @@ export class TopView implements EditorView {
     ctx.fill();
   }
 
-  private drawGrid(w: number, h: number): void {
-    const { ctx } = this;
+  private drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     // Grid every 100 mm, stronger every metre; skip the fine grid when zoomed out.
     for (const [step, color] of [
       [100, 'rgba(255,255,255,0.04)'],

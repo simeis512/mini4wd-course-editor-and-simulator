@@ -31,6 +31,11 @@
       #view2d { touch-action: none; display: block; }
       #view3d canvas { display: block; touch-action: none; }
       #view3d .ar-button { position: absolute !important; bottom: 12px !important; }
+      #stage.framing { background: #0d0e11; }
+      #stage.framing #view2d, #stage.framing #view3d { outline: 2px solid var(--accent); }
+      .share-field { display: flex; flex-direction: column; gap: 2px; margin: 8px 0 6px; }
+      .share-field input { font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+      #share-preview { display: block; width: 100%; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; background: #1b1d22; }
       #fit { position: absolute; right: 10px; bottom: 10px; }
       #height-tools { position: absolute; left: 10px; top: 10px; z-index: 3; width: 210px; padding: 6px 10px; font-size: 13px; background: rgba(36, 39, 46, 0.92); border: 1px solid var(--line); border-radius: 8px; }
       #height-tools label { display: flex; gap: 6px; align-items: center; }
@@ -96,7 +101,7 @@
       dialog .close { position: absolute; top: 8px; right: 8px; min-height: 0; padding: 2px 8px; border: 0; background: transparent; font-size: 18px; line-height: 1; }
       dialog .actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 12px; flex-wrap: wrap; }
       dialog .actions label { margin-right: auto; display: flex; gap: 6px; align-items: center; }
-      dialog .primary { background: #1f5f75; border-color: var(--accent); }
+      dialog .primary, #panel .primary { background: #1f5f75; border-color: var(--accent); }
       dialog pre { max-height: 240px; overflow: auto; font-size: 11px; white-space: pre-wrap; background: #1b1d22; padding: 8px; border-radius: 6px; }
       #save-name, #qr-caption, #unsaved-name { flex: 1; min-width: 160px; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
       #saves-list { list-style: none; padding: 0; margin: 10px 0 0; }
@@ -155,6 +160,7 @@
       <button id="save" title="このブラウザに保存 (Ctrl+S)">保存</button>
       <button id="saves" title="このブラウザに保存したコースの一覧">保存一覧</button>
       <button id="copy-url">URLをコピー</button>
+      <button id="share" title="SNSで共有する画像（16:9／9:16）を作る" aria-pressed="false">画像で共有</button>
       <button id="qr" title="コースのQRコードを表示・保存／QRコードからコースを開く">QRコード</button>
       <button id="export">書き出し</button>
       <button id="import">読み込み</button>
@@ -281,9 +287,28 @@
       </details>
     </main>
     <aside id="panel">
-      <h2>パーツ</h2>
-      <div id="palette"></div>
-      <p id="palette-hint" class="hint"></p>
+      <div id="palette-section">
+        <h2>パーツ</h2>
+        <div id="palette"></div>
+        <p id="palette-hint" class="hint"></p>
+      </div>
+      <section id="share-panel" hidden>
+        <h2>SNS用の画像</h2>
+        <p class="hint">枠の中の表示がそのまま画像になります。2D/3D の切り替えや、ドラッグ・ホイールでの向きや拡大はいつも通りできます。</p>
+        <div class="row">
+          <button id="share-landscape" aria-pressed="true">横 16:9</button>
+          <button id="share-portrait" aria-pressed="false">縦 9:16</button>
+          <button id="share-fit">枠に合わせる</button>
+        </div>
+        <label class="share-field">コース名<input id="share-name" type="text" maxlength="60" placeholder="（なし）" /></label>
+        <label><input id="share-facts" type="checkbox" checked /> 全長・大きさ・ピース数</label><br />
+        <label><input id="share-qr" type="checkbox" checked /> QRコード</label>
+        <canvas id="share-preview" aria-label="画像のプレビュー"></canvas>
+        <div class="row">
+          <button id="share-save" class="primary">PNGで保存</button>
+          <button id="share-close">閉じる</button>
+        </div>
+      </section>
     </aside>
     <div id="trash-zone" hidden></div>
     <div id="toast"></div>

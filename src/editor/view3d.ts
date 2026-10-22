@@ -331,6 +331,25 @@ export class OrbitView implements EditorView {
     this.handlers.onViewChange?.();
   }
 
+  /** The course as it is in view now, without the editing marks, `width` × `height` pixels (the view's shape) (#75). */
+  snapshot(width: number, height: number): HTMLCanvasElement {
+    const { renderer } = this;
+    const ratio = renderer.getPixelRatio();
+    const marks = [this.markers, this.outlines, this.clashMarks];
+    // Drawn larger and copied off in one go, so the page never shows it.
+    renderer.setPixelRatio(width / (this.container.clientWidth || 1));
+    marks.forEach((m) => (m.visible = false));
+    renderer.render(this.scene, this.camera);
+    const out = document.createElement('canvas');
+    out.width = width;
+    out.height = height;
+    out.getContext('2d')!.drawImage(renderer.domElement, 0, 0, width, height);
+    marks.forEach((m) => (m.visible = true));
+    renderer.setPixelRatio(ratio);
+    renderer.render(this.scene, this.camera);
+    return out;
+  }
+
   private render(frame?: XRFrame): void {
     try {
       if (this.renderer.xr.isPresenting) this.ar.onFrame(frame);
