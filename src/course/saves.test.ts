@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { carriedOver, cleanName, defaultSaveName, namesFor, offerResume, SAVE_NAME_MAX, sortSaves, uniqueName, type SavedCourse } from './saves';
+import { carriedOver, cleanName, defaultSaveName, offerResume, saveNameFor, SAVE_NAME_MAX, sortSaves, uniqueName, type SavedCourse } from './saves';
 
 const saved = (id: string, savedAt: number): SavedCourse => ({ id, name: id, data: '', savedAt, pieceCount: 1 });
 
@@ -43,7 +43,7 @@ describe('offering to resume', () => {
   });
 });
 
-describe('namesFor', () => {
+describe('saveNameFor', () => {
   const saves = [
     { ...saved('a', 1), name: 'オーバル', data: 'X' },
     { ...saved('b', 3), name: '練習', data: 'Y' },
@@ -51,17 +51,14 @@ describe('namesFor', () => {
   ];
 
   it('takes the save the course is first', () => {
-    expect(namesFor(saves, 'a', 'Y').current).toBe('オーバル');
+    expect(saveNameFor(saves, 'a', 'Y')).toBe('オーバル');
   });
 
   it('else the newest save holding the same course', () => {
-    expect(namesFor(saves, null, 'X').current).toBe('練習');
-    expect(namesFor(saves, 'gone', 'Z').current).toBe('');
+    expect(saveNameFor(saves, null, 'X')).toBe('練習');
+    expect(saveNameFor(saves, 'gone', 'Z')).toBe('');
   });
 
-  it('lists every name once, newest first', () => {
-    expect(namesFor(saves, null, '').names).toEqual(['練習', 'オーバル']);
-  });
 });
 
 describe('carriedOver', () => {

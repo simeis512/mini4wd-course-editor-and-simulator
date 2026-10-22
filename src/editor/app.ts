@@ -437,10 +437,7 @@ export class EditorApp {
     const app = this;
     bindQr({
       url: () => this.hashSync.url(),
-      names: async () => {
-        const saved = await this.library.names();
-        return app.course.name ? { ...saved, current: app.course.name } : saved;
-      },
+      name: async () => app.course.name || (await this.library.savedName()),
       get fileName() {
         return fileName(app.course);
       },
