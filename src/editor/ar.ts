@@ -156,7 +156,7 @@ export class ArMode {
       this.yaw = headingOf(forward);
       this.faceViewer = false;
     }
-    if (this.hasDepth) this.depth.update(frame, viewer?.views[0], this.aiming);
+    if (this.hasDepth) this.depth.update(frame, viewer?.views[0], this.aiming, this.at?.y ?? null);
     if (!this.aiming) return;
     if (this.hitPending) return;
     if (this.hitSource) {

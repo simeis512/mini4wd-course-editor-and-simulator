@@ -4,12 +4,12 @@ import * as THREE from 'three';
 const DEPTH_RANGE = 4;
 const DEPTH_OPACITY = 0.4;
 /**
- * Real things hide the course only when nearer than it by this much, m, plus
- * a share of the distance, as ARCore depth wavers by a few cm; otherwise the
- * floor the course lies on would flicker through the road (#19, provisional).
+ * Only real things standing at least this high above the floor the course
+ * stands on hide it, m. The floor itself never does, as ARCore depth wavers
+ * by a few cm, while a machine set down beside or "on" the course still shows
+ * in front (#19, provisional).
  */
-const OCCLUSION_MARGIN = 0.05;
-const OCCLUSION_MARGIN_SHARE = 0.04;
+const OCCLUSION_MIN_HEIGHT = 0.02;
 
 /** What a session is asked for so the phone shares its depth view (ARCore depth, cpu-optimized on Android). */
 export const DEPTH_SENSING: XRDepthStateInit = {
@@ -34,6 +34,8 @@ export class ArDepth {
     uvTransform: { value: new THREE.Matrix4() },
     rawToMetres: { value: 0.001 },
   };
+  /** Height of the floor the course stands on (scene m). */
+  private floorY = { value: 0 };
   /** Whether the coloured depth view is wanted (while aiming). */
   viewWanted = true;
   /** Whether the course hides behind real things. */
@@ -43,7 +45,7 @@ export class ArDepth {
     this.view = fullScreen(viewMaterial(this.uniforms));
     // Drawn early, under the course and the dots.
     this.view.renderOrder = -1;
-    this.occluder = fullScreen(occluderMaterial(this.uniforms));
+    this.occluder = fullScreen(occluderMaterial(this.uniforms, this.floorY));
     // Drawn first of all, so the course is tested against it.
     this.occluder.renderOrder = -2;
     scene.add(this.view, this.occluder);
@@ -54,13 +56,19 @@ export class ArDepth {
     return !!session.enabledFeatures?.includes('depth-sensing') && session.depthUsage === 'cpu-optimized' && session.depthDataFormat === 'luminance-alpha';
   }
 
-  /** Take this frame's depth and show what is wanted; `aiming` shows the coloured view. */
-  update(frame: XRFrame, view: XRView | undefined, aiming: boolean): void {
+  /**
+   * Take this frame's depth and show what is wanted: `aiming` shows the
+   * coloured view, and `floorY` (scene m) is the floor the course stands on,
+   * or null while there is none.
+   */
+  update(frame: XRFrame, view: XRView | undefined, aiming: boolean, floorY: number | null): void {
     const showView = aiming && this.viewWanted;
-    const info = (showView || this.occlusionWanted) && view ? frame.getDepthInformation(view) : null;
+    const occlude = this.occlusionWanted && floorY !== null;
+    const info = (showView || occlude) && view ? frame.getDepthInformation(view) : null;
     this.view.visible = !!info && showView;
-    this.occluder.visible = !!info && this.occlusionWanted;
+    this.occluder.visible = !!info && occlude;
     if (!info) return;
+    if (floorY !== null) this.floorY.value = floorY;
     let tex = this.texture;
     if (!tex || tex.image.width !== info.width || tex.image.height !== info.height) {
       tex?.dispose();
@@ -93,9 +101,14 @@ const VERTEX = /* glsl */ `
   varying vec2 vUv;
   /** The terms of the camera's projection that turn a view-space z into depth. */
   varying vec2 vDepthTerms;
+  /** Scene direction through this pixel, scaled to 1 m along the view axis. */
+  varying vec3 vRay;
   void main() {
     vUv = uv;
     vDepthTerms = vec2(projectionMatrix[2][2], projectionMatrix[3][2]);
+    vec4 far = inverse(projectionMatrix) * vec4(position.xy, 1.0, 1.0);
+    vec3 ray = far.xyz / far.w;
+    vRay = (inverse(viewMatrix) * vec4(ray / -ray.z, 0.0)).xyz;
     gl_Position = vec4(position.xy, 0.0, 1.0);
   }`;
 
@@ -141,21 +154,23 @@ function viewMaterial(uniforms: object): THREE.ShaderMaterial {
   });
 }
 
-/** Depth only: the real distance at each pixel, as the camera's depth buffer would hold it. */
-function occluderMaterial(uniforms: object): THREE.ShaderMaterial {
+/** Depth only: the real distance at each pixel, as the camera's depth buffer would hold it, where something stands above the floor. */
+function occluderMaterial(uniforms: object, floorY: { value: number }): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    uniforms: { ...uniforms, margin: { value: OCCLUSION_MARGIN }, marginShare: { value: OCCLUSION_MARGIN_SHARE } },
+    uniforms: { ...uniforms, floorY, minHeight: { value: OCCLUSION_MIN_HEIGHT } },
     vertexShader: VERTEX,
     fragmentShader: /* glsl */ `
       ${READ_DEPTH}
-      uniform float margin;
+      uniform float floorY;
+      uniform float minHeight;
       varying vec2 vDepthTerms;
-      uniform float marginShare;
+      varying vec3 vRay;
       void main() {
         float metres = metresHere();
         if (metres <= 0.0) discard;
-        // Push the real distance back, so only things clearly in front hide the course.
-        metres = metres * (1.0 + marginShare) + margin;
+        // Where the real thing seen here is; the floor never hides the course.
+        vec3 real = cameraPosition + vRay * metres;
+        if (real.y < floorY + minHeight) discard;
         // The distance is along the view axis: a view-space z of -metres.
         float ndc = (vDepthTerms.y - vDepthTerms.x * metres) / metres;
         gl_FragDepth = clamp(ndc * 0.5 + 0.5, 0.0, 1.0);
