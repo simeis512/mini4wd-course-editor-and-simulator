@@ -55,16 +55,13 @@ export class QrScanner {
     const file = $<HTMLInputElement>('qr-image-file');
     $('qr-camera').addEventListener('click', () => (this.stream ? this.stop() : void this.startCamera()));
     // The drop area is the file input's label: pressing it lets the browser
-    // offer the camera or a picture (no `capture`, so both are offered).
-    // "カメラで撮る" has `capture`, which starts the camera at once on phones.
-    const photo = $<HTMLInputElement>('qr-photo-file');
-    $('qr-shoot').addEventListener('click', () => photo.click());
-    for (const input of [file, photo]) {
-      input.addEventListener('change', () => {
-        if (input.files?.[0]) void this.readImage(input.files[0]);
-        input.value = '';
-      });
-    }
+    // offer the camera or a file. No `capture`, so both are offered; and the
+    // input also takes a non-image type, because Android's Chrome goes
+    // straight to its photo picker (no camera) when only images are taken.
+    file.addEventListener('change', () => {
+      if (file.files?.[0]) void this.readImage(file.files[0]);
+      file.value = '';
+    });
     const drop = $('qr-drop');
     drop.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -96,6 +93,11 @@ export class QrScanner {
   }
 
   private async readImage(file: File): Promise<void> {
+    // The picker also lets other files through (see the constructor).
+    if (file.type && !file.type.startsWith('image/')) {
+      toast('QRコードの画像を選んでください');
+      return;
+    }
     try {
       const bitmap = await createImageBitmap(file);
       const text = await (await this.detector())(bitmap);
