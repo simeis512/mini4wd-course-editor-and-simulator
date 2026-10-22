@@ -1,4 +1,5 @@
-import { courseHashOf } from '../course/qr';
+import { decodeCourse, HASH_KEY } from '../course/codec';
+import { courseValueOf } from '../course/qr';
 import { $, toast } from './dom';
 
 // Reading a course QR code with the camera or from an image (#66). The
@@ -75,7 +76,7 @@ export class QrScanner {
       const text = await (await this.detector())(bitmap);
       bitmap.close();
       if (text === null) toast('画像からQRコードが見つかりませんでした');
-      else this.open(text);
+      else await this.open(text);
     } catch (e) {
       toast(`画像を読めませんでした: ${(e as Error).message}`);
     }
@@ -99,7 +100,7 @@ export class QrScanner {
       const look = async () => {
         if (!this.stream) return;
         const text = await detect(this.video).catch(() => null);
-        if (text !== null && this.stream) this.open(text);
+        if (text !== null && this.stream) await this.open(text);
         else if (this.stream) this.timer = window.setTimeout(look, SCAN_INTERVAL_MS);
       };
       void look();
@@ -119,14 +120,23 @@ export class QrScanner {
   }
 
   /** Open the course in the text read, or say why not. */
-  private open(text: string): void {
+  private async open(text: string): Promise<void> {
     this.stop();
-    const hash = courseHashOf(text, location.href);
-    if (!hash) {
-      toast('このアプリのコースのQRコードではありません');
+    // Only the course is taken from the URL, whatever its host, and it must
+    // decode to a valid course before it is opened.
+    const value = courseValueOf(text);
+    if (!value) {
+      toast('コースのQRコードではありません');
+      return;
+    }
+    try {
+      await decodeCourse(value);
+    } catch (e) {
+      toast(`QRコードのコースを読み込めませんでした: ${(e as Error).message}`);
       return;
     }
     this.dialog.close();
+    const hash = `#${HASH_KEY}=${value}`;
     if (hash === location.hash) toast('このコースはもう開いています');
     // The page's hash change opens it, as a shared URL would.
     else location.hash = hash;

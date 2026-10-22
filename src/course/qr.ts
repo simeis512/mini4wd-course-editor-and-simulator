@@ -2,7 +2,7 @@ import { encode } from 'uqr';
 import { HASH_KEY } from './codec';
 
 // QR codes of course URLs (#66): the code, how big it must be printed to be
-// read, drawing it, and telling a course URL from any other text read back.
+// read, drawing it, and taking the course out of a URL read back.
 
 /** The light margin round a QR code, in modules (the standard asks for 4). */
 export const QR_QUIET_MODULES = 4;
@@ -17,9 +17,6 @@ export const MIN_PRINT_MODULE_MM = 0.5;
 
 /** Print widths offered for saving, in mm (#66). provisional: business card to poster corner. */
 export const PRINT_SIZES_MM = [30, 50, 80, 120] as const;
-
-/** Hosts whose course URLs are opened when read: the published app (#21). */
-export const APP_HOSTS = ['mini4wd-lab.simeis512.com'];
 
 export interface Qr {
   /** QR version, 1–40: the code is 17 + 4 × version modules wide. */
@@ -102,17 +99,27 @@ export function qrSvg(qr: Qr, widthMm: number, caption = ''): string {
 }
 
 /**
- * The hash to open when `text` read from a QR code is a course URL of this
- * app: one on `here`'s host or a published host, with a course in its hash.
- * Null for anything else, which is not opened.
+ * Longest course value taken from a QR code: more than any QR code holds
+ * (2953 bytes at version 40-L), so longer text is not a course of ours.
  */
-export function courseHashOf(text: string, here: string): string | null {
+const MAX_COURSE_VALUE = 3000;
+/** A course value as `encodeCourse` writes it: format version, dot, base64url. */
+const COURSE_VALUE = /^\d{1,3}\.[A-Za-z0-9_-]+$/;
+
+/**
+ * The course value (`c` in the hash) of a URL read from a QR code, whatever
+ * its host: a code made on another address (localhost, a LAN IP, the
+ * published site) opens here too (#66). Only the value is taken, and only
+ * when it has the shape of one; the caller still decodes and validates the
+ * course before opening it. Null for anything else.
+ */
+export function courseValueOf(text: string): string | null {
   let url: URL;
   try {
     url = new URL(text.trim());
   } catch {
     return null;
   }
-  if (url.host !== new URL(here).host && !APP_HOSTS.includes(url.host)) return null;
-  return new URLSearchParams(url.hash.replace(/^#/, '')).get(HASH_KEY) ? url.hash : null;
+  const value = new URLSearchParams(url.hash.replace(/^#/, '')).get(HASH_KEY);
+  return value && value.length <= MAX_COURSE_VALUE && COURSE_VALUE.test(value) ? value : null;
 }

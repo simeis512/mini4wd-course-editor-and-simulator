@@ -1,10 +1,8 @@
 import jsQR from 'jsqr';
 import { describe, expect, it } from 'vitest';
-import { courseToHash } from './codec';
+import { courseToHash, decodeCourse } from './codec';
 import { basicOval } from './presets';
-import { courseHashOf, makeQr, MIN_PRINT_MODULE_MM, printFit, qrPixels, qrSvg, QR_QUIET_MODULES } from './qr';
-
-const HERE = 'https://localhost:5173/';
+import { courseValueOf, makeQr, MIN_PRINT_MODULE_MM, printFit, qrPixels, qrSvg, QR_QUIET_MODULES } from './qr';
 
 describe('makeQr', () => {
   it('encodes a course URL so it reads back the same', async () => {
@@ -52,15 +50,28 @@ describe('qrSvg', () => {
   });
 });
 
-describe('courseHashOf', () => {
-  it('takes a course URL of this host or the published app', () => {
-    expect(courseHashOf('https://localhost:5173/#c=5.abc', HERE)).toBe('#c=5.abc');
-    expect(courseHashOf(' https://mini4wd-lab.simeis512.com/#c=5.abc\n', HERE)).toBe('#c=5.abc');
+describe('courseValueOf', () => {
+  it('takes the course out of a URL on any host', () => {
+    expect(courseValueOf('https://localhost:5173/#c=5.abc')).toBe('5.abc');
+    expect(courseValueOf(' https://192.168.0.10:5173/#c=5.a-b_c\n')).toBe('5.a-b_c');
+    expect(courseValueOf('https://mini4wd-lab.simeis512.com/?x=1#c=5.abc&z=2')).toBe('5.abc');
   });
 
-  it('refuses other sites, URLs without a course, and plain text', () => {
-    expect(courseHashOf('https://example.com/#c=5.abc', HERE)).toBeNull();
-    expect(courseHashOf('https://localhost:5173/', HERE)).toBeNull();
-    expect(courseHashOf('こんにちは', HERE)).toBeNull();
+  it('refuses URLs without a course, and plain text', () => {
+    expect(courseValueOf('https://localhost:5173/')).toBeNull();
+    expect(courseValueOf('https://example.com/#x=5.abc')).toBeNull();
+    expect(courseValueOf('こんにちは')).toBeNull();
+  });
+
+  it('refuses values that are not shaped like a course', () => {
+    expect(courseValueOf('https://example.com/#c=<script>')).toBeNull();
+    expect(courseValueOf('https://example.com/#c=5.ab%22c')).toBeNull();
+    expect(courseValueOf('https://example.com/#c=abc')).toBeNull();
+    expect(courseValueOf(`https://example.com/#c=5.${'a'.repeat(3000)}`)).toBeNull();
+  });
+
+  it('gives a value that decodes back to the course', async () => {
+    const value = courseValueOf(`https://192.168.0.10:5173/${await courseToHash(basicOval())}`);
+    expect((await decodeCourse(value!)).pieces).toHaveLength(basicOval().pieces.length);
   });
 });
