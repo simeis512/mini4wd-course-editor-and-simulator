@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { carriedSaveId, cleanName, defaultSaveName, namesFor, offerResume, SAVE_NAME_MAX, sortSaves, uniqueName, type SavedCourse } from './saves';
+import { carriedOver, cleanName, defaultSaveName, namesFor, offerResume, SAVE_NAME_MAX, sortSaves, uniqueName, type SavedCourse } from './saves';
 
 const saved = (id: string, savedAt: number): SavedCourse => ({ id, name: id, data: '', savedAt, pieceCount: 1 });
 
@@ -64,16 +64,17 @@ describe('namesFor', () => {
   });
 });
 
-describe('carriedSaveId', () => {
-  const autosave = { data: 'X', savedAt: 1, pieceCount: 3, savedId: 'a' };
+describe('carriedOver', () => {
+  const autosave = { data: 'X', savedAt: 1, pieceCount: 3, savedId: 'a', dirty: true };
 
-  it('keeps the save when the URL holds the course the last session left', () => {
-    expect(carriedSaveId(autosave, 'X')).toBe('a');
+  it('keeps the save and its unsaved changes when the URL holds the course the last session left', () => {
+    expect(carriedOver(autosave, 'X')).toEqual({ savedId: 'a', dirty: true });
+    expect(carriedOver({ ...autosave, savedId: undefined }, 'X')).toEqual({ savedId: null, dirty: true });
+    expect(carriedOver({ ...autosave, dirty: undefined }, 'X')).toEqual({ savedId: 'a', dirty: false });
   });
 
-  it('drops it for any other course, or when that session was not a save', () => {
-    expect(carriedSaveId(autosave, 'Y')).toBeNull();
-    expect(carriedSaveId({ ...autosave, savedId: undefined }, 'X')).toBeNull();
-    expect(carriedSaveId(undefined, 'X')).toBeNull();
+  it('carries nothing for any other course', () => {
+    expect(carriedOver(autosave, 'Y')).toEqual({ savedId: null, dirty: false });
+    expect(carriedOver(undefined, 'X')).toEqual({ savedId: null, dirty: false });
   });
 });

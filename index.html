@@ -98,7 +98,7 @@
       dialog .actions label { margin-right: auto; display: flex; gap: 6px; align-items: center; }
       dialog .primary { background: #1f5f75; border-color: var(--accent); }
       dialog pre { max-height: 240px; overflow: auto; font-size: 11px; white-space: pre-wrap; background: #1b1d22; padding: 8px; border-radius: 6px; }
-      #save-name, #qr-caption { flex: 1; min-width: 160px; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+      #save-name, #qr-caption, #unsaved-name { flex: 1; min-width: 160px; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
       #saves-list { list-style: none; padding: 0; margin: 10px 0 0; }
       #saves-list li { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
       #saves-list li.current { background: #1f5f7533; }
@@ -310,6 +310,21 @@
         <div class="actions">
           <button value="no">開かない</button>
           <button class="primary" value="yes" autofocus>続きを開く</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="unsaved-dialog" aria-labelledby="unsaved-title">
+      <form method="dialog">
+        <h2 id="unsaved-title">保存していない変更があります</h2>
+        <p>保存せずに進むと、今のコースの保存していない変更は消えます。</p>
+        <div id="unsaved-name-row" class="row">
+          <label for="unsaved-name">保存する名前</label>
+          <input id="unsaved-name" type="text" maxlength="60" />
+        </div>
+        <div class="actions">
+          <button value="cancel">キャンセル</button>
+          <button id="unsaved-discard" value="discard"></button>
+          <button id="unsaved-save" class="primary" value="save" autofocus>保存してから開く</button>
         </div>
       </form>
     </dialog>

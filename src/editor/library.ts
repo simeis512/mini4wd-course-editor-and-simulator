@@ -1,6 +1,6 @@
 import { decodeCourse, encodeCourse } from '../course/codec';
 import type { Course } from '../course/course';
-import { carriedSaveId, cleanName, defaultSaveName, namesFor, offerResume, sortSaves, type SavedCourse } from '../course/saves';
+import { carriedOver, cleanName, defaultSaveName, namesFor, offerResume, sortSaves, type SavedCourse } from '../course/saves';
 import { $, toast } from './dom';
 import { deleteSave, getSave, listSaves, putSave, readAutosave, writeAutosave } from './store';
 
@@ -34,6 +34,8 @@ export class Library {
   private timer = 0;
   /** The named save of the course resumed on start, taken over once it is loaded. */
   private resumedId: string | null = null;
+  /** Whether the course resumed on start had unsaved changes. */
+  private resumedDirty = false;
   private dialog = $<HTMLDialogElement>('saves-dialog');
 
   constructor(private host: LibraryHost) {
@@ -62,17 +64,18 @@ export class Library {
    * On start, offer to carry on from the last session when the page has no
    * course in its URL (#68). Resolves to that course if the user says yes.
    * A course in the URL that is the one the last session left (a reload)
-   * stays that session's named save.
+   * stays that session's named save, with its unsaved changes.
    */
   async resume(urlHasCourse: boolean, fresh: Course): Promise<Course | null> {
     try {
       const last = await readAutosave();
-      if (urlHasCourse) this.savedId = carriedSaveId(last, await encodeCourse(this.host.course));
+      if (urlHasCourse) ({ savedId: this.savedId, dirty: this.dirty } = carriedOver(last, await encodeCourse(this.host.course)));
       if (!last || !offerResume(last, urlHasCourse, await encodeCourse(fresh))) return null;
       $('resume-info').textContent = `${when(last.savedAt)}・${last.pieceCount} ピース`;
       if (!(await this.ask($<HTMLDialogElement>('resume-dialog')))) return null;
       const course = await decodeCourse(last.data);
       this.resumedId = last.savedId ?? null;
+      this.resumedDirty = !!last.dirty;
       return course;
     } catch (e) {
       toast(`前回のコースを読み込めませんでした: ${(e as Error).message}`);
@@ -85,8 +88,9 @@ export class Library {
   /** The course was replaced (new, opened, read from a file or URL): it is no longer a named save. */
   replaced(): void {
     this.savedId = this.resumedId;
+    this.dirty = this.resumedDirty;
     this.resumedId = null;
-    this.dirty = false;
+    this.resumedDirty = false;
   }
 
   /** Names of the saves to offer for the course, the one it is (or matches) first. */
@@ -114,10 +118,38 @@ export class Library {
     this.timer = 0;
     const course = this.host.course;
     void encodeCourse(course)
-      .then((data) => writeAutosave({ data, savedAt: Date.now(), pieceCount: course.pieces.length, savedId: this.savedId ?? undefined }))
+      .then((data) => writeAutosave({ data, savedAt: Date.now(), pieceCount: course.pieces.length, savedId: this.savedId ?? undefined, dirty: this.dirty }))
       .catch(() => {
         // Storage may be blocked (private mode); the URL still holds the course.
       });
+  }
+
+  /**
+   * Before the course is replaced (another opened, a new one started: say
+   * which with `verb`, as in 「保存してから開く」): when
+   * it has changes not in a named save, ask to save them first, drop them,
+   * or stay. Resolves to whether to go on.
+   */
+  async confirmReplace(verb = '開く'): Promise<boolean> {
+    if (!this.dirty || this.host.course.pieces.length === 0) return true;
+    const dialog = $<HTMLDialogElement>('unsaved-dialog');
+    const saves = await listSaves().catch((): SavedCourse[] => []);
+    const current = saves.find((s) => s.id === this.savedId);
+    const name = $<HTMLInputElement>('unsaved-name');
+    $('unsaved-name-row').hidden = !!current;
+    $('unsaved-save').textContent = current ? `「${current.name}」に上書きしてから${verb}` : `保存してから${verb}`;
+    $('unsaved-discard').textContent = `保存せずに${verb}`;
+    name.value = defaultSaveName(this.host.course.name, new Date(), saves.map((s) => s.name));
+    dialog.returnValue = '';
+    dialog.showModal();
+    const answer = await new Promise<string>((resolve) =>
+      dialog.addEventListener('close', () => resolve(dialog.returnValue), { once: true }),
+    );
+    if (answer === 'discard') return true;
+    if (answer !== 'save') return false;
+    if (current) return this.store({ ...current, savedAt: Date.now() });
+    const saveName = cleanName(name.value) || name.defaultValue;
+    return this.store({ id: crypto.randomUUID(), name: saveName, data: '', savedAt: Date.now(), pieceCount: 0 });
   }
 
   /** Overwrite the named save, or ask for a name when there is none (Ctrl+S). */
@@ -140,13 +172,14 @@ export class Library {
     await this.store({ id: crypto.randomUUID(), name, data: '', savedAt: Date.now(), pieceCount: 0 });
   }
 
-  private async store(save: SavedCourse): Promise<void> {
+  /** Save the course being edited as `save`; resolves to whether it was saved. */
+  private async store(save: SavedCourse): Promise<boolean> {
     const course = this.host.course;
     try {
       await putSave({ ...save, data: await encodeCourse(course), pieceCount: course.pieces.length });
     } catch (e) {
       toast(`保存できませんでした: ${(e as Error).message}`);
-      return;
+      return false;
     }
     this.savedId = save.id;
     this.dirty = false;
@@ -154,6 +187,7 @@ export class Library {
     this.flush(true);
     toast(`「${save.name}」をこのブラウザに保存しました`);
     if (this.dialog.open) await this.renderList();
+    return true;
   }
 
   private async openList(): Promise<void> {
@@ -199,9 +233,7 @@ export class Library {
     if (!save) return;
     switch (button.dataset.act) {
       case 'open': {
-        if (this.dirty && this.savedId !== id && this.host.course.pieces.length > 0) {
-          if (!confirm('今のコースは保存していない変更があります。開きますか？（URLを控えておけば元に戻せます）')) return;
-        }
+        if (!(await this.confirmReplace())) return;
         try {
           this.host.open(await decodeCourse(save.data));
         } catch (err) {

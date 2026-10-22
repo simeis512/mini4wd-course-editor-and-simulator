@@ -22,6 +22,8 @@ export interface Autosave {
   pieceCount: number;
   /** The named save it came from, so overwriting still goes there after a resume. */
   savedId?: string;
+  /** Whether it had changes not in a named save, so a reload still asks before they are lost. */
+  dirty?: boolean;
 }
 
 /** The longest name kept, in characters. */
@@ -65,15 +67,17 @@ export function offerResume(autosave: Autosave | undefined, urlHasCourse: boolea
 }
 
 /**
- * The named save a course opened from the URL still belongs to (#66, owner
- * 2026-10-22): the one the last session was editing, when the URL holds
- * exactly the course that session left (as after a reload). A different
- * course in the URL never matches, so it is not mistaken for that save.
- * The whole encoded course is compared, not a hash of it: it is already
- * kept with the autosave, and two courses can never look the same.
+ * What a course opened from the URL carries over from the last session
+ * (#66, owner 2026-10-22): when the URL holds exactly the course that
+ * session left (as after a reload), the named save it belonged to and
+ * whether it had unsaved changes. A different course in the URL carries
+ * nothing, so it is never mistaken for that save. The whole encoded course
+ * is compared, not a hash of it: it is already kept with the autosave, and
+ * two courses can never look the same.
  */
-export function carriedSaveId(autosave: Autosave | undefined, urlData: string): string | null {
-  return autosave?.savedId && autosave.data === urlData ? autosave.savedId : null;
+export function carriedOver(autosave: Autosave | undefined, urlData: string): { savedId: string | null; dirty: boolean } {
+  if (!autosave || autosave.data !== urlData) return { savedId: null, dirty: false };
+  return { savedId: autosave.savedId ?? null, dirty: !!autosave.dirty };
 }
 
 /**
