@@ -38,6 +38,8 @@ DOM にもビューにも触らない処理が `editor` に 10 行以上あれ�
 | `checks.ts` | コース欄（検証の結果）の DOM 表示。購入リストは `shopping.ts` |
 | `drag.ts` | パーツ一覧からのドラッグと、ピースのドラッグ |
 | `share.ts` | URL・ファイルでのコースの受け渡し |
+| `library.ts` / `store.ts` | ブラウザ内（IndexedDB）への保存・一覧・自動保存と、その読み書き |
+| `notice.ts` | 起動時の案内と情報パネル（権利表示・ライセンス） |
 | `view.ts` | 2D/3D ビュー共通のインターフェース `EditorView` |
 | `view2d.ts` / `view3d.ts` | 各ビューの描画とポインター操作（2D の道の外形は `outline2d.ts`） |
 | `ar.ts` / `ar-pose.ts` / `ar-scan.ts` / `ar-depth.ts` / `ar-gesture.ts` | 3D ビューの AR（床への設置・大きさ・向き）、その置き方の計算、見つけた床の点、奥行きの表示とオクルージョン、指での移動・回転 |

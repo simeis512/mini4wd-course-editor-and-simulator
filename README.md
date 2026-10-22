@@ -35,6 +35,9 @@ AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari 
 - ピースをタップして選択 → 色の変更、反転（カーブの左右切り替え）、削除。削除しても先のピースはその場に残る
 - ドラッグで移動、ホイール／ピンチで拡大縮小。Ctrl+Z / Ctrl+Y、Delete、F（反転）も使える
 - コースは URL（`#c=...`）に自動で保存される。「URLをコピー」で共有、JSON の書き出し／読み込みも可能
+- 「保存」（Ctrl+S）でコースに名前を付けてこのブラウザの中（IndexedDB）に保存する。一度保存したコースは「保存」で上書きする。「保存一覧」から開く・名前を変える・削除する。サーバーには送らない
+- 編集中のコースは自動でブラウザ内に残り、URL にコースが入っていない状態で次に開いたとき「前回の続きを開きますか」と聞く（名前付きの保存とは別枠）
+- 起動するたびに「ブラウザの中だけで動き、サーバーには保存されない」ことを知らせる（「次回以降表示しない」で止められる）。右上の「i」から権利表示・ライセンス・リンクと、この案内をもう一度見られる
 - 開いた口どうしが 10mm・3° 以内で向かい合うとループが閉じたとみなし、誤差を表示する
 - 2D の左上で「高さで色分け」と、指定の高さ以上のピースだけを表示するフィルターを切り替えられる（ほかのピースは薄く表示され、選べない）
 - 3D では、持ち上がった路面の下に支柱を自動で表示する（見た目だけ。下を別の路面が通る所には立てない）
@@ -69,9 +72,11 @@ AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari 
 - `src/course/laps.ts` レーン一巡と各レーンの周長（検証）
 - `src/course/clash.ts` ピース同士の重なりと立体交差の高さ（検証）
 - `src/course/mesh.ts` 3D メッシュ生成（路面＋フェンスの掃引、支柱。シーンは m 単位）
-- `src/editor/app.ts` エディタの状態と操作。`panels.ts` パネル表示、`checks.ts` コース欄（検証の結果）、`shopping.ts` コース欄の購入リスト、`attach.ts` ウォッシュボードの設定欄、`drag.ts` ドラッグ操作、`share.ts` URL・ファイルでの受け渡し、`levels.ts` 2D の高さ表示の設定、`history.ts` 元に戻す／やり直し
+- `src/editor/app.ts` エディタの状態と操作。`panels.ts` パネル表示、`checks.ts` コース欄（検証の結果）、`shopping.ts` コース欄の購入リスト、`attach.ts` ウォッシュボードの設定欄、`drag.ts` ドラッグ操作、`share.ts` URL・ファイルでの受け渡し、`library.ts` ブラウザ内の保存と自動保存（IndexedDB は `store.ts`、名前や一覧の決め方は `src/course/saves.ts`）、`notice.ts` 起動時の案内と「i」の情報パネル、`levels.ts` 2D の高さ表示の設定、`history.ts` 元に戻す／やり直し
 - `src/editor/view2d.ts` / `view3d.ts` 2D 編集ビュー、3D/AR ビュー（共通インターフェースは `view.ts`、AR の設置と操作は `ar.ts`（指の操作は `ar-gesture.ts`）、床の点は `ar-scan.ts`、奥行きの表示とオクルージョンは `ar-depth.ts`、その置き方の計算は `ar-pose.ts`、2D の道の外形は `outline2d.ts`）
 - `src/physics/` Rapier の物理ワールド（シミュレーター用、未接続）
+
+作者はコトン（[simeis512.com](https://simeis512.com/)）。開発には Anthropic の Claude Code を使用している。このアプリは [MIT License](LICENSE)。ミニ四駆・ジャパンカップジュニアサーキットは株式会社タミヤの商標で、本アプリはタミヤとは関係のない非公式アプリ。
 
 コードの置き場所や実装の進め方のルールは [CONTRIBUTING.md](CONTRIBUTING.md) を参照。
 
