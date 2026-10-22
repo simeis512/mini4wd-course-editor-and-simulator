@@ -30,7 +30,7 @@ export const TIMER = {
   tape: 30,
 };
 /** How far the stickers and tape are drawn above the road, mm, so the road never shows through (cosmetic). */
-const ON_ROAD = 0.3;
+const ON_ROAD = 1;
 
 const { lanePitch, laneWidth, fenceThickness } = GLOBAL_SPEC;
 
@@ -108,7 +108,8 @@ export function timerBlocks(layout: Layout, timer: LapTimer): Block[] {
   const inner = fence - out * TIMER.reach;
   const { width, bodyHeight, topThickness } = TIMER;
   return [
-    { role: 'body', frame: offsetFrame(f, fence + out * (fenceThickness / 2 + TIMER.bodyDepth / 2), bodyHeight / 2, 0), size: [TIMER.bodyDepth, bodyHeight, width] },
+    // The body stands under the top and meets it without overlapping, so no faces fight (user, 2026-10-22).
+    { role: 'body', frame: offsetFrame(f, fence + out * (fenceThickness / 2 + TIMER.bodyDepth / 2), (bodyHeight - topThickness) / 2, 0), size: [TIMER.bodyDepth, bodyHeight - topThickness, width] },
     { role: 'top', frame: offsetFrame(f, (back + inner) / 2, bodyHeight - topThickness / 2, 0), size: [Math.abs(back - inner), topThickness, width] },
     { role: 'tape', frame: offsetFrame(f, laneOffset(lane), ON_ROAD, 0), size: [laneWidth - 20, 0.2, TIMER.tape] },
   ];

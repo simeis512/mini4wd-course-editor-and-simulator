@@ -47,7 +47,7 @@ export function buildPropMeshes(layout: Layout): THREE.Group[] {
   const out: THREE.Group[] = [];
   if (layout.start) {
     const stickers = startStickers(layout, layout.start);
-    const lift = (p: THREE.Vector3) => p.clone().setY(p.y + 0.1);
+    const lift = (p: THREE.Vector3) => p.clone().setY(p.y + 0.5);
     out.push(
       group({ kind: 'start' }, [
         flat(stickers.flatMap(({ corners: [a, b, c, d] }) => [[a, b, c], [a, c, d]]), PROP_COLORS.sticker),

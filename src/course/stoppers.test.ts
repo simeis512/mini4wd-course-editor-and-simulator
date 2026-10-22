@@ -122,3 +122,18 @@ describe('cardboard boxes (#53)', () => {
     expect(stopperBounds([])).toBeNull();
   });
 });
+
+describe('box panels', () => {
+  it.each([false, true])('meet without overlapping (upright %s), so no faces fight', (upright) => {
+    const blocks = boxBlocks(box({ upright, yaw: 0 }));
+    const bounds = blocks.map((b) => {
+      const c = blockCorners(b);
+      return [0, 1, 2].map((k) => [Math.min(...c.map((p) => p.getComponent(k))), Math.max(...c.map((p) => p.getComponent(k)))]);
+    });
+    for (let i = 0; i < bounds.length; i++)
+      for (let j = i + 1; j < bounds.length; j++) {
+        const overlap = [0, 1, 2].every((k) => Math.min(bounds[i][k][1], bounds[j][k][1]) - Math.max(bounds[i][k][0], bounds[j][k][0]) > 1e-6);
+        expect(overlap).toBe(false);
+      }
+  });
+});

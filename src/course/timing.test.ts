@@ -66,7 +66,7 @@ describe('lap timer (#56)', () => {
     // The left fence's outer face, + X being left.
     const fence = -(laneOffset(0) - GLOBAL_SPEC.lanePitch / 2) + GLOBAL_SPEC.fenceThickness / 2;
     expect(Math.min(...blockCorners(body).map((p) => p.x))).toBeCloseTo(fence);
-    expect(Math.max(...blockCorners(body).map((p) => p.y))).toBeCloseTo(TIMER.bodyHeight);
+    expect(Math.max(...blockCorners(body).map((p) => p.y))).toBeCloseTo(TIMER.bodyHeight - TIMER.topThickness);
     expect(Math.min(...blockCorners(top).map((p) => p.x))).toBeCloseTo(fence - GLOBAL_SPEC.fenceThickness / 2 - TIMER.reach);
     expect(Math.min(...blockCorners(top).map((p) => p.y))).toBeCloseTo(TIMER.bodyHeight - TIMER.topThickness);
     expect(new Vector3().setFromMatrixPosition(tape.frame).x).toBeCloseTo(-laneOffset(0));

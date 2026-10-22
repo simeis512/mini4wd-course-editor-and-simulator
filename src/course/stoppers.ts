@@ -92,22 +92,24 @@ export function boxBlocks(b: CatchBox): Block[] {
   const { width: w, depth: d, height: h } = boxSize(b);
   const t = CARDBOARD;
   const panel = (right: number, up: number, along: number, size: [number, number, number]): Block => ({ role: 'box', frame: offsetFrame(f, right, up, along), size });
+  // Panels meet edge to edge without overlapping, so no faces fight in 3D.
   if (b.upright) {
+    const y = t + (h - t) / 2;
     return [
       panel(0, t / 2, 0, [w, t, d]),
-      panel(-(w - t) / 2, h / 2, 0, [t, h, d]),
-      panel((w - t) / 2, h / 2, 0, [t, h, d]),
-      panel(0, h / 2, -(d - t) / 2, [w, h, t]),
-      panel(0, h / 2, (d - t) / 2, [w, h, t]),
+      panel(-(w - t) / 2, y, 0, [t, h - t, d]),
+      panel((w - t) / 2, y, 0, [t, h - t, d]),
+      panel(0, y, -(d - t) / 2, [w - 2 * t, h - t, t]),
+      panel(0, y, (d - t) / 2, [w - 2 * t, h - t, t]),
     ];
   }
   // On its side: its height lies along + Z, its depth stands up and its bottom is at the back.
   return [
     panel(0, d / 2, -(h - t) / 2, [w, d, t]),
-    panel(-(w - t) / 2, d / 2, 0, [t, d, h]),
-    panel((w - t) / 2, d / 2, 0, [t, d, h]),
-    panel(0, t / 2, 0, [w, t, h]),
-    panel(0, d - t / 2, 0, [w, t, h]),
+    panel(-(w - t) / 2, d / 2, t / 2, [t, d, h - t]),
+    panel((w - t) / 2, d / 2, t / 2, [t, d, h - t]),
+    panel(0, t / 2, t / 2, [w - 2 * t, t, h - t]),
+    panel(0, d - t / 2, t / 2, [w - 2 * t, t, h - t]),
   ];
 }
 
