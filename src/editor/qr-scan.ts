@@ -19,6 +19,8 @@ interface BarcodeDetectorClass {
   getSupportedFormats(): Promise<string[]>;
 }
 
+/** A mouse or trackpad device, where `capture` does nothing and there is no gallery. */
+const FINE_POINTER = '(hover: hover) and (pointer: fine)';
 /** Time between looks at the camera picture. */
 const SCAN_INTERVAL_MS = 200;
 /** Longest side a picture is shrunk to before jsQR reads it, for speed. */
@@ -52,21 +54,32 @@ export class QrScanner {
   private video = $<HTMLVideoElement>('qr-video');
 
   constructor(private dialog: HTMLDialogElement) {
-    const file = $<HTMLInputElement>('qr-image-file');
+    const gallery = $<HTMLInputElement>('qr-image-file');
+    const photo = $<HTMLInputElement>('qr-photo-file');
     $('qr-camera').addEventListener('click', () => (this.stream ? this.stop() : void this.startCamera()));
-    // The drop area is the file input's label: pressing it lets the browser
-    // offer the camera or a file. No `capture`, so both are offered; and the
-    // input also takes a non-image type, because Android's Chrome goes
-    // straight to its photo picker (no camera) when only images are taken.
-    file.addEventListener('change', () => {
-      if (file.files?.[0]) void this.readImage(file.files[0]);
-      file.value = '';
-    });
+    for (const input of [gallery, photo]) {
+      input.addEventListener('change', () => {
+        if (input.files?.[0]) void this.readImage(input.files[0]);
+        input.value = '';
+      });
+    }
+    // Pressing the drop area: on a phone or tablet, our own sheet offers the
+    // camera (`capture` starts it at once) or the gallery (an images-only
+    // input opens the photo picker); a PC goes straight to its file picker.
+    const sheet = $<HTMLDialogElement>('qr-sheet');
+    const pick = (input: HTMLInputElement) => {
+      sheet.close();
+      input.click();
+    };
+    $('qr-sheet-camera').addEventListener('click', () => pick(photo));
+    $('qr-sheet-gallery').addEventListener('click', () => pick(gallery));
+    const choose = () => (matchMedia(FINE_POINTER).matches ? gallery.click() : sheet.showModal());
     const drop = $('qr-drop');
+    drop.addEventListener('click', choose);
     drop.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        file.click();
+        choose();
       }
     });
     drop.addEventListener('dragover', (e) => {
@@ -93,7 +106,6 @@ export class QrScanner {
   }
 
   private async readImage(file: File): Promise<void> {
-    // The picker also lets other files through (see the constructor).
     if (file.type && !file.type.startsWith('image/')) {
       toast('QRコードの画像を選んでください');
       return;
