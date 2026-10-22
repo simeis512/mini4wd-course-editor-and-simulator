@@ -1,6 +1,6 @@
 import { decodeCourse, encodeCourse } from '../course/codec';
 import type { Course } from '../course/course';
-import { cleanName, defaultSaveName, namesFor, offerResume, sortSaves, type SavedCourse } from '../course/saves';
+import { carriedSaveId, cleanName, defaultSaveName, namesFor, offerResume, sortSaves, type SavedCourse } from '../course/saves';
 import { $, toast } from './dom';
 import { deleteSave, getSave, listSaves, putSave, readAutosave, writeAutosave } from './store';
 
@@ -61,10 +61,13 @@ export class Library {
   /**
    * On start, offer to carry on from the last session when the page has no
    * course in its URL (#68). Resolves to that course if the user says yes.
+   * A course in the URL that is the one the last session left (a reload)
+   * stays that session's named save.
    */
   async resume(urlHasCourse: boolean, fresh: Course): Promise<Course | null> {
     try {
       const last = await readAutosave();
+      if (urlHasCourse) this.savedId = carriedSaveId(last, await encodeCourse(this.host.course));
       if (!last || !offerResume(last, urlHasCourse, await encodeCourse(fresh))) return null;
       $('resume-info').textContent = `${when(last.savedAt)}・${last.pieceCount} ピース`;
       if (!(await this.ask($<HTMLDialogElement>('resume-dialog')))) return null;

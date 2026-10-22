@@ -65,6 +65,18 @@ export function offerResume(autosave: Autosave | undefined, urlHasCourse: boolea
 }
 
 /**
+ * The named save a course opened from the URL still belongs to (#66, owner
+ * 2026-10-22): the one the last session was editing, when the URL holds
+ * exactly the course that session left (as after a reload). A different
+ * course in the URL never matches, so it is not mistaken for that save.
+ * The whole encoded course is compared, not a hash of it: it is already
+ * kept with the autosave, and two courses can never look the same.
+ */
+export function carriedSaveId(autosave: Autosave | undefined, urlData: string): string | null {
+  return autosave?.savedId && autosave.data === urlData ? autosave.savedId : null;
+}
+
+/**
  * The names to offer for a course (to write under its QR code): the save it
  * came from or was saved as (`savedId`) first, else the newest save holding
  * exactly the same course (`data`, as `encodeCourse` writes it), as when it
