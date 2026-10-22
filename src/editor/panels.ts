@@ -9,7 +9,7 @@ import { propOutline, propPoint } from '../course/props';
 import { getTemplate, TEMPLATES } from '../course/templates';
 import { renderAttachments } from './attach';
 import { $ } from './dom';
-import { floatSpot, rectAround, type Rect } from './float';
+import { cornerSpot, rectAround, type Rect } from './float';
 import { partIcon, templateIcon } from './icons';
 import { renderPropPanel } from './props';
 import { isProp, type Selection } from './selection';
@@ -162,7 +162,7 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
 
   renderPropPanel(layout, s);
 
-  // Settings for the selection float over the editor, next to it (#45).
+  // Settings for the selection float over the editor, in the same place for anything selected (#45, #64).
   $('context').hidden = s === null;
 }
 
@@ -224,8 +224,9 @@ function pieceRect(view: EditorView, layout: Layout, index: number, stage: DOMRe
 }
 
 /**
- * Put the selection's settings beside it on screen, keeping them inside the
- * editor and off the selection and the pieces `lit` up for it.
+ * Put the selection's settings in the same corner of the editor whatever is
+ * selected (#64), moving only to keep off the selection and the pieces
+ * `lit` up for it.
  */
 export function placeContext(view: EditorView, layout: Layout, s: Selection, lit: readonly number[] = []): void {
   const box = $('context');
@@ -250,7 +251,7 @@ export function placeContext(view: EditorView, layout: Layout, s: Selection, lit
   }
   const avoid = lit.map((i) => pieceRect(view, layout, i, stage)).filter((r): r is Rect => r !== null);
   if (anchor) avoid.push(anchor);
-  const [left, top] = floatSpot(box.offsetWidth, box.offsetHeight, stage.width, stage.height, anchor, avoid);
+  const [left, top] = cornerSpot(box.offsetWidth, box.offsetHeight, stage.width, stage.height, avoid);
   box.style.left = `${left}px`;
   box.style.top = `${top}px`;
 }

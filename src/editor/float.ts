@@ -69,3 +69,31 @@ export function floatSpot(w: number, h: number, width: number, height: number, a
   }
   return best;
 }
+
+/** Room kept under a box in the bottom right corner, for the "全体を表示" button, px. */
+const FIT_BUTTON_ROOM = 56;
+
+/**
+ * Top-left of a `w`×`h` box on a stage of `width`×`height` that always
+ * stands in the same place whatever is selected (#64): the top right
+ * corner, or when that would cover `avoid` (the selection and the pieces
+ * it highlights) the bottom right and then the top left, whichever covers
+ * least, in that order.
+ */
+export function cornerSpot(w: number, h: number, width: number, height: number, avoid: readonly Rect[]): [number, number] {
+  const right = Math.max(MARGIN, width - w - MARGIN);
+  const spots: [number, number][] = [
+    [right, MARGIN],
+    [right, Math.max(MARGIN, height - h - FIT_BUTTON_ROOM)],
+    [MARGIN, MARGIN],
+  ];
+  let best = spots[0];
+  let bestCovered = Infinity;
+  for (const [x, y] of spots) {
+    const box = { left: x, top: y, right: x + w, bottom: y + h };
+    const covered = avoid.reduce((sum, r) => sum + overlap(box, r), 0);
+    if (covered < bestCovered) [best, bestCovered] = [[x, y], covered];
+    if (covered === 0) break;
+  }
+  return best;
+}
