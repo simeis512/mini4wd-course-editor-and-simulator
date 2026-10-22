@@ -27,6 +27,8 @@ export interface EditorView {
   setRunMarks(marks: RunMarks | null): void;
   /** Mark where pieces are in each other's way (spec 7). */
   setClashes(clashes: readonly Clash[]): void;
+  /** Show or hide the hoses and boxes on the floor (#53); hidden ones cannot be picked. */
+  setStoppersShown(shown: boolean): void;
   /** Frame the whole course. */
   fit(): void;
   /** Floor point (mm, X/Z) in the middle of the view. */

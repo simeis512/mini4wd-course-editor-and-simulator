@@ -3,6 +3,7 @@ import { offsetFrame, type Block } from './blocks';
 import { GLOBAL_SPEC, laneOffset, partOf } from './catalog';
 import type { Course, LapTimer, Layout, PieceRec, PlacedPiece, StartLine } from './course';
 import { distancesAlong, frameAlong, partGeometry } from './geometry';
+import type { PartDef } from './part';
 
 // The start line and Tamiya's lap timer (#56): where they sit on the road
 // and their shapes.
@@ -32,6 +33,14 @@ export const TIMER = {
 const ON_ROAD = 0.3;
 
 const { lanePitch, laneWidth, fenceThickness } = GLOBAL_SPEC;
+
+/**
+ * Whether a part is a plain straight: one level road with no turn, slope or
+ * swing. The start goes on one, and the timer fits only there (#56).
+ */
+export function isStraight(part: PartDef): boolean {
+  return !part.tracks?.length && part.segments.every((s) => !s.yaw && !s.pitch && !s.roll && !s.lateralProfile);
+}
 
 /** The length of a piece's main road, mm. */
 function lengthOf(rec: PieceRec): number {
@@ -105,19 +114,20 @@ export function timerBlocks(layout: Layout, timer: LapTimer): Block[] {
   ];
 }
 
-/** Put the start line on a piece; the first time, the timer goes just past it (#56 決定事項). */
+/** Where the timer goes for the start line: just past it on its piece, as far as the piece goes (#56 決定事項). */
+export function pastStart(course: Course): { piece: number; offset: number } | null {
+  const start = course.start;
+  if (!start) return null;
+  const ahead = start.offset + (start.reverse ? -TIMER_GAP : TIMER_GAP);
+  return { piece: start.piece, offset: Math.round(Math.min(lengthOf(course.pieces[start.piece]), Math.max(0, ahead))) };
+}
+
+/** Put the start line on a piece; the first time, the timer goes just past it. */
 export function placeStart(course: Course, piece: number, offset: number): Course {
   const next = structuredClone(course);
-  const rec = next.pieces[piece];
-  const length = lengthOf(rec);
-  const at = Math.round(Math.min(length, Math.max(0, offset)));
-  next.start = { piece, offset: at };
+  next.start = { piece, offset: Math.round(Math.min(lengthOf(next.pieces[piece]), Math.max(0, offset))) };
   if (course.start?.reverse) next.start.reverse = true;
-  if (!next.timer) {
-    const ahead = next.start.reverse ? -TIMER_GAP : TIMER_GAP;
-    next.timer = { piece, offset: Math.round(Math.min(length, Math.max(0, at + ahead))), side: 'left' };
-  }
-  return next;
+  return next.timer ? next : placeTimer(next, pastStart(next)!);
 }
 
 /** Change the start line's place, or which way machines set off from it. */
@@ -178,14 +188,15 @@ export interface RoadSpot {
 /**
  * The spot on a main road nearest the floor point (x, z); with `y`, nearest
  * in all three directions, so stacked roads stay apart. Seen from above,
- * the higher of two roads equally near wins. Only pieces with lanes count.
+ * the higher of two roads equally near wins. Only pieces with lanes count,
+ * and only those `only` lets through when given.
  */
-export function nearestRoad(layout: Layout, x: number, z: number, y?: number): RoadSpot | null {
+export function nearestRoad(layout: Layout, x: number, z: number, y?: number, only?: (pc: PlacedPiece) => boolean): RoadSpot | null {
   let best: (RoadSpot & { d: number }) | null = null;
   const target = new Vector3(x, y ?? 0, z);
   const [a, b, p] = [new Vector3(), new Vector3(), new Vector3()];
   for (const [piece, pc] of layout.pieces.entries()) {
-    if (!pc.part.lanes.length) continue;
+    if (!pc.part.lanes.length || (only && !only(pc))) continue;
     const { samples } = pc.geometry;
     const along = distancesAlong(samples);
     for (let i = 1; i < samples.length; i++) {

@@ -1,10 +1,13 @@
-import { Matrix4 } from 'three';
+import { Matrix4, type Vector3 } from 'three';
 import { dropJoin } from '../course/add';
 import { layoutCourse, movingGroup, type Course, type Layout } from '../course/course';
 import { addFreePiece, deletePiece, moveGroup, tidyCuts } from '../course/edit';
 import { applyMagnet, findMagnet, MAGNET_DISTANCE } from '../course/joining';
 import { $, toast } from './dom';
-import { TAP_SLOP, type Selection } from './selection';
+import { propPoint } from '../course/props';
+import { moveStopper } from '../course/stoppers';
+import { moveStart, nearestRoad, placeTimer } from '../course/timing';
+import { TAP_SLOP, type PropSelection, type Selection } from './selection';
 import type { EditorView } from './view';
 
 /** Ports this many screen pixels apart still pull together while dragging. */
@@ -27,6 +30,8 @@ export interface DragHost {
   readonly view: EditorView;
   readonly snapOn: boolean;
   readonly moveAlone: boolean;
+  /** The view on show looks straight down, so heights do not show. */
+  readonly topDown: boolean;
   /** `px` screen pixels in mm on the view, or 0 when it has no single scale. */
   screenMm(px: number): number;
   /** Apply an edit, recording it for undo. */
@@ -165,6 +170,54 @@ export class PieceDrag {
       this.host.commit(deletePiece(d.start, d.index));
       toast('ピースを片づけました（元に戻す で戻せます）');
     } else if (commit && !d.overPanel) this.host.commit(tidyCuts(d.preview), { kind: 'piece', index: d.index });
+    else this.host.refresh(false);
+  }
+}
+
+/**
+ * Dragging the start line or the timer along the road, or a stopper or one
+ * of a hose's points across the floor (#56, #53).
+ */
+export class PropDrag {
+  private drag: { target: PropSelection; start: Course; layout: Layout; from: Vector3 | null; preview: Course | null } | null = null;
+
+  constructor(private host: DragHost) {}
+
+  start(target: PropSelection): boolean {
+    const { course, layout } = this.host;
+    // The start and timer follow the road from where they are now.
+    const from = target.kind === 'stopper' ? null : propPoint(layout, target);
+    this.drag = { target, start: course, layout, from, preview: null };
+    return true;
+  }
+
+  move(dx: number, dz: number, noSnap: boolean): void {
+    const d = this.drag;
+    if (!d) return;
+    const snapOn = this.host.snapOn && !noSnap;
+    $('context').hidden = true;
+    const t = d.target;
+    let next: Course;
+    if (t.kind === 'stopper') {
+      if (snapOn) [dx, dz] = [snap(dx), snap(dz)];
+      next = moveStopper(d.start, t.index, dx, dz, t.point);
+    } else {
+      if (!d.from) return;
+      // Seen from above any road can be reached; in 3D, roads at the height it was grabbed at come first.
+      const spot = nearestRoad(d.layout, d.from.x + dx, d.from.z + dz, this.host.topDown ? undefined : d.from.y);
+      if (!spot) return;
+      const to = { piece: spot.piece, offset: snapOn ? snap(spot.offset) : spot.offset };
+      next = t.kind === 'start' ? moveStart(d.start, to) : placeTimer(d.start, to);
+    }
+    d.preview = next;
+    this.host.view.setData(layoutCourse(next), this.host.selection);
+  }
+
+  end(commit: boolean): void {
+    const d = this.drag;
+    this.drag = null;
+    if (!d?.preview) return;
+    if (commit) this.host.commit(d.preview, this.host.selection);
     else this.host.refresh(false);
   }
 }

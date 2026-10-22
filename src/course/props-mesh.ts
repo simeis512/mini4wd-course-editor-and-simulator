@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Block } from './blocks';
 import type { Layout } from './course';
+import type { PropRef } from './props';
 import { material } from './mesh';
 import { boxBlocks, hoseColor, hoseCurve, HOSE_DIAMETER } from './stoppers';
 import { startStickers, timerBlocks } from './timing';
@@ -8,8 +9,6 @@ import { startStickers, timerBlocks } from './timing';
 // The start line, lap timer and floor stoppers as meshes (#56, #53), in
 // world millimetres like the pieces; the caller scales to metres.
 
-/** What a prop mesh stands for, kept in its `userData.prop`. */
-export type PropRef = { kind: 'start' } | { kind: 'timer' } | { kind: 'stopper'; index: number };
 
 /** Colours: white stickers with a black arrow; the timer pale blue-grey as on the box art, its tape aluminium; brown cardboard. */
 export const PROP_COLORS: Record<string, string> = {
@@ -43,7 +42,7 @@ function group(prop: PropRef, children: THREE.Object3D[]): THREE.Group {
   return g;
 }
 
-/** One group for the start line, one for the timer and one per stopper, as the layout has them. */
+/** One group for the start line, one for the timer and one per stopper, each keeping what it is in `userData.prop` (`PropRef`). */
 export function buildPropMeshes(layout: Layout): THREE.Group[] {
   const out: THREE.Group[] = [];
   if (layout.start) {

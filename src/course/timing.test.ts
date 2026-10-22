@@ -1,10 +1,10 @@
 import { Matrix4, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { blockCorners } from './blocks';
-import { GLOBAL_SPEC, laneOffset } from './catalog';
+import { getPart, GLOBAL_SPEC, laneOffset } from './catalog';
 import { emptyCourse, layoutCourse, validateCourse } from './course';
 import { addPiece, deletePiece, moveGroup } from './edit';
-import { moveStart, nearestRoad, placeStart, placeTimer, removeStart, removeTimer, startStickers, TIMER, TIMER_GAP, timerBlocks, timerLane } from './timing';
+import { isStraight, moveStart, nearestRoad, placeStart, placeTimer, removeStart, removeTimer, startStickers, TIMER, TIMER_GAP, timerBlocks, timerLane } from './timing';
 
 /** Two straights in a row along + Z, 540mm each. */
 function straights() {
@@ -107,6 +107,11 @@ describe('nearestRoad', () => {
     expect(spot.offset).toBeCloseTo(160);
     expect(spot.point.z).toBeCloseTo(700);
     expect(nearestRoad(layoutCourse(emptyCourse()), 0, 0)).toBeNull();
+    expect(nearestRoad(layout, 80, 700, undefined, (pc) => pc !== layout.pieces[1])!.piece).toBe(0);
+  });
+
+  it('tells plain straights from the rest', () => {
+    expect(['straight', 'free-straight', 'curve45', 'wave', 'slope'].map((id) => isStraight(getPart(id)))).toEqual([true, true, false, false, false]);
   });
 
   it('keeps to the road at the height given, and else takes the higher', () => {

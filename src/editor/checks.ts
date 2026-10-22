@@ -2,6 +2,7 @@ import { MACHINE_CLEARANCE, type Clash } from '../course/clash';
 import { groupCount, portKey, type Course, type Layout, type PortRef, type Problem } from '../course/course';
 import { BEND_LIMIT, TWIST_LIMIT } from '../course/flex';
 import type { LapCheck } from '../course/laps';
+import { floorExtent } from '../course/share-image';
 import { $ } from './dom';
 import { shoppingHtml } from './shopping';
 
@@ -119,6 +120,21 @@ function lapLines(layout: Layout, laps: LapCheck): string[] {
   return out;
 }
 
+/** Where the start line and timer are, or that there is no start yet; and the floor taken with the stoppers (#56, #53). */
+function propLines(layout: Layout): string[] {
+  if (!layout.pieces.length) return [];
+  const { start, timer } = layout;
+  const out = [
+    start ? `<div>スタート: ${pieceLink(layout, start.piece)}</div>` : '<div class="muted">スタート未設定（置き物の「スタート」で置けます）</div>',
+  ];
+  if (timer) out.push(`<div>ラップタイマー: ${pieceLink(layout, timer.piece)}</div>`);
+  if (layout.stoppers.length) {
+    const { x, z } = floorExtent(layout);
+    out.push(`<div class="muted">床の広さ（置き物込み）: ${mm(x)} × ${mm(z)}</div>`);
+  }
+  return out;
+}
+
 /** Bring the course box up to date: its summary line, the checks and the parts used. */
 export function renderCourseInfo(course: Course, layout: Layout, checks: CourseChecks): void {
   const info: string[] = [];
@@ -134,6 +150,7 @@ export function renderCourseInfo(course: Course, layout: Layout, checks: CourseC
     if (c.distance < 0.05 && c.angle < 0.05) continue;
     info.push(`<div class="muted">ループ閉じ（#${c.a.piece + 1}–#${c.b.piece + 1}）: 誤差 ${c.distance.toFixed(1)}mm / ${c.angle.toFixed(1)}°</div>`);
   }
+  info.push(...propLines(layout));
   if (checks.laps) info.push(...lapLines(layout, checks.laps));
   info.push(...shoppingHtml(course));
   $('info').innerHTML = info.join('');

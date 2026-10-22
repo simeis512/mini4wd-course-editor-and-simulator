@@ -41,12 +41,13 @@ import { raiseRun } from '../course/raise';
 import { bindAttachments } from './attach';
 import { bindCourseInfo, renderCourseInfo, type CourseChecks } from './checks';
 import { $, toast } from './dom';
-import { PaletteDrag, PieceDrag, SNAP_STEP, type DragHost } from './drag';
+import { PaletteDrag, PieceDrag, PropDrag, SNAP_STEP, type DragHost } from './drag';
 import { History } from './history';
 import { Library } from './library';
 import { bindLevelTools, levelMax, renderLevelTools, type HeightView } from './levels';
 import { buildPalette, placeContext, POSE_FIELDS, renderPanels, runMarks } from './panels';
-import type { Selection } from './selection';
+import { PropTools } from './props';
+import { isProp, type Selection } from './selection';
 import { bindAbout, showNoticeOnStart } from './notice';
 import { bindShopping } from './shopping';
 import { bindQr } from './qr';
@@ -75,6 +76,10 @@ export class EditorApp {
   private share: ShareImage | undefined;
   private paletteDrag: PaletteDrag;
   private pieceDrag: PieceDrag;
+  private propDrag: PropDrag;
+  /** The drag going on in a view, if any. */
+  private drag: PieceDrag | PropDrag | null = null;
+  private props: PropTools;
   private library: Library;
 
   constructor() {
@@ -98,12 +103,35 @@ export class EditorApp {
       get moveAlone() {
         return app.moveAlone;
       },
+      get topDown() {
+        return app.mode === '2d';
+      },
       screenMm: (px) => this.screenMm(px),
       commit: (next, selection) => this.commit(next, selection),
       refresh: (writeUrl) => this.refresh(writeUrl),
     };
     this.paletteDrag = new PaletteDrag(host);
     this.pieceDrag = new PieceDrag(host);
+    this.propDrag = new PropDrag(host);
+    this.props = new PropTools({
+      get course() {
+        return app.course;
+      },
+      get layout() {
+        return app.layout;
+      },
+      get selection() {
+        return app.selection;
+      },
+      get view() {
+        return app.view;
+      },
+      get views() {
+        return [app.top, app.orbit];
+      },
+      commit: (next, selection) => this.commit(next, selection),
+      select: (selection) => this.select(selection),
+    });
     this.library = new Library({
       get course() {
         return app.course;
@@ -117,9 +145,16 @@ export class EditorApp {
         if (this.top) renderTurnTools(this.top);
         this.share?.later();
       },
-      onDragStart: (index: number) => this.pieceDrag.start(index),
-      onDragMove: (dx: number, dz: number, noSnap: boolean) => this.pieceDrag.move(dx, dz, noSnap),
-      onDragEnd: (commit: boolean) => this.pieceDrag.end(commit),
+      onDragStart: (target: NonNullable<Selection>) => {
+        this.drag = target.kind === 'piece' ? this.pieceDrag : isProp(target) ? this.propDrag : null;
+        if (target.kind === 'piece') return this.pieceDrag.start(target.index);
+        return isProp(target) && this.propDrag.start(target);
+      },
+      onDragMove: (dx: number, dz: number, noSnap: boolean) => this.drag?.move(dx, dz, noSnap),
+      onDragEnd: (commit: boolean) => {
+        this.drag?.end(commit);
+        this.drag = null;
+      },
     };
     this.top = new TopView($('view2d'), handlers);
     this.orbit = new OrbitView($('view3d'), handlers);
@@ -198,6 +233,12 @@ export class EditorApp {
     if (s?.kind === 'port' && !this.layout.open.some((r) => portKey(r) === portKey(s.ref))) this.selection = null;
     if (s?.kind === 'piece' && s.index >= this.course.pieces.length) this.selection = null;
     if (s?.kind === 'joint' && !this.layout.joints.some((j) => sameJoint(s, j))) this.selection = null;
+    if ((s?.kind === 'start' && !this.layout.start) || (s?.kind === 'timer' && !this.layout.timer)) this.selection = null;
+    if (s?.kind === 'stopper') {
+      const stopper = this.layout.stoppers[s.index];
+      if (!stopper) this.selection = null;
+      else if (s.point !== undefined && (stopper.kind !== 'hose' || s.point >= stopper.points.length)) this.selection = { kind: 'stopper', index: s.index };
+    }
     this.checks = { clashes: findClashes(this.layout), laps: checkLaps(this.layout, this.course.dir) };
     for (const view of [this.top, this.orbit]) {
       view.setData(this.layout, this.selection);
@@ -263,6 +304,7 @@ export class EditorApp {
   }
 
   private deleteSelected(): void {
+    if (this.props.deleteSelected()) return;
     const s = this.selection;
     if (s?.kind !== 'piece') return;
     this.commit(deletePiece(this.course, s.index));
@@ -287,6 +329,7 @@ export class EditorApp {
 
   /** Turn the selected piece about its middle, + to the left (anticlockwise from above). */
   private rotateSelected(deg: number): void {
+    if (this.props.turnSelected(deg)) return;
     const s = this.selection;
     if (s?.kind !== 'piece') return;
     this.moveSelected(turnAboutMiddle(this.layout.pieces[s.index], deg));

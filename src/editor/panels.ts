@@ -4,11 +4,13 @@ import { footprint, jointBend, jointShift, linkHolder, setShift } from '../cours
 import { BEND_LIMIT, TWIST_LIMIT } from '../course/flex';
 import { asLink, bendable, joinableNear } from '../course/joining';
 import { previewRun } from '../course/raise';
+import { propOutline, propPoint } from '../course/props';
 import { renderAttachments } from './attach';
 import { $ } from './dom';
 import { floatSpot, rectAround, type Rect } from './float';
 import { partIcon } from './icons';
-import type { Selection } from './selection';
+import { renderPropPanel } from './props';
+import { isProp, type Selection } from './selection';
 import type { EditorView, RunMarks } from './view';
 
 export const POSE_FIELDS = ['pose-x', 'pose-y', 'pose-z', 'pose-yaw', 'pose-pitch', 'pose-roll'] as const;
@@ -142,6 +144,8 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
   $('join-row').hidden = !near;
   if (near) $('join-name').textContent = `近くの口（${pieceLabel(layout, near.piece)}）`;
 
+  renderPropPanel(layout, s);
+
   // Settings for the selection float over the editor, next to it (#45).
   $('context').hidden = s === null;
 }
@@ -214,6 +218,14 @@ export function placeContext(view: EditorView, layout: Layout, s: Selection, lit
   let anchor: Rect | null;
   if (s.kind === 'piece') {
     anchor = pieceRect(view, layout, s.index, stage);
+  } else if (isProp(s)) {
+    // All round it, at the height of its middle.
+    const y = propPoint(layout, s)?.y ?? 0;
+    const pts = propOutline(layout, s).flatMap(([x, z]) => {
+      const q = view.clientOf(x, y, z);
+      return q ? [[q[0] - stage.left, q[1] - stage.top] as [number, number]] : [];
+    });
+    anchor = rectAround(pts);
   } else {
     const ref = s.kind === 'port' ? s.ref : s.a;
     const e = layout.pieces[ref.piece].ports[ref.port].elements;
