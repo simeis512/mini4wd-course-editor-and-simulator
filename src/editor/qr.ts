@@ -1,4 +1,5 @@
-import { makeQr, printFit, PRINT_SIZES_MM, QR_QUIET_MODULES, qrPixels, qrSvg, type Qr } from '../course/qr';
+import { makeQr, printFit, PRINT_SIZES_MM, QR_QUIET_MODULES, type Qr } from '../course/qr';
+import { CARD_STYLES, cardPixels, cardSvg, qrCard, type Card, type CardStyle } from '../course/qr-card';
 import { $, toast } from './dom';
 import { QrScanner } from './qr-scan';
 import { download } from './share';
@@ -18,33 +19,39 @@ export interface QrHost {
 const PNG_DPI = 300;
 /** Default print width: the second of `PRINT_SIZES_MM` (5cm). */
 const DEFAULT_SIZE = PRINT_SIZES_MM[1];
-/** Caption band under a saved PNG, as a share of the code's width. */
-const PNG_CAPTION = 0.14;
+/** Remembers the chosen card style. */
+const STYLE_KEY = 'qr.style';
 
-/** Draw `qr` on `canvas`, `scale` pixels to a module, with `caption` underneath. */
-function draw(canvas: HTMLCanvasElement, qr: Qr, scale: number, caption = ''): void {
-  const { width, rgba } = qrPixels(qr, scale);
-  const band = caption ? Math.round(width * PNG_CAPTION) : 0;
+/** Draw `card` on `canvas`, `scale` pixels to a module. */
+function draw(canvas: HTMLCanvasElement, card: Card, qr: Qr, scale: number): void {
+  const { width, height, rgba } = cardPixels(card, qr, scale);
   canvas.width = width;
-  canvas.height = width + band;
+  canvas.height = height;
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.putImageData(new ImageData(rgba, width, width), 0, 0);
-  if (!caption) return;
-  ctx.fillStyle = '#000';
+  ctx.putImageData(new ImageData(rgba, width, height), 0, 0);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `${Math.round(band * 0.5)}px sans-serif`;
-  ctx.fillText(caption, width / 2, width + band * 0.4, width * 0.92);
+  for (const t of card.texts) {
+    ctx.fillStyle = t.fill;
+    ctx.font = `${t.bold ? 'bold ' : ''}${t.size * scale}px sans-serif`;
+    ctx.fillText(t.text, t.x * scale, t.y * scale, card.width * scale * 0.92);
+  }
 }
 
 export function bindQr(host: QrHost): void {
   const dialog = $<HTMLDialogElement>('qr-dialog');
   const size = $<HTMLSelectElement>('qr-size');
   const caption = $<HTMLInputElement>('qr-caption');
-  size.innerHTML = PRINT_SIZES_MM.map((mm) => `<option value="${mm}">${mm / 10}cm 角</option>`).join('');
+  const style = $<HTMLSelectElement>('qr-style');
+  size.innerHTML = PRINT_SIZES_MM.map((mm) => `<option value="${mm}">幅 ${mm / 10}cm</option>`).join('');
   size.value = String(DEFAULT_SIZE);
+  style.innerHTML = CARD_STYLES.map((s) => `<option value="${s.id}">${s.label}</option>`).join('');
+  try {
+    const kept = localStorage.getItem(STYLE_KEY);
+    if (CARD_STYLES.some((s) => s.id === kept)) style.value = kept!;
+  } catch {
+    // Storage blocked: start from the first style.
+  }
   let qr: Qr | null = null;
   const scanner = new QrScanner(dialog);
   /** Saved files are named after the caption, or the course. */
@@ -57,9 +64,25 @@ export function bindQr(host: QrHost): void {
     $('qr-fit').textContent = `1マス ${fit.moduleMm.toFixed(2)}mm`;
     const warn = $('qr-warn');
     warn.hidden = fit.readable;
-    warn.textContent = `このサイズでは細かすぎて読めないことがあります。${Math.ceil(fit.minWidthMm / 10)}cm 角以上で印刷してください（保存はできます）。`;
+    warn.textContent = `このサイズでは細かすぎて読めないことがあります。幅 ${Math.ceil(fit.minWidthMm / 10)}cm 以上で印刷してください（保存はできます）。`;
   };
   size.addEventListener('change', describe);
+
+  /** The card as it would be saved now. */
+  const card = () => qrCard(qr!, style.value as CardStyle, caption.value.trim());
+  /** Redraw the card on screen: sharp on high-density screens, whole device pixels to a module. */
+  const preview = () => {
+    if (qr) draw($<HTMLCanvasElement>('qr-canvas'), card(), qr, Math.max(2, Math.ceil((360 * devicePixelRatio) / qr.size)));
+  };
+  style.addEventListener('change', () => {
+    try {
+      localStorage.setItem(STYLE_KEY, style.value);
+    } catch {
+      // Storage blocked: the choice lasts until the page is closed.
+    }
+    preview();
+  });
+  caption.addEventListener('input', preview);
 
   /** Show the make or read tab; leaving the read tab stops the camera. */
   const showTab = (read: boolean) => {
@@ -83,10 +106,9 @@ export function bindQr(host: QrHost): void {
     $('qr-made').hidden = !qr;
     $('qr-too-long').hidden = !!qr;
     if (qr) {
-      // Sharp on high-density screens: whole device pixels to a module.
-      draw($<HTMLCanvasElement>('qr-canvas'), qr, Math.max(2, Math.ceil((360 * devicePixelRatio) / qr.size)));
       $('qr-info').textContent = `URL ${url.length} 文字・QRバージョン ${qr.version}（${qr.size}×${qr.size} マス）`;
       caption.value = await host.name();
+      preview();
       describe();
     }
     dialog.showModal();
@@ -97,12 +119,12 @@ export function bindQr(host: QrHost): void {
     const mm = Number(size.value);
     const pixels = (mm / 25.4) * PNG_DPI;
     const canvas = document.createElement('canvas');
-    draw(canvas, qr, Math.max(1, Math.round(pixels / (qr.size + 2 * QR_QUIET_MODULES))), caption.value.trim());
+    draw(canvas, card(), qr, Math.max(1, Math.round(pixels / (qr.size + 2 * QR_QUIET_MODULES))));
     canvas.toBlob((blob) => (blob ? download(blob, file('png')) : toast('画像を作れませんでした')));
   });
   $('qr-svg').addEventListener('click', () => {
     if (!qr) return;
-    const svg = qrSvg(qr, Number(size.value), caption.value.trim());
+    const svg = cardSvg(card(), qr, Number(size.value));
     download(new Blob([svg], { type: 'image/svg+xml' }), file('svg'));
   });
   dialog.addEventListener('close', () => scanner.stop());

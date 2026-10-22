@@ -2,15 +2,16 @@ import jsQR from 'jsqr';
 import { describe, expect, it } from 'vitest';
 import { courseToHash, decodeCourse } from './codec';
 import { basicOval } from './presets';
-import { courseValueOf, makeQr, MIN_PRINT_MODULE_MM, printFit, qrPixels, qrSvg, QR_QUIET_MODULES } from './qr';
+import { cardPixels, qrCard } from './qr-card';
+import { courseValueOf, makeQr, MIN_PRINT_MODULE_MM, printFit, QR_QUIET_MODULES } from './qr';
 
 describe('makeQr', () => {
   it('encodes a course URL so it reads back the same', async () => {
     const url = `https://mini4wd-lab.simeis512.com/${await courseToHash(basicOval())}`;
     const qr = makeQr(url);
     expect(qr.size).toBe(17 + 4 * qr.version);
-    const { width, rgba } = qrPixels(qr, 4);
-    expect(jsQR(rgba, width, width)?.data).toBe(url);
+    const { width, height, rgba } = cardPixels(qrCard(qr, 'plain'), qr, 4);
+    expect(jsQR(rgba, width, height)?.data).toBe(url);
   });
 
   it('keeps the basic oval small', async () => {
@@ -33,20 +34,6 @@ describe('printFit', () => {
 
   it('is not readable when printed too small', () => {
     expect(printFit(101, 30).readable).toBe(false);
-  });
-});
-
-describe('qrSvg', () => {
-  const qr = makeQr('https://example.com/');
-
-  it('is as wide as asked, in mm', () => {
-    expect(qrSvg(qr, 50)).toContain('width="50mm" height="50mm"');
-  });
-
-  it('adds the caption underneath, escaped', () => {
-    const svg = qrSvg(qr, 50, 'A&B <コース>');
-    expect(svg).toContain('A&#38;B &#60;コース&#62;</text>');
-    expect(svg).not.toContain('height="50mm"');
   });
 });
 
