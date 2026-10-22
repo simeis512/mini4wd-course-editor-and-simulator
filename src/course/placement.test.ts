@@ -1,7 +1,8 @@
 import { Matrix4 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { emptyCourse, groupCount, layoutCourse, movingGroup, type Course } from './course';
-import { addFreePiece, addPiece, footprint, freeSpot, moveGroup, setPose, tidyCuts } from './edit';
+import { addFreePiece, addPiece, footprint, moveGroup, setPose, tidyCuts } from './edit';
+import { itemSpot } from './add';
 import { applyMagnet, asLink, bendable, findMagnet, joinableNear, joinPorts, splitJoint } from './joining';
 import { facingError } from './geometry';
 import { basicOval, chain } from './presets';
@@ -169,7 +170,7 @@ describe('adding on its own', () => {
   it('finds a spot that overlaps nothing, as near as it can', () => {
     const oval = basicOval();
     const [x0, x1, z0, z1] = footprint(layoutCourse(oval).pieces[0]);
-    const [x, z] = freeSpot(oval, 'straight', 0, (x0 + x1) / 2, (z0 + z1) / 2);
+    const [x, z] = itemSpot(oval, { part: 'straight' }, (x0 + x1) / 2, (z0 + z1) / 2);
     const c = addFreePiece(oval, 'straight', 0, x, z);
     const layout = layoutCourse(c);
     const [a0, a1, b0, b1] = footprint(layout.pieces[c.pieces.length - 1]);
@@ -178,7 +179,7 @@ describe('adding on its own', () => {
       expect(a1 <= p0 || a0 >= p1 || b1 <= q0 || b0 >= q1).toBe(true);
     }
     // An empty floor takes the point itself.
-    expect(freeSpot(emptyCourse(), 'straight', 0, 120, 340)).toEqual([100, 300]);
+    expect(itemSpot(emptyCourse(), { part: 'straight' }, 120, 340)).toEqual([100, 300]);
   });
 
   it('starts an empty course on a free piece when the first piece lies on its second port', () => {

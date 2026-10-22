@@ -1,3 +1,4 @@
+import type { PaletteItem } from '../course/add';
 import { getPart, PARTS, variantOf } from '../course/catalog';
 import { compatible, movingGroup, placementOf, portKey, type Course, type Layout, type PortRef } from '../course/course';
 import { footprint, jointBend, jointShift, linkHolder, setShift } from '../course/edit';
@@ -5,10 +6,11 @@ import { BEND_LIMIT, TWIST_LIMIT } from '../course/flex';
 import { asLink, bendable, joinableNear } from '../course/joining';
 import { previewRun } from '../course/raise';
 import { propOutline, propPoint } from '../course/props';
+import { getTemplate, TEMPLATES } from '../course/templates';
 import { renderAttachments } from './attach';
 import { $ } from './dom';
 import { floatSpot, rectAround, type Rect } from './float';
-import { partIcon } from './icons';
+import { partIcon, templateIcon } from './icons';
 import { renderPropPanel } from './props';
 import { isProp, type Selection } from './selection';
 import type { EditorView, RunMarks } from './view';
@@ -20,34 +22,45 @@ function pieceLabel(layout: Layout, index: number): string {
   return `#${index + 1} ${layout.pieces[index].part.name}`;
 }
 
-/** What a button in the parts list does: `port` is the way round chosen, if the part has two. */
+/** What a button in the parts list or the templates does. */
 export interface PaletteHandlers {
-  click(partId: string, port: number | undefined): void;
-  down(e: PointerEvent, partId: string, port: number | undefined): void;
+  click(item: PaletteItem): void;
+  down(e: PointerEvent, item: PaletteItem): void;
   move(e: PointerEvent): void;
   up(e: PointerEvent, cancelled: boolean): void;
 }
 
-/** Fill the parts list with a button per part, or per way round. */
+/** A button that adds `item` by a click, or by dragging it onto the course (#40, #41). */
+function paletteButton(handlers: PaletteHandlers, item: PaletteItem, icon: SVGSVGElement, html: string, title: string): HTMLButtonElement {
+  const b = document.createElement('button');
+  if ('template' in item) b.dataset.template = item.template;
+  else b.dataset.part = item.part;
+  const label = document.createElement('span');
+  label.innerHTML = html;
+  b.append(icon, label);
+  b.title = `${title}：クリックで追加、ドラッグでコースに置く`;
+  b.addEventListener('click', () => handlers.click(item));
+  b.addEventListener('pointerdown', (e) => handlers.down(e, item));
+  b.addEventListener('pointermove', (e) => handlers.move(e));
+  b.addEventListener('pointerup', (e) => handlers.up(e, false));
+  b.addEventListener('pointercancel', (e) => handlers.up(e, true));
+  return b;
+}
+
+/** Fill the parts list with a button per part, or per way round, and the templates under it (#63). */
 export function buildPalette(handlers: PaletteHandlers): void {
   const palette = $('palette');
   for (const part of PARTS) {
     // A part that differs turned round comes both ways: port 0 first, then port 1 (#43).
     const sides: [number | undefined, string][] = part.ways ? [[0, part.ways[0]], [1, part.ways[1]]] : [[undefined, '']];
     for (const [port, side] of sides) {
-      const b = document.createElement('button');
-      b.dataset.part = part.id;
-      const label = document.createElement('span');
-      label.innerHTML = `${part.name}${side ? ` ${side}` : ''}${part.setCode ? ` <small>${part.setCode}</small>` : ''}`;
-      b.append(partIcon(part, port ?? 0), label);
-      b.title = `${part.name}${side ? `（${side}）` : ''}：クリックで追加、ドラッグでコースに置く`;
-      b.addEventListener('click', () => handlers.click(part.id, port));
-      b.addEventListener('pointerdown', (e) => handlers.down(e, part.id, port));
-      b.addEventListener('pointermove', (e) => handlers.move(e));
-      b.addEventListener('pointerup', (e) => handlers.up(e, false));
-      b.addEventListener('pointercancel', (e) => handlers.up(e, true));
-      palette.appendChild(b);
+      const html = `${part.name}${side ? ` ${side}` : ''}${part.setCode ? ` <small>${part.setCode}</small>` : ''}`;
+      const title = `${part.name}${side ? `（${side}）` : ''}`;
+      palette.appendChild(paletteButton(handlers, { part: part.id, port }, partIcon(part, port ?? 0), html, title));
     }
+  }
+  for (const t of TEMPLATES) {
+    $('templates').appendChild(paletteButton(handlers, { template: t.id }, templateIcon(t.id), t.name, `${t.name}（${t.note}）`));
   }
 }
 
@@ -56,9 +69,12 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
   // Parts list: joins to the selected open port where it can, else adds on its own.
   const empty = course.pieces.length === 0;
   const target = s?.kind === 'port' ? layout.pieces[s.ref.piece].part : null;
-  for (const b of $('palette').querySelectorAll<HTMLButtonElement>('button')) {
-    const part = getPart(b.dataset.part!);
-    const joins = target && s?.kind === 'port' && part.ports.some((_, p) => compatible(target, s.ref.port, part, p));
+  for (const b of document.querySelectorAll<HTMLButtonElement>('#palette button, #templates button')) {
+    // A template joins by its first piece's port.
+    const first = b.dataset.template ? getTemplate(b.dataset.template).pieces[0] : null;
+    const part = getPart(first?.part ?? b.dataset.part!);
+    const ports = first ? [first.port] : part.ports.map((_, p) => p);
+    const joins = target && s?.kind === 'port' && ports.some((p) => compatible(target, s.ref.port, part, p));
     b.classList.toggle('dim', !!target && !joins);
   }
   $('palette-hint').textContent = empty

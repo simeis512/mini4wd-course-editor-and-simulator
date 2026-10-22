@@ -6,7 +6,6 @@ import {
   anchorFrame,
   anchorRef,
   compatible,
-  emptyCourse,
   layoutCourse,
   placementOf,
   portKey,
@@ -75,13 +74,13 @@ export function addFreePiece(course: Course, partId: string, port: number, x: nu
 }
 
 /**
- * The nearest spot to (x, z), on a grid of `step` mm, where `partId` added by
- * `addFreePiece` overlaps no piece already placed.
+ * The nearest spot to (x, z), on a grid of `step` mm, for something whose
+ * top-view `bounds` are [p0, p1, q0, q1] when centred on the origin (they
+ * just shift elsewhere), where it overlaps no piece already placed.
  */
-export function freeSpot(course: Course, partId: string, port: number, x: number, z: number, step = 100): [number, number] {
+export function freeSpot(course: Course, bounds: [number, number, number, number], x: number, z: number, step = 100): [number, number] {
   const taken = layoutCourse(course).pieces.map(footprint);
-  // The new piece's bounds when centred on the origin; elsewhere they just shift.
-  const [p0, p1, q0, q1] = footprint(layoutCourse(addFreePiece(emptyCourse(), partId, port, 0, 0)).pieces[0]);
+  const [p0, p1, q0, q1] = bounds;
   const fits = (cx: number, cz: number) =>
     taken.every(([x0, x1, z0, z1]) => cx + p1 <= x0 || cx + p0 >= x1 || cz + q1 <= z0 || cz + q0 >= z1);
   const x0 = Math.round(x / step) * step;
