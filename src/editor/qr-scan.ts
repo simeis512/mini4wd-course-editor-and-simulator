@@ -56,10 +56,15 @@ export class QrScanner {
     $('qr-camera').addEventListener('click', () => (this.stream ? this.stop() : void this.startCamera()));
     // The drop area is the file input's label: pressing it lets the browser
     // offer the camera or a picture (no `capture`, so both are offered).
-    file.addEventListener('change', () => {
-      if (file.files?.[0]) void this.readImage(file.files[0]);
-      file.value = '';
-    });
+    // "カメラで撮る" has `capture`, which starts the camera at once on phones.
+    const photo = $<HTMLInputElement>('qr-photo-file');
+    $('qr-shoot').addEventListener('click', () => photo.click());
+    for (const input of [file, photo]) {
+      input.addEventListener('change', () => {
+        if (input.files?.[0]) void this.readImage(input.files[0]);
+        input.value = '';
+      });
+    }
     const drop = $('qr-drop');
     drop.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {

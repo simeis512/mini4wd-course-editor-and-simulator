@@ -112,6 +112,8 @@
       dialog .tabs button[aria-selected='true'] { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
       #qr-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 160px; padding: 16px; text-align: center; border: 2px dashed var(--line); border-radius: 10px; cursor: pointer; }
       #qr-drop span { color: var(--muted); font-size: 13px; }
+      /* capture only starts the camera on phones and tablets; a PC shows a file picker. */
+      @media (hover: hover) and (pointer: fine) { #qr-shoot { display: none; } }
       #qr-drop:hover, #qr-drop:focus-visible, #qr-drop.over { border-color: var(--accent); background: #1f5f7522; outline: none; }
       #qr-video { display: block; width: 100%; max-height: 50vh; margin-top: 8px; border-radius: 6px; background: #000; }
       #qr-video[hidden] { display: none; }
@@ -378,6 +380,8 @@
         </label>
         <p class="hint">スマホの標準のカメラで読んでも、URLとしてそのまま開けます。</p>
         <div class="actions">
+          <button id="qr-shoot" class="primary" title="カメラを直接起動して QR コードを撮る">カメラで撮る</button>
+          <input id="qr-photo-file" type="file" accept="image/*" capture="environment" hidden />
           <button id="qr-camera" title="カメラの映像を映したまま読み取る（PCのカメラなど）">カメラ映像で読む</button>
         </div>
         <video id="qr-video" playsinline muted hidden></video>
