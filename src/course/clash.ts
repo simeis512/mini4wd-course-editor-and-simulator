@@ -3,6 +3,7 @@ import { GLOBAL_SPEC } from './catalog';
 import type { Layout } from './course';
 import { pointOnFrame } from './geometry';
 import { worldTracks, type WorldTrack } from './mesh';
+import type { StopperContact } from './stopper-contact';
 
 // Pieces that run into each other, and road too low over a lane below
 // (spec 7, #14, #15).
@@ -26,11 +27,13 @@ const STEP_SLACK = 0.5;
  * Two pieces in each other's way. `interference`: they overlap (their road
  * and fences, as a solid up to the fence tops). `clearance`: the road of
  * `upper` crosses over a lane of `lower` with less than the room a machine
- * needs under it.
+ * needs under it. `stopper`: a hose or box on the floor runs into
+ * something (stopper-contact.ts, #53).
  */
 export type Clash =
   | { kind: 'interference'; pieces: [number, number]; at: Vector3 }
-  | { kind: 'clearance'; lower: number; upper: number; at: Vector3; gap: number };
+  | { kind: 'clearance'; lower: number; upper: number; at: Vector3; gap: number }
+  | StopperContact;
 
 /** A track ready for testing points against: its frames turned round, and its bounds. */
 interface Solid {
@@ -165,7 +168,7 @@ export function findClashes(layout: Layout): Clash[] {
     }
   }
   // A pair that overlaps somewhere is reported as that alone.
-  return clashes.filter((c) => c.kind === 'interference' || !found.has(`i${pairKey(c.lower, c.upper)}`));
+  return clashes.filter((c) => c.kind !== 'clearance' || !found.has(`i${pairKey(c.lower, c.upper)}`));
 }
 
 function pairKey(a: number, b: number): string {

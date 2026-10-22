@@ -1,6 +1,7 @@
 import type { Layout } from './course';
 import type { LapCheck } from './laps';
 import { roadOutline, trackEdge, worldTracks } from './mesh';
+import { stopperBounds } from './stoppers';
 
 // The picture of a course for sharing on social media (#75): how it is laid
 // out, and the facts written beside the course.
@@ -52,8 +53,8 @@ export function frameIn(w: number, h: number, aspect: number, margin = 0): Rect 
   return { x: (w - fw) / 2, y: (h - fh) / 2, w: fw, h: fh };
 }
 
-/** How far the course reaches across the floor, mm: X (left to right) and Z (front to back), fences included. */
-export function courseExtent(layout: Layout): { x: number; z: number } {
+/** How far the course reaches across the floor, mm: [x0, x1, z0, z1], fences included; null when it has no road. */
+function courseBounds(layout: Layout): [number, number, number, number] | null {
   let [x0, x1, z0, z1] = [Infinity, -Infinity, Infinity, -Infinity];
   for (const { samples, section } of worldTracks(layout)) {
     const edges = [roadOutline(samples, section), ...section.fences.map((f) => trackEdge(samples, f))];
@@ -61,7 +62,21 @@ export function courseExtent(layout: Layout): { x: number; z: number } {
       [x0, x1, z0, z1] = [Math.min(x0, p.x), Math.max(x1, p.x), Math.min(z0, p.z), Math.max(z1, p.z)];
     }
   }
-  return x0 > x1 ? { x: 0, z: 0 } : { x: x1 - x0, z: z1 - z0 };
+  return x0 > x1 ? null : [x0, x1, z0, z1];
+}
+
+const extentOf = (b: [number, number, number, number] | null) => (b ? { x: b[1] - b[0], z: b[3] - b[2] } : { x: 0, z: 0 });
+
+/** How far the course reaches across the floor, mm: X (left to right) and Z (front to back), fences included. */
+export function courseExtent(layout: Layout): { x: number; z: number } {
+  return extentOf(courseBounds(layout));
+}
+
+/** The floor the course takes with the hoses and boxes round it (#53): what the room must have, mm. */
+export function floorExtent(layout: Layout): { x: number; z: number } {
+  const [a, b] = [courseBounds(layout), stopperBounds(layout.stoppers)];
+  if (!a || !b) return extentOf(a ?? b);
+  return extentOf([Math.min(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.max(a[3], b[3])]);
 }
 
 const metres = (mm: number) => `${(mm / 1000).toFixed(1)} m`;

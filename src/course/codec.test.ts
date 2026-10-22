@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { courseFromBytes, courseFromHash, courseFromJson, courseToBytes, courseToHash, decodeCourse, encodeCourse } from './codec';
 import { addAttachment, moveAttachment } from './attachments';
-import { type Course } from './course';
+import { type Course, type Hose } from './course';
+import { addStopper, newStopper } from './stoppers';
+import { moveStart, placeStart, placeTimer } from './timing';
 import { addPiece, deletePiece, flipPiece, markIntended, setLength, setShift, setVariant } from './edit';
 import { splitJoint } from './joining';
 import { basicOval } from './presets';
@@ -19,6 +21,11 @@ function sample(): Course {
   c = addAttachment(c, 'washboard-10', 3, 2, 50);
   c = moveAttachment(c, 0, { reverse: true, side: 10 });
   c = moveAttachment(addAttachment(c, 'washboard-5', 3, 0, 300), 1, { wall: 'right' });
+  c = moveStart(placeStart(c, 0, 100), { reverse: true });
+  c = placeTimer(c, { piece: 2, offset: 40, side: 'right', everyLane: true });
+  c = addStopper(c, { ...(newStopper('hose', -500, 300) as Hose), color: 2 });
+  c = addStopper(c, { kind: 'hose', points: [[0, 0], [-30, 700]], color: 0 });
+  c = addStopper(c, { kind: 'box', size: 2, x: 1200, z: -40, yaw: -37.5, upright: true });
   return { ...c, name: 'テストコース', dir: -1 };
 }
 
@@ -31,14 +38,14 @@ describe('codec', () => {
   it('round-trips through the URL hash', async () => {
     const c = sample();
     const hash = await courseToHash(c);
-    expect(hash).toMatch(/^#c=5\.[A-Za-z0-9_-]+$/);
+    expect(hash).toMatch(/^#c=6\.[A-Za-z0-9_-]+$/);
     expect(await courseFromHash(hash)).toEqual(c);
   });
 
-  it('still reads format 1 to 4 links', async () => {
+  it('still reads format 1 to 5 links', async () => {
     // Each older format is the newer one without lengths, shifts, open-on-purpose marks, bends and twists in turn.
     const payload = (await encodeCourse(basicOval())).split('.')[1];
-    for (const v of [1, 2, 3, 4]) expect(await decodeCourse(`${v}.${payload}`)).toEqual(basicOval());
+    for (const v of [1, 2, 3, 4, 5]) expect(await decodeCourse(`${v}.${payload}`)).toEqual(basicOval());
   });
 
   it('keeps the basic oval short', async () => {

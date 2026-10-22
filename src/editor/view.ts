@@ -27,6 +27,8 @@ export interface EditorView {
   setRunMarks(marks: RunMarks | null): void;
   /** Mark where pieces are in each other's way (spec 7). */
   setClashes(clashes: readonly Clash[]): void;
+  /** Show or hide the hoses and boxes on the floor (#53); hidden ones cannot be picked. */
+  setStoppersShown(shown: boolean): void;
   /** Frame the whole course. */
   fit(): void;
   /** Floor point (mm, X/Z) in the middle of the view. */
@@ -63,8 +65,8 @@ export function drawShortMark(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.fillText(String(n), x, y + 3);
 }
 
-/** Colours of the clash marks: an overlap is an error, a low crossing a warning. */
-const CLASH_COLOR: Record<Clash['kind'], string> = { interference: '#ff5a5a', clearance: '#ffc828' };
+/** Colours of the clash marks: an overlap is an error, a low crossing or a stopper in the way a warning. */
+const CLASH_COLOR: Record<Clash['kind'], string> = { interference: '#ff5a5a', clearance: '#ffc828', stopper: '#ffc828' };
 
 /** A round "!" where pieces are in each other's way (spec 7). Both views draw it. */
 export function drawClashMark(ctx: CanvasRenderingContext2D, x: number, y: number, kind: Clash['kind']): void {

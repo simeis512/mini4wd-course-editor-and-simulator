@@ -1,7 +1,9 @@
 import { MACHINE_CLEARANCE, type Clash } from '../course/clash';
+import type { ContactTarget } from '../course/stopper-contact';
 import { groupCount, portKey, type Course, type Layout, type PortRef, type Problem } from '../course/course';
 import { BEND_LIMIT, TWIST_LIMIT } from '../course/flex';
 import type { LapCheck } from '../course/laps';
+import { floorExtent } from '../course/share-image';
 import { $ } from './dom';
 import { shoppingHtml } from './shopping';
 
@@ -15,8 +17,8 @@ export interface CourseChecks {
 
 /** What a click in the course box asks for. */
 export interface CheckHandlers {
-  /** Select a piece or an open port. */
-  pick(target: { piece: number } | PortRef): void;
+  /** Select a piece, an open port or a stopper. */
+  pick(target: { piece: number } | PortRef | { stopper: number }): void;
   /** Mark an open port as left open on purpose, or clear the mark (#13). */
   intended(ref: PortRef, on: boolean): void;
   /** Run the course the other way round. */
@@ -58,7 +60,6 @@ function openPorts(layout: Layout): string[] {
   return [head, `<ul class="checks">${items.join('')}</ul>`];
 }
 
-/** Overlaps first: they cannot be built, while a low crossing only stops machines. */
 /** Lanes that end at a joint, each with a box to mark it as made that way (#60). */
 function deadEnds(layout: Layout): string[] {
   if (!layout.deadEnds.length) return [];
@@ -72,12 +73,30 @@ function deadEnds(layout: Layout): string[] {
   return [head, `<ul class="checks">${items.join('')}</ul>`];
 }
 
+/** A hose or box, as a button that selects it. */
+function stopperLink(layout: Layout, index: number): string {
+  const name = layout.stoppers[index].kind === 'hose' ? 'ホース' : '段ボール箱';
+  return `<button class="link" data-stopper="${index}">${name} ${index + 1}</button>`;
+}
+
+/** What a stopper runs into, in words. */
+function targetText(layout: Layout, t: ContactTarget): string {
+  if (t.kind === 'piece') return pieceLink(layout, t.piece);
+  if (t.kind === 'support') return `${pieceLink(layout, t.piece)} の支え`;
+  if (t.kind === 'timer') return 'ラップタイマー';
+  return stopperLink(layout, t.index);
+}
+
+/** Overlaps first: they cannot be built, while a low crossing only stops machines; stoppers in the way last. */
 function clashLines(layout: Layout, clashes: readonly Clash[]): string[] {
-  const order = [...clashes].sort((a, b) => Number(a.kind === 'clearance') - Number(b.kind === 'clearance'));
+  const rank: Record<Clash['kind'], number> = { interference: 0, clearance: 1, stopper: 2 };
+  const order = [...clashes].sort((a, b) => rank[a.kind] - rank[b.kind]);
   return order.map((c) =>
     c.kind === 'interference'
       ? `<div class="err">${pieceLink(layout, c.pieces[0])} と ${pieceLink(layout, c.pieces[1])} が重なっています</div>`
-      : `<div class="warn">${pieceLink(layout, c.upper)} の下を通る ${pieceLink(layout, c.lower)} の上の高さが ${mm(c.gap)} しかありません（目安 ${MACHINE_CLEARANCE}mm）</div>`,
+      : c.kind === 'clearance'
+        ? `<div class="warn">${pieceLink(layout, c.upper)} の下を通る ${pieceLink(layout, c.lower)} の上の高さが ${mm(c.gap)} しかありません（目安 ${MACHINE_CLEARANCE}mm）</div>`
+        : `<div class="warn">${stopperLink(layout, c.stopper)} が ${targetText(layout, c.other)} に当たっています</div>`,
   );
 }
 
@@ -119,6 +138,21 @@ function lapLines(layout: Layout, laps: LapCheck): string[] {
   return out;
 }
 
+/** Where the start line and timer are, or that there is no start yet; and the floor taken with the stoppers (#56, #53). */
+function propLines(layout: Layout): string[] {
+  if (!layout.pieces.length) return [];
+  const { start, timer } = layout;
+  const out = [
+    start ? `<div>スタート: ${pieceLink(layout, start.piece)}</div>` : '<div class="muted">スタート未設定（置き物の「スタート」で置けます）</div>',
+  ];
+  if (timer) out.push(`<div>ラップタイマー: ${pieceLink(layout, timer.piece)}</div>`);
+  if (layout.stoppers.length) {
+    const { x, z } = floorExtent(layout);
+    out.push(`<div class="muted">床の広さ（置き物込み）: ${mm(x)} × ${mm(z)}</div>`);
+  }
+  return out;
+}
+
 /** Bring the course box up to date: its summary line, the checks and the parts used. */
 export function renderCourseInfo(course: Course, layout: Layout, checks: CourseChecks): void {
   const info: string[] = [];
@@ -134,6 +168,7 @@ export function renderCourseInfo(course: Course, layout: Layout, checks: CourseC
     if (c.distance < 0.05 && c.angle < 0.05) continue;
     info.push(`<div class="muted">ループ閉じ（#${c.a.piece + 1}–#${c.b.piece + 1}）: 誤差 ${c.distance.toFixed(1)}mm / ${c.angle.toFixed(1)}°</div>`);
   }
+  info.push(...propLines(layout));
   if (checks.laps) info.push(...lapLines(layout, checks.laps));
   info.push(...shoppingHtml(course));
   $('info').innerHTML = info.join('');
@@ -164,6 +199,7 @@ export function bindCourseInfo(handlers: CheckHandlers): void {
     if (!t) return;
     if (t.id === 'reverse') handlers.reverse();
     else if (t.dataset.piece) handlers.pick({ piece: Number(t.dataset.piece) });
+    else if (t.dataset.stopper) handlers.pick({ stopper: Number(t.dataset.stopper) });
     else if (t.dataset.port) {
       const [piece, port] = t.dataset.port.split(':').map(Number);
       handlers.pick({ piece, port });

@@ -294,6 +294,61 @@
           </div>
           <p class="hint">分断すると、口は向き合ったまま切り離されます（赤い矢印）。ピースを動かすと、それぞれ別に動きます。</p>
         </section>
+        <section id="prop-panel" hidden>
+          <div id="prop-name" class="title"></div>
+          <div id="prop-offset-row" class="row angle">
+            <label for="prop-offset" title="道に沿った位置。ドラッグでも動かせます">位置</label>
+            <input id="prop-offset" type="number" step="10" /> mm
+            <span id="prop-offset-from" class="muted"></span>
+          </div>
+          <div id="start-row" class="row">
+            <button id="start-flip" title="走り出す向きを反対にする">⇄ 向きを反転</button>
+          </div>
+          <div id="timer-rows">
+            <div class="row">
+              <label for="timer-side">付ける壁</label>
+              <select id="timer-side">
+                <option value="left">左の壁（左のレーンの上）</option>
+                <option value="right">右の壁（右のレーンの上）</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="timer-mode" title="シミュレーターでの計測のしかた">計測</label>
+              <select id="timer-mode">
+                <option value="covered">覆っているレーンだけ（実物どおり）</option>
+                <option value="every">どのレーンも（レーンごとのラップ）</option>
+              </select>
+            </div>
+          </div>
+          <div id="hose-rows">
+            <div class="row">
+              <label for="hose-color">色</label>
+              <select id="hose-color"></select>
+              <label title="最後の点から最初の点へつないで輪にします"><input id="hose-closed" type="checkbox" /> 輪にする</label>
+            </div>
+            <div class="row">
+              <button id="hose-add-point" title="選んだ点の次（点を選んでいなければ一番長い区間）に点を足す">点を足す</button>
+              <button id="hose-remove-point" title="選んだ点を消す (Delete)">点を消す</button>
+            </div>
+            <div id="hose-length" class="hint"></div>
+          </div>
+          <div id="box-rows" class="row">
+            <label for="box-size">大きさ</label>
+            <select id="box-size"></select>
+            <select id="box-way" aria-label="置き方">
+              <option value="side">横倒し（口をコースへ）</option>
+              <option value="up">口を上に</option>
+            </select>
+          </div>
+          <div id="prop-turn-row" class="row">
+            <button id="prop-rot-left" title="左に15°回す (Q、Shift で 1°)">⟲15°</button>
+            <button id="prop-rot-right" title="右に15°回す (E、Shift で 1°)">⟳15°</button>
+          </div>
+          <div class="row">
+            <button id="prop-delete" title="削除 (Delete)">削除</button>
+          </div>
+          <p id="prop-hint" class="hint"></p>
+        </section>
         <section id="port-panel" hidden>
           <div class="title">開いた口</div>
           <p class="hint">パーツ一覧のパーツをクリックすると、この口につなぎます。</p>
@@ -313,6 +368,16 @@
         <h2>パーツ</h2>
         <div id="palette"></div>
         <p id="palette-hint" class="hint"></p>
+        <h2>置き物</h2>
+        <div id="props-palette" class="row">
+          <button data-prop="start" title="START のステッカー。選んだピースか、画面の中央に近い道に置きます">スタート</button>
+          <button data-prop="timer" title="ミニ四駆ラップタイマー（15184）。スタートを置くと、すぐ先に自動で付きます">ラップタイマー</button>
+          <button data-prop="hose" title="床に置くホース。コースアウトしたマシンを止めます">ホース</button>
+          <button data-prop="box" data-size="0" title="マシンを受け止める段ボール箱（小）">箱 小</button>
+          <button data-prop="box" data-size="1" title="マシンを受け止める段ボール箱（中）">箱 中</button>
+          <button data-prop="box" data-size="2" title="マシンを受け止める段ボール箱（大）">箱 大</button>
+        </div>
+        <label class="row"><input id="show-stoppers" type="checkbox" checked /> 床の置き物（ホース・箱）を表示</label>
       </div>
       <section id="share-panel" hidden>
         <h2>SNS用の画像</h2>

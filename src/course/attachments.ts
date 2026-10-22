@@ -21,7 +21,7 @@ export interface AttachmentShape {
 }
 
 /** The length of a piece's main road, measured along it, mm. */
-function roadLength(pc: PlacedPiece): number {
+export function roadLength(pc: PlacedPiece): number {
   const d = distancesAlong(pc.geometry.samples);
   return d[d.length - 1];
 }

@@ -155,7 +155,7 @@ const partGeometryCache = new WeakMap<PartGeometry, ReturnType<typeof buildPartG
 const materialCache = new Map<string, THREE.MeshStandardMaterial>();
 
 /** `doubleSided` for stands, whose slabs' winding follows the road. */
-function material(color: string, shade: number, doubleSided = false): THREE.MeshStandardMaterial {
+export function material(color: string, shade: number, doubleSided = false): THREE.MeshStandardMaterial {
   const key = `${color}/${shade}/${doubleSided}`;
   let m = materialCache.get(key);
   if (!m) {

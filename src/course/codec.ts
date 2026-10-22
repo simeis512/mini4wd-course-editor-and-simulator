@@ -1,15 +1,16 @@
 import { ATTACHMENT_CODES, CATALOG_VERSION, hasPart, PART_CODES } from './catalog';
-import { validateCourse, type Attachment, type Course, type PieceRec } from './course';
+import { validateCourse, type Attachment, type Course, type PieceRec, type Stopper } from './course';
 import { isZeroBend } from './flex';
 
 /**
  * Course ⇄ URL hash (spec 6): `#c=<format>.<payload>`, where the payload is
  * a compact binary course, deflate-raw compressed and base64url encoded.
  *
- * Format 5, all integers as LEB128 varints (signed ones zigzag encoded):
+ * Format 6, all integers as LEB128 varints (signed ones zigzag encoded):
  *   catalog version
  *   flags: bit0 dir = -1, bit1 has name, bit2 has split marks,
- *          bit3 has ports left open on purpose, bit4 has attachments
+ *          bit3 has ports left open on purpose, bit4 has attachments,
+ *          bit5 has a start line, bit6 has a lap timer, bit7 has stoppers
  *   [name: byte length, UTF-8]
  *   piece count
  *   per piece:
@@ -30,14 +31,20 @@ import { isZeroBend } from './flex';
  *   [attachment count, then for each: kind (index into ATTACHMENT_CODES),
  *    piece, lane, offset (mm), side (mm, signed),
  *    flags: bit0 reversed, bit1 on a fence, bit2 the right one]  when flagged (spec 4)
+ *   [start: piece, offset (mm), flags: bit0 reversed]  when flagged (#56)
+ *   [timer: piece, offset (mm), flags: bit0 by the right fence, bit1 times every lane]  when flagged (#56)
+ *   [stopper count, then for each: kind (0 hose, 1 box), then  when flagged (#53)
+ *     hose: colour, flags (bit0 closed), point count, then x, z (mm, signed) for each
+ *     box: size, flags (bit0 upright), x, z (mm, signed), yaw (0.1°)]
  *
- * Format 4 is the same without lengths and attachments, format 3 also without shifts,
+ * Format 5 is the same without the start, timer and stoppers,
+ * format 4 also without lengths and attachments, format 3 also without shifts,
  * format 2 also without the open-on-purpose marks, and format 1 without
  * bends and twists too, so all still read.
  */
-export const FORMAT_VERSION = 5;
+export const FORMAT_VERSION = 6;
 /** Older formats that still read. */
-const READABLE_VERSIONS = [1, 2, 3, 4, FORMAT_VERSION];
+const READABLE_VERSIONS = [1, 2, 3, 4, 5, FORMAT_VERSION];
 export const HASH_KEY = 'c';
 
 class Writer {
@@ -94,7 +101,17 @@ export function courseToBytes(course: Course): Uint8Array {
   const cuts = course.cuts ?? [];
   const intended = course.intended ?? [];
   const attachments = course.attachments ?? [];
-  w.uint((course.dir === -1 ? 1 : 0) | (course.name ? 2 : 0) | (cuts.length ? 4 : 0) | (intended.length ? 8 : 0) | (attachments.length ? 16 : 0));
+  const stoppers = course.stoppers ?? [];
+  w.uint(
+    (course.dir === -1 ? 1 : 0) |
+      (course.name ? 2 : 0) |
+      (cuts.length ? 4 : 0) |
+      (intended.length ? 8 : 0) |
+      (attachments.length ? 16 : 0) |
+      (course.start ? 32 : 0) |
+      (course.timer ? 64 : 0) |
+      (stoppers.length ? 128 : 0),
+  );
   if (course.name) {
     const name = new TextEncoder().encode(course.name);
     w.uint(name.length);
@@ -147,6 +164,31 @@ export function courseToBytes(course: Course): Uint8Array {
       for (const n of [code, a.piece, a.lane, Math.round(a.offset)]) w.uint(n);
       w.int(Math.round(a.side));
       w.uint((a.reverse ? 1 : 0) | (a.wall ? 2 : 0) | (a.wall === 'right' ? 4 : 0));
+    }
+  }
+  if (course.start) {
+    const { piece, offset, reverse } = course.start;
+    for (const n of [piece, Math.round(offset), reverse ? 1 : 0]) w.uint(n);
+  }
+  if (course.timer) {
+    const { piece, offset, side, everyLane } = course.timer;
+    for (const n of [piece, Math.round(offset), (side === 'right' ? 1 : 0) | (everyLane ? 2 : 0)]) w.uint(n);
+  }
+  if (stoppers.length) {
+    w.uint(stoppers.length);
+    for (const s of stoppers) {
+      if (s.kind === 'hose') {
+        for (const n of [0, s.color, s.closed ? 1 : 0, s.points.length]) w.uint(n);
+        for (const [x, z] of s.points) {
+          w.int(Math.round(x));
+          w.int(Math.round(z));
+        }
+      } else {
+        for (const n of [1, s.size, s.upright ? 1 : 0]) w.uint(n);
+        w.int(Math.round(s.x));
+        w.int(Math.round(s.z));
+        w.tenths(s.yaw);
+      }
     }
   }
   return new Uint8Array(w.bytes);
@@ -205,6 +247,32 @@ export function courseFromBytes(bytes: Uint8Array): Course {
       if (flags & 1) a.reverse = true;
       if (flags & 2) a.wall = flags & 4 ? 'right' : 'left';
       return a;
+    });
+  }
+  if (flags & 32) {
+    course.start = { piece: r.uint(), offset: r.uint() };
+    if (r.uint() & 1) course.start.reverse = true;
+  }
+  if (flags & 64) {
+    course.timer = { piece: r.uint(), offset: r.uint(), side: 'left' };
+    const bits = r.uint();
+    if (bits & 1) course.timer.side = 'right';
+    if (bits & 2) course.timer.everyLane = true;
+  }
+  if (flags & 128) {
+    course.stoppers = Array.from({ length: r.uint() }, (): Stopper => {
+      const kind = r.uint();
+      if (kind === 0) {
+        const hose: Stopper = { kind: 'hose', color: r.uint(), points: [] };
+        if (r.uint() & 1) hose.closed = true;
+        hose.points = Array.from({ length: r.uint() }, (): [number, number] => [r.int(), r.int()]);
+        return hose;
+      }
+      if (kind !== 1) throw new Error('unknown stopper kind');
+      const box: Stopper = { kind: 'box', size: r.uint(), x: 0, z: 0, yaw: 0 };
+      if (r.uint() & 1) box.upright = true;
+      [box.x, box.z, box.yaw] = [r.int(), r.int(), r.tenths()];
+      return box;
     });
   }
   if (r.pos !== bytes.length) throw new Error('unexpected data after course');

@@ -9,7 +9,10 @@ import { ATTACHMENT_COLOR, halfWidth, insidePolygon, worldTracks } from '../cour
 import { colorRange, heightColor, type HeightView } from './levels';
 import { lowestFirst, outlinesOf, xz, type Outline } from './outline2d';
 import { snapSquare, TopCamera, TURN_STEP_DEG } from './top-camera';
-import { JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
+import { propAt } from '../course/props';
+import { hosePointAt, stopperBounds } from '../course/stoppers';
+import { drawPropSelection, drawStart, drawStoppers, drawTimer, HANDLE_RADIUS, type Painter } from './props2d';
+import { grabs, JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
 import { blink, drawClashMark, drawShortMark, type EditorView, type RunMarks } from './view';
 
 /**
@@ -39,6 +42,7 @@ export class TopView implements EditorView {
   private runMarks: RunMarks | null = null;
   private blinking = false;
   private clashes: readonly Clash[] = [];
+  private stoppersShown = true;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -85,6 +89,11 @@ export class TopView implements EditorView {
 
   setClashes(clashes: readonly Clash[]): void {
     this.clashes = clashes;
+    this.draw();
+  }
+
+  setStoppersShown(shown: boolean): void {
+    this.stoppersShown = shown;
     this.draw();
   }
 
@@ -144,8 +153,10 @@ export class TopView implements EditorView {
 
   /** Zoom and pan so the whole course fits. */
   fit(): void {
+    const floor = this.stoppersShown && this.layout ? stopperBounds(this.layout.stoppers) : null;
+    const corners: [number, number][] = floor ? [[floor[0], floor[2]], [floor[1], floor[3]]] : [];
     this.camera.fit(
-      this.outlines.flatMap((o) => o.polygon),
+      [...this.outlines.flatMap((o) => o.polygon), ...corners],
       200,
       this.canvas.clientWidth || 1,
       this.canvas.clientHeight || 1,
@@ -203,6 +214,9 @@ export class TopView implements EditorView {
       if (close) ctx.closePath();
     };
 
+    const painter: Painter = { ctx, toScreen: (x, z) => this.toScreen(x, z), scale: this.camera.scale };
+    // Hoses and boxes lie on the floor, under everything (#53).
+    if (this.stoppersShown) drawStoppers(painter, layout);
     const range = colorRange(this.topHeight);
     const drawnMarks = new Set<number>();
     for (const i of this.order) {
@@ -269,11 +283,16 @@ export class TopView implements EditorView {
           ctx.stroke();
           ctx.lineWidth = 1;
         }
+        // The start line on the road, under anything higher (#56).
+        if (layout.start?.piece === o.piece) drawStart(painter, layout);
       }
     }
+    // The timer stands high over its lane, so over the road round it.
+    if (layout.timer && this.shown(layout.timer.piece)) drawTimer(painter, layout);
 
     if (target) return;
     const sel = this.selection;
+    drawPropSelection(painter, layout, sel);
     if (sel?.kind === 'piece') {
       // The pieces joined to the selection move with it: outline them too.
       const group = layout.group[sel.index];
@@ -426,8 +445,29 @@ export class TopView implements EditorView {
       if (d < JOINT_HIT && (!joint || d < joint.d)) joint = { a: j.a, b: j.b, d };
     }
     if (joint) return { kind: 'joint', a: joint.a, b: joint.b };
+    const prop = this.propAt(sx, sy);
+    if (prop) return prop;
     const piece = this.pieceAt(sx, sy);
     return piece === null ? null : { kind: 'piece', index: piece };
+  }
+
+  /**
+   * The start line, timer or stopper under a screen point (#56, #53), or a
+   * point of the selected hose; hidden ones are left out.
+   */
+  private propAt(sx: number, sy: number): Selection {
+    const layout = this.layout;
+    if (!layout) return null;
+    const [x, z] = this.toWorld(sx, sy);
+    const mm = (px: number) => px / this.camera.scale;
+    const sel = this.selection;
+    const hose = sel?.kind === 'stopper' && this.stoppersShown ? layout.stoppers[sel.index] : undefined;
+    if (sel?.kind === 'stopper' && hose?.kind === 'hose') {
+      const point = hosePointAt(hose, x, z, mm(HANDLE_RADIUS + 4));
+      if (point !== null) return { kind: 'stopper', index: sel.index, point };
+    }
+    const hidden = (piece: number | undefined) => piece === undefined || !this.shown(piece);
+    return propAt(layout, x, z, mm(6), (r) => (r.kind === 'stopper' ? !this.stoppersShown : hidden(layout[r.kind]?.piece)));
   }
 
   /** The topmost piece under a screen point. */
@@ -456,9 +496,10 @@ export class TopView implements EditorView {
     } else if (this.pointers.size === 1) {
       this.dragged = false;
       this.downAt = p;
-      // Dragging the selected piece moves it; dragging anything else pans.
+      // Dragging the selection moves it; dragging anything else pans.
       const sel = this.selection;
-      this.moving = sel?.kind === 'piece' && this.pieceAt(p.x, p.y) === sel.index && this.handlers.onDragStart(sel.index);
+      const hit: Selection = sel?.kind === 'piece' ? (this.pieceAt(p.x, p.y) === sel.index ? sel : null) : this.propAt(p.x, p.y);
+      this.moving = !!hit && grabs(sel, hit) && this.handlers.onDragStart(hit);
     } else {
       if (this.moving) this.handlers.onDragEnd(false);
       this.moving = false;

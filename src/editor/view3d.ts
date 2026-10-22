@@ -5,8 +5,10 @@ import { portKey, sameJoint, type Layout, type PlacedPiece } from '../course/cou
 import { GLOBAL_SPEC } from '../course/catalog';
 import { supports } from '../course/height';
 import { buildCourseMeshes, buildSupportMesh, MM, pieceTracks, roadOutline } from '../course/mesh';
+import { buildPropMeshes } from '../course/props-mesh';
+import { HOSE_DIAMETER } from '../course/stoppers';
 import { ArMode } from './ar';
-import { JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
+import { grabs, JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
 import { blink, drawClashMark, drawShortMark, type EditorView, type RunMarks } from './view';
 
 const BACKGROUND = new THREE.Color(0x1b1d22);
@@ -25,6 +27,9 @@ export class OrbitView implements EditorView {
   /** Course in millimetres, scaled to metres. */
   private root = new THREE.Group();
   private pieces: THREE.Group[] = [];
+  /** The start line, timer and stoppers (#56, #53). */
+  private props: THREE.Group[] = [];
+  private stoppersShown = true;
   /** Stands under raised road, shown only (#11). */
   private supports: THREE.Mesh | null = null;
   private markers = new THREE.Group();
@@ -147,9 +152,9 @@ export class OrbitView implements EditorView {
     if (e.target !== this.renderer.domElement || this.renderer.xr.isPresenting) return;
     this.downAt = { x: e.clientX, y: e.clientY };
     const sel = this.selection;
-    if (sel?.kind !== 'piece' || !e.isPrimary || e.button !== 0) return;
-    const hit = this.raycaster(e).intersectObjects(this.pieces, true)[0];
-    if (!hit || pieceOf(hit.object) !== sel.index || !this.handlers.onDragStart(sel.index)) return;
+    if (!sel || !e.isPrimary || e.button !== 0) return;
+    const hit = this.hitAt(e);
+    if (!hit || !grabs(sel, hit.target) || !this.handlers.onDragStart(hit.target!)) return;
     e.stopPropagation();
     this.renderer.domElement.setPointerCapture(e.pointerId);
     this.moving = {
@@ -183,6 +188,18 @@ export class OrbitView implements EditorView {
       }
       this.supports = buildSupportMesh(supports(layout));
       this.root.add(this.supports);
+      for (const p of this.props) this.root.remove(p);
+      this.props = buildPropMeshes(layout);
+      for (const p of this.props) this.root.add(p);
+      this.showStoppers();
+    }
+    // The selected start line, timer or stopper glows as a piece does.
+    for (const g of this.props) {
+      const prop = g.userData.prop;
+      const on = prop.kind === selection?.kind && (prop.kind !== 'stopper' || (selection?.kind === 'stopper' && selection.index === prop.index));
+      g.traverse((o) => {
+        if (o instanceof THREE.Mesh) o.material = on ? highlighted(o.material, 2) : unhighlighted(o.material);
+      });
     }
     // The selected piece glows; the pieces joined to it (which move with it) glow faintly.
     const group = selection?.kind === 'piece' ? layout.group[selection.index] : -1;
@@ -212,6 +229,16 @@ export class OrbitView implements EditorView {
       m.userData.port = ref;
       this.markers.add(m);
     }
+    // A selected hose's points, to drag (#53).
+    const hose = selection?.kind === 'stopper' ? layout.stoppers[selection.index] : undefined;
+    if (selection?.kind === 'stopper' && hose?.kind === 'hose') {
+      hose.points.forEach(([x, z], point) => {
+        const m = new THREE.Mesh(HANDLE_GEOMETRY, point === selection.point ? MARKER_SELECTED : HANDLE);
+        m.position.set(x, HOSE_DIAMETER, z);
+        m.userData.handle = { kind: 'stopper', index: selection.index, point };
+        this.markers.add(m);
+      });
+    }
     for (const j of layout.joints) {
       const selected = selection?.kind === 'joint' && sameJoint(selection, j);
       const m = new THREE.Mesh(JOINT_GEOMETRY, selected ? MARKER_SELECTED : MARKER_JOINT);
@@ -219,6 +246,15 @@ export class OrbitView implements EditorView {
       m.userData.joint = { a: j.a, b: j.b };
       this.markers.add(m);
     }
+  }
+
+  setStoppersShown(shown: boolean): void {
+    this.stoppersShown = shown;
+    this.showStoppers();
+  }
+
+  private showStoppers(): void {
+    for (const g of this.props) if (g.userData.prop.kind === 'stopper') g.visible = this.stoppersShown;
   }
 
   setClashes(clashes: readonly Clash[]): void {
@@ -375,9 +411,21 @@ export class OrbitView implements EditorView {
     const marker = this.markerNear(e.clientX, e.clientY);
     if (marker?.userData.port) return this.handlers.onPick({ kind: 'port', ref: marker.userData.port });
     if (marker?.userData.joint) return this.handlers.onPick({ kind: 'joint', ...marker.userData.joint });
-    const hit = this.raycaster(e).intersectObjects(this.pieces, true)[0];
-    const piece = hit ? pieceOf(hit.object) : null;
-    this.handlers.onPick(piece === null ? null : { kind: 'piece', index: piece });
+    this.handlers.onPick(this.hitAt(e)?.target ?? null);
+  }
+
+  /**
+   * What is under a point on the page and where: a point of the selected
+   * hose, else the nearest piece, start line, timer or shown stopper.
+   */
+  private hitAt(e: { clientX: number; clientY: number }): { target: Selection; point: THREE.Vector3 } | null {
+    const ray = this.raycaster(e);
+    const handles = this.markers.children.filter((m) => m.userData.handle);
+    const handle = ray.intersectObjects(handles, false)[0];
+    if (handle) return { target: handle.object.userData.handle, point: handle.point };
+    const props = this.props.filter((g) => g.visible);
+    const hit = ray.intersectObjects([...this.pieces, ...props], true)[0];
+    return hit ? { target: targetOf(hit.object), point: hit.point } : null;
   }
 
   /**
@@ -417,6 +465,14 @@ function pieceOf(object: THREE.Object3D): number | null {
   let o: THREE.Object3D | null = object;
   while (o && o.userData.piece === undefined) o = o.parent;
   return o ? o.userData.piece : null;
+}
+
+/** The piece, start line, timer or stopper a mesh belongs to. */
+function targetOf(object: THREE.Object3D): Selection {
+  let o: THREE.Object3D | null = object;
+  while (o && o.userData.piece === undefined && !o.userData.prop) o = o.parent;
+  if (!o) return null;
+  return o.userData.prop ?? { kind: 'piece', index: o.userData.piece };
 }
 
 const OUTLINE_SOLID = new THREE.LineBasicMaterial({ color: 0x3fd0ff });
@@ -463,7 +519,11 @@ function clashMaterial(kind: Clash['kind']): () => THREE.SpriteMaterial {
 const CLASH_MATERIALS: Record<Clash['kind'], () => THREE.SpriteMaterial> = {
   interference: clashMaterial('interference'),
   clearance: clashMaterial('clearance'),
+  stopper: clashMaterial('stopper'),
 };
+/** A ball on each point of the selected hose, to drag. */
+const HANDLE_GEOMETRY = new THREE.SphereGeometry(18, 16, 12);
+const HANDLE = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x333333 });
 /** Height of a marker's middle above its port, mm, where picking aims. */
 const MARKER_PICK_HEIGHT = 10;
 /** A flat bar across the middle of a joint, standing just above the road. */
