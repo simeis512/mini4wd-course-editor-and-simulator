@@ -61,7 +61,19 @@ export function bindQr(host: QrHost): void {
   };
   size.addEventListener('change', describe);
 
+  /** Show the make or read tab; leaving the read tab stops the camera. */
+  const showTab = (read: boolean) => {
+    $('qr-tab-make').setAttribute('aria-selected', String(!read));
+    $('qr-tab-read').setAttribute('aria-selected', String(read));
+    $('qr-make').hidden = read;
+    $('qr-read').hidden = !read;
+    if (!read) scanner.stop();
+  };
+  $('qr-tab-make').addEventListener('click', () => showTab(false));
+  $('qr-tab-read').addEventListener('click', () => showTab(true));
+
   $('qr').addEventListener('click', async () => {
+    showTab(false);
     const url = await host.url();
     try {
       qr = makeQr(url);

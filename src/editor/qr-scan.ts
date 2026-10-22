@@ -54,10 +54,30 @@ export class QrScanner {
   constructor(private dialog: HTMLDialogElement) {
     const file = $<HTMLInputElement>('qr-image-file');
     $('qr-camera').addEventListener('click', () => (this.stream ? this.stop() : void this.startCamera()));
-    $('qr-image').addEventListener('click', () => file.click());
+    // The drop area is the file input's label: pressing it lets the browser
+    // offer the camera or a picture (no `capture`, so both are offered).
     file.addEventListener('change', () => {
       if (file.files?.[0]) void this.readImage(file.files[0]);
       file.value = '';
+    });
+    const drop = $('qr-drop');
+    drop.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        file.click();
+      }
+    });
+    drop.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      drop.classList.add('over');
+    });
+    drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      drop.classList.remove('over');
+      const image = [...(e.dataTransfer?.files ?? [])].find((f) => f.type.startsWith('image/'));
+      if (image) void this.readImage(image);
+      else toast('画像ファイルをドロップしてください');
     });
   }
 
@@ -116,7 +136,7 @@ export class QrScanner {
     this.stream = null;
     this.video.srcObject = null;
     this.video.hidden = true;
-    $('qr-camera').textContent = 'カメラで読む';
+    $('qr-camera').textContent = 'カメラ映像で読む';
   }
 
   /** Open the course in the text read, or say why not. */
