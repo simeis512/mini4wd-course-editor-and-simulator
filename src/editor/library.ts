@@ -86,6 +86,12 @@ export class Library {
     this.dirty = false;
   }
 
+  /** The name of the named save the course is, or the empty string. */
+  async savedName(): Promise<string> {
+    const save = this.savedId ? await getSave(this.savedId).catch(() => undefined) : undefined;
+    return save?.name ?? '';
+  }
+
   /** The course was edited: keep it a moment later. */
   changed(): void {
     this.dirty = true;

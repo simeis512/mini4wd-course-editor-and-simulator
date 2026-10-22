@@ -38,7 +38,7 @@ import { isZeroBend } from './flex';
 export const FORMAT_VERSION = 5;
 /** Older formats that still read. */
 const READABLE_VERSIONS = [1, 2, 3, 4, FORMAT_VERSION];
-const HASH_KEY = 'c';
+export const HASH_KEY = 'c';
 
 class Writer {
   bytes: number[] = [];

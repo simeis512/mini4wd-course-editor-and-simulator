@@ -49,7 +49,8 @@ import { buildPalette, placeContext, POSE_FIELDS, renderPanels, runMarks } from 
 import type { Selection } from './selection';
 import { bindAbout, showNoticeOnStart } from './notice';
 import { bindShopping } from './shopping';
-import { exportJson, HashSync, readCourseFile, readHash } from './share';
+import { bindQr } from './qr';
+import { exportJson, fileName, HashSync, readCourseFile, readHash } from './share';
 import type { EditorView } from './view';
 import { TopView } from './view2d';
 import { OrbitView } from './view3d';
@@ -429,6 +430,14 @@ export class EditorApp {
       }
     });
     $('copy-url').addEventListener('click', () => void this.hashSync.copyUrl());
+    const app = this;
+    bindQr({
+      url: () => this.hashSync.url(),
+      name: async () => app.course.name || (await this.library.savedName()),
+      get fileName() {
+        return fileName(app.course);
+      },
+    });
     $('export').addEventListener('click', () => exportJson(this.course));
     const file = $<HTMLInputElement>('import-file');
     $('import').addEventListener('click', () => file.click());

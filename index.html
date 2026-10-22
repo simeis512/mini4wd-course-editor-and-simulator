@@ -98,13 +98,17 @@
       dialog .actions label { margin-right: auto; display: flex; gap: 6px; align-items: center; }
       dialog .primary { background: #1f5f75; border-color: var(--accent); }
       dialog pre { max-height: 240px; overflow: auto; font-size: 11px; white-space: pre-wrap; background: #1b1d22; padding: 8px; border-radius: 6px; }
-      #save-name { flex: 1; min-width: 160px; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+      #save-name, #qr-caption { flex: 1; min-width: 160px; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
       #saves-list { list-style: none; padding: 0; margin: 10px 0 0; }
       #saves-list li { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
       #saves-list li.current { background: #1f5f7533; }
       #saves-list .link { min-height: 0; padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-weight: 600; text-decoration: underline dotted; text-align: left; }
       #saves-list .link:hover { background: none; color: var(--accent); }
       #saves-list .acts { margin-left: auto; display: flex; gap: 4px; }
+      #qr-canvas { display: block; width: min(100%, 360px); margin: 0 auto; image-rendering: pixelated; border-radius: 6px; }
+      #qr-info { text-align: center; }
+      #qr-video { display: block; width: 100%; max-height: 50vh; margin-top: 8px; border-radius: 6px; background: #000; }
+      #qr-video[hidden] { display: none; }
       #saves-list .small { min-height: 0; padding: 2px 8px; font-size: 12px; }
       #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #000c; padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 10; }
       #toast.show { opacity: 1; }
@@ -138,6 +142,7 @@
       <button id="save" title="このブラウザに保存 (Ctrl+S)">保存</button>
       <button id="saves" title="このブラウザに保存したコースの一覧">保存一覧</button>
       <button id="copy-url">URLをコピー</button>
+      <button id="qr" title="コースのQRコードを表示・保存／QRコードからコースを開く">QRコード</button>
       <button id="export">書き出し</button>
       <button id="import">読み込み</button>
       <input id="import-file" type="file" accept=".json,application/json" hidden />
@@ -323,11 +328,44 @@
         <li>このアプリ：MIT License（© 2026 コトン）</li>
         <li><a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a>：MIT License</li>
         <li><a href="https://rapier.rs/" target="_blank" rel="noopener">Rapier</a>（@dimforge/rapier3d-compat）：Apache License 2.0</li>
+        <li><a href="https://github.com/unjs/uqr" target="_blank" rel="noopener">uqr</a>（QRコードの作成）：MIT License</li>
+        <li><a href="https://github.com/cozmo/jsQR" target="_blank" rel="noopener">jsQR</a>（QRコードの読み取り）：Apache License 2.0</li>
       </ul>
       <details id="licence-texts">
         <summary>ライブラリのライセンス全文</summary>
         <pre></pre>
       </details>
+    </dialog>
+    <dialog id="qr-dialog" aria-labelledby="qr-title">
+      <form method="dialog"><button class="close" aria-label="閉じる">×</button></form>
+      <h2 id="qr-title">QRコード</h2>
+      <div id="qr-made">
+        <canvas id="qr-canvas" aria-label="このコースのURLのQRコード"></canvas>
+        <p id="qr-info" class="hint"></p>
+        <h3>画像で保存（印刷用）</h3>
+        <div class="row">
+          <label>印刷サイズ <select id="qr-size"></select></label>
+          <span id="qr-fit" class="muted"></span>
+        </div>
+        <div class="row">
+          <label for="qr-caption">下に添える文字</label>
+          <input id="qr-caption" type="text" maxlength="40" placeholder="空なら添えない" />
+        </div>
+        <p id="qr-warn" class="hint warn" hidden></p>
+        <div class="actions">
+          <button id="qr-png">PNGで保存</button>
+          <button id="qr-svg">SVGで保存</button>
+        </div>
+      </div>
+      <p id="qr-too-long" class="warn" hidden>コースが大きすぎて、URLがQRコードに入りません。「書き出し」でファイルにして渡してください。</p>
+      <h3>QRコードからコースを開く</h3>
+      <p class="hint">スマホの標準のカメラで読んでも、URLとしてそのまま開けます。</p>
+      <div class="actions">
+        <button id="qr-camera">カメラで読む</button>
+        <button id="qr-image">画像から読む</button>
+        <input id="qr-image-file" type="file" accept="image/*" hidden />
+      </div>
+      <video id="qr-video" playsinline muted hidden></video>
     </dialog>
     <div id="ar-overlay" hidden>
       <div id="ar-touch"></div>
