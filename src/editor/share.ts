@@ -24,24 +24,37 @@ export class HashSync {
     });
   }
 
-  async copyUrl(): Promise<void> {
+  /** The page URL once the latest course is written into it. */
+  async url(): Promise<string> {
     await this.hashWrite;
+    return location.href;
+  }
+
+  async copyUrl(): Promise<void> {
+    const url = await this.url();
     try {
-      await navigator.clipboard.writeText(location.href);
+      await navigator.clipboard.writeText(url);
       toast('URLをコピーしました');
     } catch {
-      prompt('このURLをコピーしてください', location.href);
+      prompt('このURLをコピーしてください', url);
     }
   }
 }
 
-export function exportJson(course: Course): void {
-  const blob = new Blob([JSON.stringify(course, null, 2)], { type: 'application/json' });
+/** The name files of `course` are saved under, before the extension. */
+export const fileName = (course: Course) => course.name || 'course';
+
+/** Save `blob` as a file called `name`. */
+export function download(blob: Blob, name: string): void {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `${course.name || 'course'}.json`;
+  a.download = name;
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+export function exportJson(course: Course): void {
+  download(new Blob([JSON.stringify(course, null, 2)], { type: 'application/json' }), `${fileName(course)}.json`);
 }
 
 /** The course in a file saved by `exportJson`; throws when it is not one. */

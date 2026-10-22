@@ -49,7 +49,8 @@ import { buildPalette, placeContext, POSE_FIELDS, renderPanels, runMarks } from 
 import type { Selection } from './selection';
 import { bindAbout, showNoticeOnStart } from './notice';
 import { bindShopping } from './shopping';
-import { exportJson, HashSync, readCourseFile, readHash } from './share';
+import { bindQr } from './qr';
+import { exportJson, fileName, HashSync, readCourseFile, readHash } from './share';
 import type { EditorView } from './view';
 import { TopView } from './view2d';
 import { OrbitView } from './view3d';
@@ -140,8 +141,9 @@ export class EditorApp {
     this.course = course;
     this.history.clear();
     this.selection = null;
-    this.library.replaced();
     this.refresh(writeUrl);
+    // After the refresh, which counts as an edit, so the new course starts unchanged.
+    this.library.replaced();
     this.top.fit();
     this.orbit.fit();
   }
@@ -205,7 +207,10 @@ export class EditorApp {
   private async onHashChange(): Promise<void> {
     if (this.hashSync.isOwn(location.hash)) return;
     const course = await readHash();
-    if (course !== undefined) this.load(course ?? emptyCourse(), false);
+    if (course === undefined) return;
+    // Staying: put the course being edited back in the URL.
+    if (await this.library.confirmReplace()) this.load(course ?? emptyCourse(), false);
+    else this.hashSync.write(this.course);
   }
 
   // ---- Commands
@@ -367,7 +372,9 @@ export class EditorApp {
 
   private async importJson(file: File): Promise<void> {
     try {
-      this.load(await readCourseFile(file), true);
+      const course = await readCourseFile(file);
+      if (!(await this.library.confirmReplace())) return;
+      this.load(course, true);
       toast('コースを読み込みました');
     } catch (e) {
       toast(`読み込めませんでした: ${(e as Error).message}`);
@@ -423,12 +430,18 @@ export class EditorApp {
     $('mode-3d').addEventListener('click', () => this.setMode('3d'));
     $('undo').addEventListener('click', () => this.undo());
     $('redo').addEventListener('click', () => this.redo());
-    $('new').addEventListener('click', () => {
-      if (this.course.pieces.length === 0 || confirm('今のコースを消して新しく作りますか？（URLを控えておけば元に戻せます）')) {
-        this.load(emptyCourse(), true);
-      }
+    $('new').addEventListener('click', async () => {
+      if (await this.library.confirmReplace('新しく作る')) this.load(emptyCourse(), true);
     });
     $('copy-url').addEventListener('click', () => void this.hashSync.copyUrl());
+    const app = this;
+    bindQr({
+      url: () => this.hashSync.url(),
+      name: async () => app.course.name || (await this.library.savedName()),
+      get fileName() {
+        return fileName(app.course);
+      },
+    });
     $('export').addEventListener('click', () => exportJson(this.course));
     const file = $<HTMLInputElement>('import-file');
     $('import').addEventListener('click', () => file.click());

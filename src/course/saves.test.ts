@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanName, defaultSaveName, offerResume, SAVE_NAME_MAX, sortSaves, uniqueName, type SavedCourse } from './saves';
+import { carriedOver, cleanName, defaultSaveName, offerResume, saveNameFor, SAVE_NAME_MAX, sortSaves, uniqueName, type SavedCourse } from './saves';
 
 const saved = (id: string, savedAt: number): SavedCourse => ({ id, name: id, data: '', savedAt, pieceCount: 1 });
 
@@ -40,5 +40,38 @@ describe('offering to resume', () => {
     expect(offerResume(undefined, false, 'fresh')).toBe(false);
     expect(offerResume({ ...left, pieceCount: 0 }, false, 'fresh')).toBe(false);
     expect(offerResume(left, false, 'x')).toBe(false);
+  });
+});
+
+describe('saveNameFor', () => {
+  const saves = [
+    { ...saved('a', 1), name: 'オーバル', data: 'X' },
+    { ...saved('b', 3), name: '練習', data: 'Y' },
+    { ...saved('c', 2), name: '練習', data: 'X' },
+  ];
+
+  it('takes the save the course is first', () => {
+    expect(saveNameFor(saves, 'a', 'Y')).toBe('オーバル');
+  });
+
+  it('else the newest save holding the same course', () => {
+    expect(saveNameFor(saves, null, 'X')).toBe('練習');
+    expect(saveNameFor(saves, 'gone', 'Z')).toBe('');
+  });
+
+});
+
+describe('carriedOver', () => {
+  const autosave = { data: 'X', savedAt: 1, pieceCount: 3, savedId: 'a', dirty: true };
+
+  it('keeps the save and its unsaved changes when the URL holds the course the last session left', () => {
+    expect(carriedOver(autosave, 'X')).toEqual({ savedId: 'a', dirty: true });
+    expect(carriedOver({ ...autosave, savedId: undefined }, 'X')).toEqual({ savedId: null, dirty: true });
+    expect(carriedOver({ ...autosave, dirty: undefined }, 'X')).toEqual({ savedId: 'a', dirty: false });
+  });
+
+  it('carries nothing for any other course', () => {
+    expect(carriedOver(autosave, 'Y')).toEqual({ savedId: null, dirty: false });
+    expect(carriedOver(undefined, 'X')).toEqual({ savedId: null, dirty: false });
   });
 });

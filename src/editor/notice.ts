@@ -44,11 +44,14 @@ export function showNoticeOnStart(): Promise<void> {
 /** Licence texts of the libraries in the app, loaded only when asked for (#70). */
 async function loadLicences(): Promise<string> {
   // By path: the packages' exports do not list their LICENSE files.
-  const [three, rapier] = await Promise.all([
+  const texts = await Promise.all([
     import('../../node_modules/three/LICENSE?raw'),
     import('../../node_modules/@dimforge/rapier3d-compat/LICENSE?raw'),
+    import('../../node_modules/uqr/LICENSE?raw'),
+    import('../../node_modules/jsqr/LICENSE?raw'),
   ]);
-  return `three.js\n\n${three.default}\n\n----\n\nRapier (@dimforge/rapier3d-compat)\n\n${rapier.default}`;
+  const names = ['three.js', 'Rapier (@dimforge/rapier3d-compat)', 'uqr', 'jsQR'];
+  return names.map((name, i) => `${name}\n\n${texts[i].default}`).join('\n\n----\n\n');
 }
 
 export function bindAbout(): void {

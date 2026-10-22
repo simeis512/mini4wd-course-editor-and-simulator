@@ -22,6 +22,8 @@ export interface Autosave {
   pieceCount: number;
   /** The named save it came from, so overwriting still goes there after a resume. */
   savedId?: string;
+  /** Whether it had changes not in a named save, so a reload still asks before they are lost. */
+  dirty?: boolean;
 }
 
 /** The longest name kept, in characters. */
@@ -62,4 +64,29 @@ export function sortSaves(saves: readonly SavedCourse[]): SavedCourse[] {
  */
 export function offerResume(autosave: Autosave | undefined, urlHasCourse: boolean, freshData: string): boolean {
   return !urlHasCourse && !!autosave && autosave.pieceCount > 0 && autosave.data !== freshData;
+}
+
+/**
+ * What a course opened from the URL carries over from the last session
+ * (#66, owner 2026-10-22): when the URL holds exactly the course that
+ * session left (as after a reload), the named save it belonged to and
+ * whether it had unsaved changes. A different course in the URL carries
+ * nothing, so it is never mistaken for that save. The whole encoded course
+ * is compared, not a hash of it: it is already kept with the autosave, and
+ * two courses can never look the same.
+ */
+export function carriedOver(autosave: Autosave | undefined, urlData: string): { savedId: string | null; dirty: boolean } {
+  if (!autosave || autosave.data !== urlData) return { savedId: null, dirty: false };
+  return { savedId: autosave.savedId ?? null, dirty: !!autosave.dirty };
+}
+
+/**
+ * The name of a course's save (to write under its QR code): the save it
+ * came from or was saved as (`savedId`), else the newest save holding
+ * exactly the same course (`data`, as `encodeCourse` writes it), as when it
+ * was opened from a shared URL. Empty when there is none.
+ */
+export function saveNameFor(saves: readonly SavedCourse[], savedId: string | null, data: string): string {
+  const sorted = sortSaves(saves);
+  return (sorted.find((s) => s.id === savedId) ?? sorted.find((s) => s.data === data))?.name ?? '';
 }
