@@ -1,23 +1,15 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { ARButton } from 'three/addons/webxr/ARButton.js';
 import type { Clash } from '../course/clash';
 import { portKey, sameJoint, type Layout, type PlacedPiece } from '../course/course';
 import { GLOBAL_SPEC } from '../course/catalog';
 import { supports } from '../course/height';
 import { buildCourseMeshes, buildSupportMesh, MM, pieceTracks, roadOutline } from '../course/mesh';
+import { ArMode } from './ar';
 import { JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
 import { blink, drawClashMark, drawShortMark, type EditorView, type RunMarks } from './view';
 
 const BACKGROUND = new THREE.Color(0x1b1d22);
-
-// Three uses a WebXR Layers projection layer whenever the browser offers one.
-// On Android Chrome that path left the AR camera feed black, so hide it and
-// let three fall back to the long-supported XRWebGLLayer, which composites
-// with alpha over the camera image.
-if (typeof XRWebGLBinding !== 'undefined' && 'createProjectionLayer' in XRWebGLBinding.prototype) {
-  delete (XRWebGLBinding.prototype as Partial<XRWebGLBinding>).createProjectionLayer;
-}
 
 /**
  * 3D orbit view of the course, with AR (WebXR) for viewing only. Dragging
@@ -44,7 +36,9 @@ export class OrbitView implements EditorView {
   /** A piece being dragged: the level plane it moves on and where it was grabbed (course mm). */
   private moving: { plane: THREE.Plane; from: THREE.Vector3; dragged: boolean } | null = null;
   private selection: Selection = null;
-  private arStatus: HTMLElement;
+  private ar: ArMode;
+  /** Puts the camera back where it was before AR. */
+  private restoreCamera: (() => void) | null = null;
   private runMarks: RunMarks | null = null;
   /** Materials of the pieces a raise would move, which blink. */
   private runMaterials = new Set<THREE.MeshStandardMaterial>();
@@ -85,37 +79,33 @@ export class OrbitView implements EditorView {
     this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
     this.controls.addEventListener('change', () => this.handlers.onViewChange?.());
 
-    // Our own DOM overlay for AR: an exit button and a status line, so
-    // problems on the phone are visible instead of a silent black screen.
-    const overlay = document.getElementById('ar-overlay')!;
-    this.arStatus = document.getElementById('ar-status')!;
-    const arButton = ARButton.createButton(renderer, {
-      optionalFeatures: ['dom-overlay'],
-      domOverlay: { root: overlay },
-    });
-    arButton.classList.add('ar-button');
-    container.appendChild(arButton);
-    document.getElementById('ar-exit')!.addEventListener('click', () => void renderer.xr.getSession()?.end());
-    renderer.xr.addEventListener('sessionstart', () => {
-      document.documentElement.classList.add('xr-presenting');
-      overlay.hidden = false;
-      const session = renderer.xr.getSession();
-      const layer = session?.renderState.layers?.length ? 'projection' : 'webgl';
-      this.arStatus.textContent = `AR表示中：コースは足元の少し前に置いています（${session?.environmentBlendMode ?? '?'} / ${layer}）`;
-      this.scene.background = null;
-      this.grid.visible = false;
-      this.controls.enabled = false;
-      this.placeForAr();
-    });
-    renderer.xr.addEventListener('sessionend', () => {
-      document.documentElement.classList.remove('xr-presenting');
-      overlay.hidden = true;
-      this.scene.background = BACKGROUND;
-      this.grid.visible = true;
-      this.controls.enabled = true;
-      this.root.position.set(0, 0, 0);
-      // Keep the loop matching the current view now the session is over.
-      this.setActive(this.active);
+    this.ar = new ArMode(renderer, container, this.root, this.scene, {
+      onStart: () => {
+        // AR moves the camera with the phone, so keep where it was for afterwards.
+        const before = this.camera.clone();
+        const target = this.controls.target.clone();
+        this.restoreCamera = () => {
+          this.camera.copy(before);
+          this.controls.target.copy(target);
+          this.camera.updateProjectionMatrix();
+          this.controls.update();
+        };
+        this.scene.background = null;
+        this.grid.visible = false;
+        this.controls.enabled = false;
+        // AR is for looking at the course only, so the editing marks stay in the 3D view.
+        this.markers.visible = this.outlines.visible = this.clashMarks.visible = false;
+      },
+      onEnd: () => {
+        this.scene.background = BACKGROUND;
+        this.grid.visible = true;
+        this.controls.enabled = true;
+        this.markers.visible = this.outlines.visible = this.clashMarks.visible = true;
+        this.restoreCamera?.();
+        this.restoreCamera = null;
+        // Keep the loop matching the current view now the session is over.
+        this.setActive(this.active);
+      },
     });
 
     const el = renderer.domElement;
@@ -150,17 +140,7 @@ export class OrbitView implements EditorView {
     this.resize();
     // Never stop the loop while an AR session is running.
     const run = active || this.renderer.xr.isPresenting;
-    this.renderer.setAnimationLoop(run ? () => this.render() : null);
-  }
-
-  /** Centre the course on the floor about 1.5 m in front of where AR started. */
-  private placeForAr(): void {
-    this.root.position.set(0, 0, 0);
-    this.root.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(this.root);
-    const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
-    // The 'local' space starts at the phone, so the floor is roughly 1.2 m below.
-    this.root.position.set(-centre.x, -1.2, -1.5 - centre.z);
+    this.renderer.setAnimationLoop(run ? (_, frame) => this.render(frame) : null);
   }
 
   private onDown(e: PointerEvent): void {
@@ -351,14 +331,15 @@ export class OrbitView implements EditorView {
     this.handlers.onViewChange?.();
   }
 
-  private render(): void {
+  private render(frame?: XRFrame): void {
     try {
-      if (!this.renderer.xr.isPresenting) this.controls.update();
+      if (this.renderer.xr.isPresenting) this.ar.onFrame(frame);
+      else this.controls.update();
       const glow = blink(performance.now());
       for (const m of this.runMaterials) m.emissiveIntensity = 0.3 + 1.2 * glow;
       this.renderer.render(this.scene, this.camera);
     } catch (e) {
-      this.arStatus.textContent = `描画エラー: ${(e as Error).message}`;
+      this.ar.status.textContent = `描画エラー: ${(e as Error).message}`;
       throw e;
     }
   }
