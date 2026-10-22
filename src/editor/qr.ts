@@ -42,6 +42,9 @@ export function bindQr(host: QrHost): void {
   const dialog = $<HTMLDialogElement>('qr-dialog');
   const size = $<HTMLSelectElement>('qr-size');
   const caption = $<HTMLInputElement>('qr-caption');
+  const captionOff = $<HTMLInputElement>('qr-caption-off');
+  /** The text written under the code: none while "名前を表示しない" is ticked. */
+  const captionText = () => (captionOff.checked ? '' : caption.value.trim());
   const style = $<HTMLSelectElement>('qr-style');
   size.innerHTML = PRINT_SIZES_MM.map((mm) => `<option value="${mm}">幅 ${mm / 10}cm</option>`).join('');
   size.value = String(DEFAULT_SIZE);
@@ -69,7 +72,7 @@ export function bindQr(host: QrHost): void {
   size.addEventListener('change', describe);
 
   /** The card as it would be saved now. */
-  const card = () => qrCard(qr!, style.value as CardStyle, caption.value.trim());
+  const card = () => qrCard(qr!, style.value as CardStyle, captionText());
   /** Redraw the card on screen: sharp on high-density screens, whole device pixels to a module. */
   const preview = () => {
     if (qr) draw($<HTMLCanvasElement>('qr-canvas'), card(), qr, Math.max(2, Math.ceil((360 * devicePixelRatio) / qr.size)));
@@ -83,6 +86,10 @@ export function bindQr(host: QrHost): void {
     preview();
   });
   caption.addEventListener('input', preview);
+  captionOff.addEventListener('change', () => {
+    caption.disabled = captionOff.checked;
+    preview();
+  });
 
   /** Show the make or read tab; leaving the read tab stops the camera. */
   const showTab = (read: boolean) => {
