@@ -51,6 +51,7 @@ import { bindAbout, showNoticeOnStart } from './notice';
 import { bindShopping } from './shopping';
 import { bindQr } from './qr';
 import { ShareImage } from './share-image';
+import { bindSidePanel } from './side-panel';
 import { bindTurnTools, renderTurnTools } from './turn-tools';
 import { exportJson, fileName, HashSync, readCourseFile, readHash } from './share';
 import type { EditorView } from './view';
@@ -466,6 +467,7 @@ export class EditorApp {
 
   private bindUi(): void {
     bindAbout();
+    bindSidePanel();
     bindLevelTools((view) => this.setHeightView(view));
     bindTurnTools(this.top);
     bindShopping(() => renderCourseInfo(this.course, this.layout, this.checks));

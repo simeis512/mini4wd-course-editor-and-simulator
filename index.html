@@ -49,6 +49,17 @@
       #panel h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 6px; }
       #panel h2:first-child { margin-top: 0; }
       #palette, #templates { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+      #panel { position: relative; }
+      #panel-fold { position: absolute; top: 6px; right: 8px; z-index: 1; min-height: 0; padding: 0 8px; border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1.2; }
+      #panel-fold .arrow { display: inline-block; }
+      #panel-fold .label { display: none; }
+      body.panel-folded #panel-fold .label { display: inline; }
+      /* Writing down the strip turns the glyph a quarter: a quarter more points it left. */
+      body.panel-folded #panel-fold .arrow { transform: rotate(90deg); }
+      body.panel-folded { grid-template-columns: 1fr 36px; }
+      body.panel-folded #panel { padding: 0; overflow: hidden; }
+      body.panel-folded #panel > :not(#panel-fold) { display: none; }
+      body.panel-folded #panel-fold { position: static; width: 100%; height: 100%; padding: 10px 0; writing-mode: vertical-rl; font-size: 14px; display: flex; align-items: center; justify-content: flex-start; gap: 6px; }
       #palette button, #templates button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; font-size: 12px; line-height: 1.3; text-align: center; touch-action: none; user-select: none; -webkit-user-select: none; }
       #palette button.dim, #templates button.dim { opacity: 0.55; }
       #palette .part-icon, #templates .part-icon { width: 100%; max-width: 64px; aspect-ratio: 1; pointer-events: none; }
@@ -159,6 +170,10 @@
       @media (max-width: 720px) {
         body { grid-template-columns: 1fr; grid-template-rows: auto 1fr minmax(0, 38vh); grid-template-areas: 'bar' 'stage' 'panel'; }
         #panel { border-left: 0; border-top: 1px solid var(--line); }
+        body.panel-folded { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+        body.panel-folded #panel-fold { writing-mode: horizontal-tb; height: auto; padding: 6px 0; align-items: center; gap: 6px; }
+        #panel-fold .arrow { transform: rotate(90deg); }
+        body.panel-folded #panel-fold .arrow { transform: rotate(-90deg); }
         #toolbar h1 { display: none; }
       }
     </style>
@@ -364,6 +379,7 @@
       </details>
     </main>
     <aside id="panel">
+      <button id="panel-fold" aria-controls="panel" aria-expanded="true" aria-label="パーツ一覧を畳む・開く"><span class="arrow">›</span><span class="label">パーツ</span></button>
       <div id="palette-section">
         <h2>パーツ</h2>
         <div id="palette"></div>
