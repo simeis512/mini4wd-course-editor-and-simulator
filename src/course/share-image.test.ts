@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { layoutCourse } from './course';
+import { emptyCourse, layoutCourse } from './course';
+import { addStopper, newStopper } from './stoppers';
 import { checkLaps } from './laps';
 import { basicOval } from './presets';
-import { courseExtent, frameIn, shareFacts, shareLayout, SHARE_ASPECTS } from './share-image';
+import { courseExtent, floorExtent, frameIn, shareFacts, shareLayout, SHARE_ASPECTS } from './share-image';
 
 describe('shareLayout', () => {
   it.each(SHARE_ASPECTS.map((a) => a.id))('fills the %s picture with the course and the facts band, without overlap', (aspect) => {
@@ -31,6 +32,17 @@ describe('courseExtent and shareFacts', () => {
     const { x, z } = courseExtent(layout);
     expect(Math.min(x, z)).toBeCloseTo(1445, 0);
     expect(Math.max(x, z)).toBeCloseTo(3065, 0);
+  });
+
+  it('takes in the hoses and boxes round the course for the floor it needs (#53)', () => {
+    expect(floorExtent(layout)).toEqual(courseExtent(layout));
+    const { x, z } = courseExtent(layout);
+    // A box well off to the side, as wide as the course is long either way.
+    const boxed = layoutCourse(addStopper(basicOval(), { kind: 'box', size: 0, x: 3000, z: 0, yaw: 0 }));
+    expect(floorExtent(boxed).x).toBeGreaterThan(x);
+    expect(floorExtent(boxed).z).toBeCloseTo(z);
+    const loop = floorExtent(layoutCourse(addStopper(emptyCourse(), newStopper('hose', 0, 0))));
+    expect(loop.x).toBeCloseTo(400 + 15, 0);
   });
 
   it('gives the full run of the basic oval as about 20 m', () => {

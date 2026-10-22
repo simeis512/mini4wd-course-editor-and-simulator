@@ -1,5 +1,6 @@
 import { Matrix4, Vector3 } from 'three';
 import { withoutPiece } from './attachments';
+import { timingWithoutPiece } from './timing';
 import { getPart, GLOBAL_SPEC, lengthWithin, partOf } from './catalog';
 import {
   anchorFrame,
@@ -135,6 +136,9 @@ export function deletePiece(course: Course, index: number): Course {
     next.attachments = withoutPiece(course.attachments, index);
     if (!next.attachments.length) delete next.attachments;
   }
+  delete next.start;
+  delete next.timer;
+  Object.assign(next, timingWithoutPiece(course, index));
   return tidyCuts(next);
 }
 

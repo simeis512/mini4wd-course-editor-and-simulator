@@ -66,6 +66,60 @@ export interface Attachment {
   wall?: 'left' | 'right';
 }
 
+/**
+ * The start line (#56): START stickers across every lane of a piece's main
+ * road, `offset` mm along its centreline. One per course.
+ */
+export interface StartLine {
+  piece: number;
+  /** From the start of the main centreline, mm. */
+  offset: number;
+  /** Machines set off towards the start of the centreline instead of its end. */
+  reverse?: boolean;
+}
+
+/**
+ * Tamiya's lap timer (15184, #56): its body stands outside a piece's outer
+ * fence and its top reaches over the lane next to it, `offset` mm along the
+ * main centreline.
+ */
+export interface LapTimer {
+  piece: number;
+  offset: number;
+  /** The fence it stands by, looking along the centreline; it covers the lane on that side. */
+  side: 'left' | 'right';
+  /** Time every lane as it crosses the line, not only the covered one as the real timer does (#56 決定事項). */
+  everyLane?: boolean;
+}
+
+/** A garden hose laid on the floor to stop machines that fly off (#53): a curve through its points. */
+export interface Hose {
+  kind: 'hose';
+  /** Points on the floor (X, Z mm) the hose runs through, in order. */
+  points: [number, number][];
+  /** Laid as a loop, back to its first point. */
+  closed?: boolean;
+  /** Index into HOSE_COLORS (stoppers.ts). */
+  color: number;
+}
+
+/** A cardboard box on the floor that catches machines (#53). */
+export interface CatchBox {
+  kind: 'box';
+  /** Index into BOX_SIZES (stoppers.ts). */
+  size: number;
+  /** Middle of where it stands on the floor, mm. */
+  x: number;
+  z: number;
+  /** Turn about the vertical, deg; at 0 the open side faces +Z. */
+  yaw: number;
+  /** Standing open side up; by default it lies on its side, open towards the course (#53 決定事項). */
+  upright?: boolean;
+}
+
+/** Something laid on the floor around the course to stop machines that come off it (#53). */
+export type Stopper = Hose | CatchBox;
+
 export interface Course {
   v: 1;
   catalog: number;
@@ -84,6 +138,10 @@ export interface Course {
   intended?: [piece: number, port: number][];
   /** Washboards and the like on the road (spec 4). */
   attachments?: Attachment[];
+  start?: StartLine;
+  timer?: LapTimer;
+  /** Hoses and boxes on the floor (#53). */
+  stoppers?: Stopper[];
 }
 
 export function emptyCourse(): Course {
@@ -164,6 +222,10 @@ export interface Layout {
   deadEnds: DeadEnd[];
   /** The course's attachments, as stored (spec 4). */
   attachments: Attachment[];
+  /** The start line, lap timer and floor stoppers, as stored (#56, #53). */
+  start: StartLine | null;
+  timer: LapTimer | null;
+  stoppers: Stopper[];
 }
 
 /**
@@ -219,6 +281,19 @@ export function validateCourse(course: Course): void {
     if (!rec || !partOf(rec).lanes.includes(a.lane)) throw new Error(`${a.kind} on missing lane ${a.piece}:${a.lane}`);
     if (!(a.offset >= 0) || !Number.isFinite(a.side)) throw new Error(`${a.kind} at ${a.offset}mm, ${a.side}mm across`);
     if (a.wall !== undefined && a.wall !== 'left' && a.wall !== 'right') throw new Error(`${a.kind} on wall ${a.wall}`);
+  }
+  for (const [what, at] of [['start', course.start], ['timer', course.timer]] as const) {
+    if (!at) continue;
+    const rec = course.pieces[at.piece];
+    if (!rec || !partOf(rec).lanes.length || !(at.offset >= 0)) throw new Error(`${what} on missing road ${at.piece} at ${at.offset}mm`);
+  }
+  if (course.timer && course.timer.side !== 'left' && course.timer.side !== 'right') throw new Error(`timer by ${course.timer.side}`);
+  for (const s of course.stoppers ?? []) {
+    const ok =
+      s.kind === 'hose'
+        ? s.points.length >= 2 && s.points.flat().every(Number.isFinite) && Number.isInteger(s.color) && s.color >= 0
+        : s.kind === 'box' && [s.x, s.z, s.yaw].every(Number.isFinite) && Number.isInteger(s.size) && s.size >= 0;
+    if (!ok) throw new Error(`bad stopper ${JSON.stringify(s)}`);
   }
   for (const [what, marks] of [['split', course.cuts], ['open', course.intended]] as const) {
     for (const [piece, port] of marks ?? []) {
@@ -382,7 +457,8 @@ export function layoutCourse(course: Course): Layout {
     }
   }
   const attachments = course.attachments ?? [];
-  return { pieces, problems, connected, closures, open, joints, group, split, intended, deadEnds, attachments };
+  const [start, timer, stoppers] = [course.start ?? null, course.timer ?? null, course.stoppers ?? []];
+  return { pieces, problems, connected, closures, open, joints, group, split, intended, deadEnds, attachments, start, timer, stoppers };
 }
 
 /** The frame a piece's anchoring port faces, in world space. */
