@@ -19,7 +19,7 @@ interface BarcodeDetectorClass {
   getSupportedFormats(): Promise<string[]>;
 }
 
-/** A mouse or trackpad device, where `capture` does nothing and there is no gallery. */
+/** A mouse or trackpad device, where there is no gallery to pick from. */
 const FINE_POINTER = '(hover: hover) and (pointer: fine)';
 /** Time between looks at the camera picture. */
 const SCAN_INTERVAL_MS = 200;
@@ -52,27 +52,26 @@ export class QrScanner {
   private stream: MediaStream | null = null;
   private timer = 0;
   private video = $<HTMLVideoElement>('qr-video');
+  private sheet = $<HTMLDialogElement>('qr-sheet');
 
   constructor(private dialog: HTMLDialogElement) {
     const gallery = $<HTMLInputElement>('qr-image-file');
-    const photo = $<HTMLInputElement>('qr-photo-file');
-    $('qr-camera').addEventListener('click', () => (this.stream ? this.stop() : void this.startCamera()));
-    for (const input of [gallery, photo]) {
-      input.addEventListener('change', () => {
-        if (input.files?.[0]) void this.readImage(input.files[0]);
-        input.value = '';
-      });
-    }
+    gallery.addEventListener('change', () => {
+      if (gallery.files?.[0]) void this.readImage(gallery.files[0]);
+      gallery.value = '';
+    });
     // Pressing the drop area: on a phone or tablet, our own sheet offers the
-    // camera (`capture` starts it at once) or the gallery (an images-only
-    // input opens the photo picker); a PC goes straight to its file picker.
-    const sheet = $<HTMLDialogElement>('qr-sheet');
-    const pick = (input: HTMLInputElement) => {
+    // camera, read live in the sheet as soon as a code is in sight (owner
+    // 2026-10-22: taking a photo first was clumsy), or the gallery (an
+    // images-only input opens the photo picker); a PC goes straight to its
+    // file picker.
+    const sheet = this.sheet;
+    $('qr-sheet-camera').addEventListener('click', () => void this.startCamera());
+    $('qr-sheet-gallery').addEventListener('click', () => {
       sheet.close();
-      input.click();
-    };
-    $('qr-sheet-camera').addEventListener('click', () => pick(photo));
-    $('qr-sheet-gallery').addEventListener('click', () => pick(gallery));
+      gallery.click();
+    });
+    sheet.addEventListener('close', () => this.stop());
     const choose = () => (matchMedia(FINE_POINTER).matches ? gallery.click() : sheet.showModal());
     const drop = $('qr-drop');
     drop.addEventListener('click', choose);
@@ -122,25 +121,30 @@ export class QrScanner {
   }
 
   private async startCamera(): Promise<void> {
+    // Open the picture's place at once; the camera fills it when it starts.
+    this.live(true);
     try {
       const [detect, stream] = await Promise.all([
         this.detector(),
         navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }),
       ]);
-      if (!this.dialog.open) {
+      if (!this.sheet.open) {
         stream.getTracks().forEach((t) => t.stop());
         return;
       }
       this.stream = stream;
       this.video.srcObject = stream;
-      this.video.hidden = false;
-      $('qr-camera').textContent = 'カメラを止める';
       await this.video.play();
+      // A code that is not a course is said once, and the camera goes on looking.
+      let refused: string | null = null;
       const look = async () => {
         if (!this.stream) return;
         const text = await detect(this.video).catch(() => null);
-        if (text !== null && this.stream) await this.open(text);
-        else if (this.stream) this.timer = window.setTimeout(look, SCAN_INTERVAL_MS);
+        if (text !== null && text !== refused && this.stream) {
+          if (await this.open(text)) return;
+          refused = text;
+        }
+        if (this.stream) this.timer = window.setTimeout(look, SCAN_INTERVAL_MS);
       };
       void look();
     } catch (e) {
@@ -154,30 +158,37 @@ export class QrScanner {
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
     this.video.srcObject = null;
-    this.video.hidden = true;
-    $('qr-camera').textContent = 'カメラ映像で読む';
+    this.live(false);
   }
 
-  /** Open the course in the text read, or say why not. */
-  private async open(text: string): Promise<void> {
-    this.stop();
+  /** Show the camera picture in the sheet in place of the camera button, or put the button back. */
+  private live(on: boolean): void {
+    $('qr-live').hidden = !on;
+    $('qr-sheet-camera').hidden = on;
+  }
+
+  /** Open the course in the text read, or say why not; resolves to whether it opened. */
+  private async open(text: string): Promise<boolean> {
     // Only the course is taken from the URL, whatever its host, and it must
     // decode to a valid course before it is opened.
     const value = courseValueOf(text);
     if (!value) {
       toast('コースのQRコードではありません');
-      return;
+      return false;
     }
     try {
       await decodeCourse(value);
     } catch (e) {
       toast(`QRコードのコースを読み込めませんでした: ${(e as Error).message}`);
-      return;
+      return false;
     }
+    // Closing the sheet stops the camera.
+    this.sheet.close();
     this.dialog.close();
     const hash = `#${HASH_KEY}=${value}`;
     if (hash === location.hash) toast('このコースはもう開いています');
     // The page's hash change opens it, as a shared URL would.
     else location.hash = hash;
+    return true;
   }
 }
