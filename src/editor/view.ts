@@ -35,6 +35,8 @@ export interface EditorView {
   floorAt(clientX: number, clientY: number): [number, number] | null;
   /** Point on the page over the world point (mm), or null when it cannot be seen. */
   clientOf(x: number, y: number, z: number): [number, number] | null;
+  /** The course as it is in view now, without selection or marks, `width` × `height` pixels (the view's shape) (#75). */
+  snapshot(width: number, height: number): HTMLCanvasElement;
 }
 
 /**

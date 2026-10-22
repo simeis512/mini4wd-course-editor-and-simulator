@@ -50,6 +50,8 @@ import type { Selection } from './selection';
 import { bindAbout, showNoticeOnStart } from './notice';
 import { bindShopping } from './shopping';
 import { bindQr } from './qr';
+import { ShareImage } from './share-image';
+import { bindTurnTools, renderTurnTools } from './turn-tools';
 import { exportJson, fileName, HashSync, readCourseFile, readHash } from './share';
 import type { EditorView } from './view';
 import { TopView } from './view2d';
@@ -70,6 +72,7 @@ export class EditorApp {
   private top: TopView;
   private orbit: OrbitView;
   private hashSync = new HashSync();
+  private share: ShareImage | undefined;
   private paletteDrag: PaletteDrag;
   private pieceDrag: PieceDrag;
   private library: Library;
@@ -109,7 +112,11 @@ export class EditorApp {
     });
     const handlers = {
       onPick: (s: Selection) => this.select(s),
-      onViewChange: () => this.placeContext(),
+      onViewChange: () => {
+        this.placeContext();
+        if (this.top) renderTurnTools(this.top);
+        this.share?.later();
+      },
       onDragStart: (index: number) => this.pieceDrag.start(index),
       onDragMove: (dx: number, dz: number, noSnap: boolean) => this.pieceDrag.move(dx, dz, noSnap),
       onDragEnd: (commit: boolean) => this.pieceDrag.end(commit),
@@ -198,6 +205,7 @@ export class EditorApp {
     }
     this.setHeightView(this.heightView);
     this.renderPanel();
+    this.share?.later();
     if (writeUrl) {
       this.hashSync.write(this.course);
       this.library.changed();
@@ -390,6 +398,7 @@ export class EditorApp {
     $('height-tools').hidden = mode !== '2d';
     this.orbit.setActive(mode === '3d');
     if (mode === '2d') this.top.draw();
+    this.share?.later();
   }
 
   /** The view on show. */
@@ -415,6 +424,7 @@ export class EditorApp {
   private bindUi(): void {
     bindAbout();
     bindLevelTools((view) => this.setHeightView(view));
+    bindTurnTools(this.top);
     bindShopping(() => renderCourseInfo(this.course, this.layout, this.checks));
     bindCourseInfo({
       pick: (t) => this.select(this.selectionOf(t)),
@@ -437,7 +447,23 @@ export class EditorApp {
     const app = this;
     bindQr({
       url: () => this.hashSync.url(),
-      name: async () => app.course.name || (await this.library.savedName()),
+      name: () => this.courseTitle(),
+      get fileName() {
+        return fileName(app.course);
+      },
+    });
+    this.share = new ShareImage({
+      get view() {
+        return app.view;
+      },
+      get layout() {
+        return app.layout;
+      },
+      get laps() {
+        return app.checks.laps;
+      },
+      name: () => this.courseTitle(),
+      url: () => this.hashSync.url(),
       get fileName() {
         return fileName(app.course);
       },
@@ -520,6 +546,11 @@ export class EditorApp {
         this.select(null);
       }
     });
+  }
+
+  /** The course's name to write on its pictures: its own, or the name it was saved under. */
+  private async courseTitle(): Promise<string> {
+    return this.course.name || (await this.library.savedName());
   }
 
   private renderPanel(): void {
