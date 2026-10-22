@@ -39,7 +39,7 @@ export class ArDepth {
   /** Whether the coloured depth view is wanted (while aiming). */
   viewWanted = true;
   /** Whether the course hides behind real things. */
-  occlusionWanted = true;
+  occlusionWanted = false;
 
   constructor(scene: THREE.Scene) {
     this.view = fullScreen(viewMaterial(this.uniforms));
