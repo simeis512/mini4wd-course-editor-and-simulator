@@ -53,11 +53,11 @@ export function drawStoppers(p: Painter, layout: Layout): void {
     ctx.strokeStyle = 'rgba(0,0,0,0.5)';
     ctx.lineWidth = 1;
     ctx.stroke();
-    // The open side, which faces the course.
+    // The open side, which faces the course, in the light inside of the cardboard.
     if (open) {
       path(p, open, false);
-      ctx.strokeStyle = '#2a1e10';
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#ffe3b0';
+      ctx.lineWidth = 4;
       ctx.stroke();
     }
   }

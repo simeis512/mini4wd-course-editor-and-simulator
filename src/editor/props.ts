@@ -194,6 +194,6 @@ export function renderPropPanel(layout: Layout, s: Selection): void {
     $('prop-name').textContent = '段ボール箱';
     field('box-size', String(stopper.size));
     field('box-way', stopper.upright ? 'up' : 'side');
-    $('prop-hint').textContent = '飛び出したマシンを受け止める箱です。横倒しでは、太線の側が開いた口です。大きさは仮の値です。';
+    $('prop-hint').textContent = '飛び出したマシンを受け止める箱です。横倒しでは、2D の明るい線の側が開いた口です。大きさは仮の値です。';
   }
 }
