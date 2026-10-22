@@ -1,6 +1,6 @@
 import { decodeCourse, encodeCourse } from '../course/codec';
 import type { Course } from '../course/course';
-import { cleanName, defaultSaveName, offerResume, sortSaves, type SavedCourse } from '../course/saves';
+import { cleanName, defaultSaveName, namesFor, offerResume, sortSaves, type SavedCourse } from '../course/saves';
 import { $, toast } from './dom';
 import { deleteSave, getSave, listSaves, putSave, readAutosave, writeAutosave } from './store';
 
@@ -86,10 +86,14 @@ export class Library {
     this.dirty = false;
   }
 
-  /** The name of the named save the course is, or the empty string. */
-  async savedName(): Promise<string> {
-    const save = this.savedId ? await getSave(this.savedId).catch(() => undefined) : undefined;
-    return save?.name ?? '';
+  /** Names of the saves to offer for the course, the one it is (or matches) first. */
+  async names(): Promise<{ current: string; names: string[] }> {
+    try {
+      return namesFor(await listSaves(), this.savedId, await encodeCourse(this.host.course));
+    } catch {
+      // Storage blocked: nothing saved to offer.
+      return { current: '', names: [] };
+    }
   }
 
   /** The course was edited: keep it a moment later. */

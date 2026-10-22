@@ -63,3 +63,15 @@ export function sortSaves(saves: readonly SavedCourse[]): SavedCourse[] {
 export function offerResume(autosave: Autosave | undefined, urlHasCourse: boolean, freshData: string): boolean {
   return !urlHasCourse && !!autosave && autosave.pieceCount > 0 && autosave.data !== freshData;
 }
+
+/**
+ * The names to offer for a course (to write under its QR code): the save it
+ * came from or was saved as (`savedId`) first, else the newest save holding
+ * exactly the same course (`data`, as `encodeCourse` writes it), as when it
+ * was opened from a URL; then every other name, newest first.
+ */
+export function namesFor(saves: readonly SavedCourse[], savedId: string | null, data: string): { current: string; names: string[] } {
+  const sorted = sortSaves(saves);
+  const current = sorted.find((s) => s.id === savedId) ?? sorted.find((s) => s.data === data);
+  return { current: current?.name ?? '', names: [...new Set(sorted.map((s) => s.name))] };
+}

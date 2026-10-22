@@ -9,8 +9,11 @@ import { download } from './share';
 export interface QrHost {
   /** The page URL holding the latest course. */
   url(): Promise<string>;
-  /** The course name, offered to write under a saved code. */
-  name(): Promise<string>;
+  /**
+   * Names offered to write under the code: the course's own (its name, or
+   * the save it is or matches) and every saved course's.
+   */
+  names(): Promise<{ current: string; names: string[] }>;
   /** Names saved files when nothing is written under the code. */
   readonly fileName: string;
 }
@@ -83,6 +86,12 @@ export function bindQr(host: QrHost): void {
     preview();
   });
   caption.addEventListener('input', preview);
+  const pick = $<HTMLSelectElement>('qr-caption-pick');
+  pick.addEventListener('change', () => {
+    if (pick.value) caption.value = pick.value;
+    pick.value = '';
+    preview();
+  });
 
   /** Show the make or read tab; leaving the read tab stops the camera. */
   const showTab = (read: boolean) => {
@@ -107,7 +116,10 @@ export function bindQr(host: QrHost): void {
     $('qr-too-long').hidden = !!qr;
     if (qr) {
       $('qr-info').textContent = `URL ${url.length} 文字・QRバージョン ${qr.version}（${qr.size}×${qr.size} マス）`;
-      caption.value = await host.name();
+      const { current, names } = await host.names();
+      caption.value = current;
+      pick.hidden = names.length === 0;
+      pick.replaceChildren(new Option('保存した名前…', ''), ...names.map((n) => new Option(n, n)));
       preview();
       describe();
     }
