@@ -120,8 +120,21 @@
       .sheet-item span { font-size: 22px; }
       .sheet-cancel { justify-content: center; margin-top: 6px; background: #30343d; }
       #qr-drop:hover, #qr-drop:focus-visible, #qr-drop.over { border-color: var(--accent); background: #1f5f7522; outline: none; }
-      #qr-video { display: block; width: 100%; max-height: 50vh; margin-top: 8px; border-radius: 6px; background: #000; }
-      #qr-video[hidden] { display: none; }
+      .sheet-item .viewfinder { flex: none; width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+      .sheet-item .viewfinder .beam { stroke: var(--accent); animation: beam 1.6s ease-in-out infinite alternate; }
+      @keyframes beam { from { transform: translateY(-5px); } to { transform: translateY(5px); } }
+      .sheet-label { display: flex; flex-direction: column; font-size: 16px; }
+      .sheet-label small { color: var(--muted); font-size: 12px; }
+      /* The camera picture wipes open inside the sheet, top to bottom, pushing the sheet up as it grows. */
+      #qr-live { position: relative; overflow: hidden; margin: 4px 0 6px; border-radius: 12px; background: #000; aspect-ratio: 1; max-height: 60vh; width: 100%; }
+      #qr-live:not([hidden]) { animation: wipe-open 0.4s ease-out; }
+      @keyframes wipe-open { from { max-height: 0; } to { max-height: 60vh; } }
+      #qr-live video { width: 100%; height: 100%; object-fit: cover; display: block; }
+      #qr-live .frame { position: absolute; inset: 15%; border-radius: 10px; box-shadow: 0 0 0 100vmax #0007; outline: 3px solid #fff; }
+      #qr-live .beam { position: absolute; left: 6%; right: 6%; height: 2px; background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: sweep 1.8s ease-in-out infinite alternate; }
+      @keyframes sweep { from { top: 6%; } to { top: 94%; } }
+      #qr-live p { position: absolute; left: 0; right: 0; bottom: 4%; margin: 0; text-align: center; color: #fff; font-size: 13px; text-shadow: 0 1px 3px #000; }
+      @media (prefers-reduced-motion: reduce) { #qr-live:not([hidden]), #qr-live .beam, .sheet-item .viewfinder .beam { animation: none; } }
       #saves-list .small { min-height: 0; padding: 2px 8px; font-size: 12px; }
       #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #000c; padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 10; }
       #toast.show { opacity: 1; }
@@ -399,19 +412,22 @@
       <div id="qr-read" role="tabpanel" aria-labelledby="qr-tab-read" hidden>
         <div id="qr-drop" role="button" tabindex="0">
           <strong>QRコードの画像をここにドロップ</strong>
-          <span>または押して、カメラで撮るか画像を選ぶ</span>
+          <span>または押して、カメラで読み取るか画像を選ぶ</span>
         </div>
         <input id="qr-image-file" type="file" accept="image/*" hidden />
-        <input id="qr-photo-file" type="file" accept="image/*" capture="environment" hidden />
         <p class="hint">スマホの標準のカメラで読んでも、URLとしてそのまま開けます。</p>
-        <div class="actions">
-          <button id="qr-camera" title="カメラの映像を映したまま読み取る（PCのカメラなど）">カメラ映像で読む</button>
-        </div>
-        <video id="qr-video" playsinline muted hidden></video>
       </div>
     </dialog>
-    <dialog id="qr-sheet" class="sheet" aria-label="QRコードの画像を読む">
-      <button id="qr-sheet-camera" class="sheet-item"><span aria-hidden="true">📷</span>カメラで撮る</button>
+    <dialog id="qr-sheet" class="sheet" aria-label="QRコードを読む">
+      <button id="qr-sheet-camera" class="sheet-item">
+        <svg class="viewfinder" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8V4h4M17 4h4v4M21 16v4h-4M7 20H3v-4" /><path class="beam" d="M5 12h14" /></svg>
+        <span class="sheet-label">カメラで読み取る<small>QRコードにかざすだけで開きます</small></span>
+      </button>
+      <div id="qr-live" hidden>
+        <video id="qr-video" playsinline muted></video>
+        <div class="frame" aria-hidden="true"><i class="beam"></i></div>
+        <p>QRコードを枠の中に映してください</p>
+      </div>
       <button id="qr-sheet-gallery" class="sheet-item"><span aria-hidden="true">🖼️</span>ギャラリーから選ぶ</button>
       <form method="dialog"><button class="sheet-cancel">キャンセル</button></form>
     </dialog>
