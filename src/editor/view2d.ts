@@ -8,14 +8,14 @@ import { attachmentOutline } from '../course/attachments';
 import { ATTACHMENT_COLOR, halfWidth, insidePolygon, worldTracks } from '../course/mesh';
 import { colorRange, heightColor, type HeightView } from './levels';
 import { lowestFirst, outlinesOf, xz, type Outline } from './outline2d';
-import { TopCamera } from './top-camera';
+import { snapSquare, TopCamera, TURN_STEP_DEG } from './top-camera';
 import { JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
 import { blink, drawClashMark, drawShortMark, type EditorView, type RunMarks } from './view';
 
 /**
  * Top-down 2D editor view drawn on a canvas. Pointer Events only, so mouse,
  * pen and touch behave the same: tap to select, drag to pan, wheel or pinch
- * to zoom.
+ * to zoom, twist with two fingers or drag with the right mouse button to turn.
  */
 export class TopView implements EditorView {
   private ctx: CanvasRenderingContext2D;
@@ -31,7 +31,9 @@ export class TopView implements EditorView {
   private pointers = new Map<number, { x: number; y: number }>();
   private dragged = false;
   private downAt = { x: 0, y: 0 };
-  private pinch: { dist: number; scale: number } | null = null;
+  private pinch: { dist: number; scale: number; twist: number; angle: number } | null = null;
+  /** A right-button drag turning the view: where it started round the middle, and the turn then. */
+  private turning: { from: number; angle: number } | null = null;
   /** A piece is being dragged instead of the view being panned. */
   private moving = false;
   private runMarks: RunMarks | null = null;
@@ -47,6 +49,7 @@ export class TopView implements EditorView {
     canvas.addEventListener('pointermove', (e) => this.onMove(e));
     canvas.addEventListener('pointerup', (e) => this.onUp(e));
     canvas.addEventListener('pointercancel', (e) => this.onUp(e, true));
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     canvas.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     new ResizeObserver(() => this.draw()).observe(canvas);
   }
@@ -104,6 +107,19 @@ export class TopView implements EditorView {
   /** Current zoom, px per mm. */
   get pxPerMm(): number {
     return this.camera.scale;
+  }
+
+  /** How far the view is turned, degrees clockwise. */
+  get angle(): number {
+    return this.camera.angle;
+  }
+
+  /** Turn the view round its middle to the next step either way (`dir` −1 or 1), or back to unturned (0). */
+  turnStep(dir: -1 | 0 | 1): void {
+    const a = this.camera.angle;
+    const next = dir === 0 ? 0 : (dir > 0 ? Math.floor(a / TURN_STEP_DEG + 1e-6) + 1 : Math.ceil(a / TURN_STEP_DEG - 1e-6) - 1) * TURN_STEP_DEG;
+    this.turnAt(this.canvas.clientWidth / 2, this.canvas.clientHeight / 2, next);
+    this.draw();
   }
 
   /** World point (mm) at the middle of the view. */
@@ -351,26 +367,25 @@ export class TopView implements EditorView {
 
   private drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     // Grid every 100 mm, stronger every metre; skip the fine grid when zoomed out.
+    // The lines run along the floor, so they turn with the view.
+    const corners = [this.toWorld(0, 0), this.toWorld(w, 0), this.toWorld(0, h), this.toWorld(w, h)];
+    const xs = corners.map((c) => c[0]);
+    const zs = corners.map((c) => c[1]);
+    const [x0, x1, z0, z1] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)];
+    const line = (a: [number, number], b: [number, number]) => {
+      ctx.moveTo(...this.toScreen(...a));
+      ctx.lineTo(...this.toScreen(...b));
+    };
     for (const [step, color] of [
       [100, 'rgba(255,255,255,0.04)'],
       [1000, 'rgba(255,255,255,0.09)'],
     ] as const) {
       if (step * this.camera.scale < 8) continue;
-      const [xa, za] = this.toWorld(w, h);
-      const [xb, zb] = this.toWorld(0, 0);
       ctx.strokeStyle = color;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      for (let x = Math.ceil(xa / step) * step; x <= xb; x += step) {
-        const [sx] = this.toScreen(x, 0);
-        ctx.moveTo(sx, 0);
-        ctx.lineTo(sx, h);
-      }
-      for (let z = Math.ceil(za / step) * step; z <= zb; z += step) {
-        const [, sy] = this.toScreen(0, z);
-        ctx.moveTo(0, sy);
-        ctx.lineTo(w, sy);
-      }
+      for (let x = Math.ceil(x0 / step) * step; x <= x1; x += step) line([x, z0], [x, z1]);
+      for (let z = Math.ceil(z0 / step) * step; z <= z1; z += step) line([x0, z], [x1, z]);
       ctx.stroke();
     }
   }
@@ -434,7 +449,11 @@ export class TopView implements EditorView {
     this.canvas.setPointerCapture(e.pointerId);
     const p = this.local(e);
     this.pointers.set(e.pointerId, p);
-    if (this.pointers.size === 1) {
+    if (this.pointers.size === 1 && e.pointerType === 'mouse' && e.button === 2) {
+      this.dragged = true;
+      this.moving = false;
+      this.turning = { from: this.aroundMiddle(p), angle: this.camera.angle };
+    } else if (this.pointers.size === 1) {
       this.dragged = false;
       this.downAt = p;
       // Dragging the selected piece moves it; dragging anything else pans.
@@ -444,7 +463,8 @@ export class TopView implements EditorView {
       if (this.moving) this.handlers.onDragEnd(false);
       this.moving = false;
       this.dragged = true;
-      this.pinch = { dist: this.pinchDistance(), scale: this.camera.scale };
+      this.turning = null;
+      this.pinch = { dist: this.pinchDistance(), scale: this.camera.scale, twist: this.pinchTwist(), angle: this.camera.angle };
     }
   }
 
@@ -460,6 +480,13 @@ export class TopView implements EditorView {
       this.handlers.onDragMove(x1 - x0, z1 - z0, e.shiftKey);
       return;
     }
+    if (this.turning) {
+      this.pointers.set(e.pointerId, p);
+      const { from, angle } = this.turning;
+      this.turnAt(this.canvas.clientWidth / 2, this.canvas.clientHeight / 2, snapSquare(angle + this.aroundMiddle(p) - from));
+      this.draw();
+      return;
+    }
     if (this.dragged) {
       // Pan by the movement of this pointer (halved while pinching with two).
       const k = this.pointers.size;
@@ -469,6 +496,7 @@ export class TopView implements EditorView {
     if (this.pinch && this.pointers.size === 2) {
       const mid = this.pinchMid();
       this.zoomAt(mid.x, mid.y, (this.pinch.scale * this.pinchDistance()) / this.pinch.dist);
+      this.turnAt(mid.x, mid.y, snapSquare(this.pinch.angle + this.pinchTwist() - this.pinch.twist));
     }
     this.draw();
   }
@@ -476,6 +504,7 @@ export class TopView implements EditorView {
   private onUp(e: PointerEvent, cancelled = false): void {
     if (!this.pointers.delete(e.pointerId)) return;
     if (this.pointers.size < 2) this.pinch = null;
+    if (this.pointers.size === 0) this.turning = null;
     if (this.moving && this.pointers.size === 0) {
       this.moving = false;
       this.handlers.onDragEnd(this.dragged && !cancelled);
@@ -496,6 +525,21 @@ export class TopView implements EditorView {
 
   private zoomAt(sx: number, sy: number, scale: number): void {
     this.camera.zoomAt(sx, sy, scale, this.canvas.clientWidth, this.canvas.clientHeight);
+  }
+
+  private turnAt(sx: number, sy: number, angle: number): void {
+    this.camera.turnAt(sx, sy, angle, this.canvas.clientWidth, this.canvas.clientHeight);
+  }
+
+  /** Where a screen point lies round the middle of the view, degrees clockwise from right. */
+  private aroundMiddle(p: { x: number; y: number }): number {
+    return (Math.atan2(p.y - this.canvas.clientHeight / 2, p.x - this.canvas.clientWidth / 2) * 180) / Math.PI;
+  }
+
+  /** The direction from the first finger to the second, degrees clockwise. */
+  private pinchTwist(): number {
+    const [a, b] = [...this.pointers.values()];
+    return (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
   }
 
   private pinchDistance(): number {

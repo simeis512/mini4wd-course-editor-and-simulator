@@ -40,6 +40,9 @@
       #height-tools { position: absolute; left: 10px; top: 10px; z-index: 3; width: 210px; padding: 6px 10px; font-size: 13px; background: rgba(36, 39, 46, 0.92); border: 1px solid var(--line); border-radius: 8px; }
       #height-tools label { display: flex; gap: 6px; align-items: center; }
       #height-tools input[type='range'] { flex: 1; min-width: 0; }
+      #turn-tools { display: flex; gap: 4px; align-items: center; margin-top: 4px; }
+      #turn-tools button { min-height: 28px; padding: 2px 8px; }
+      #turn-reset { min-width: 52px; }
       #height-legend { height: 8px; border-radius: 4px; margin-top: 4px; }
       #height-scale .ends { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
       #panel { grid-area: panel; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); padding: 10px 12px; }
@@ -192,6 +195,12 @@
         </div>
         <label title="この高さに届くピースだけを表示し、ほかは薄くして選べなくします">表示 <input id="level" type="range" min="0" value="0" /></label>
         <div id="level-value" class="muted"></div>
+        <div id="turn-tools" title="2本指でひねるか、右ボタンでドラッグしても回せます">
+          向き
+          <button id="turn-left" class="small" aria-label="左に15°回す">⟲</button>
+          <button id="turn-reset" class="small" title="回転を元に戻す">0°</button>
+          <button id="turn-right" class="small" aria-label="右に15°回す">⟳</button>
+        </div>
       </div>
       <div id="context" hidden>
         <button id="context-close" class="close" title="選択を解除 (Esc)" aria-label="閉じる">×</button>

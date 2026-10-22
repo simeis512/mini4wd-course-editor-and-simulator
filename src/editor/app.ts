@@ -51,6 +51,7 @@ import { bindAbout, showNoticeOnStart } from './notice';
 import { bindShopping } from './shopping';
 import { bindQr } from './qr';
 import { ShareImage } from './share-image';
+import { bindTurnTools, renderTurnTools } from './turn-tools';
 import { exportJson, fileName, HashSync, readCourseFile, readHash } from './share';
 import type { EditorView } from './view';
 import { TopView } from './view2d';
@@ -113,6 +114,7 @@ export class EditorApp {
       onPick: (s: Selection) => this.select(s),
       onViewChange: () => {
         this.placeContext();
+        if (this.top) renderTurnTools(this.top);
         this.share?.later();
       },
       onDragStart: (index: number) => this.pieceDrag.start(index),
@@ -422,6 +424,7 @@ export class EditorApp {
   private bindUi(): void {
     bindAbout();
     bindLevelTools((view) => this.setHeightView(view));
+    bindTurnTools(this.top);
     bindShopping(() => renderCourseInfo(this.course, this.layout, this.checks));
     bindCourseInfo({
       pick: (t) => this.select(this.selectionOf(t)),
