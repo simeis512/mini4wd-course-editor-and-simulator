@@ -1,0 +1,10 @@
+// Cloudflare Workers の設定（静的ファイルだけを配信する）。
+// ダッシュボードのビルド設定：ビルドコマンド `npm run build`、デプロイコマンド `npx wrangler deploy`。
+{
+  // ダッシュボードの Worker 名と同じにする
+  "name": "mini4wd-course-editor-and-simulator",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist"
+  }
+}
