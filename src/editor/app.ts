@@ -43,9 +43,11 @@ import { bindCourseInfo, renderCourseInfo, type CourseChecks } from './checks';
 import { $, toast } from './dom';
 import { PaletteDrag, PieceDrag, SNAP_STEP, type DragHost } from './drag';
 import { History } from './history';
+import { Library } from './library';
 import { bindLevelTools, levelMax, renderLevelTools, type HeightView } from './levels';
 import { buildPalette, placeContext, POSE_FIELDS, renderPanels, runMarks } from './panels';
 import type { Selection } from './selection';
+import { bindAbout, showNoticeOnStart } from './notice';
 import { bindShopping } from './shopping';
 import { exportJson, HashSync, readCourseFile, readHash } from './share';
 import type { EditorView } from './view';
@@ -69,6 +71,7 @@ export class EditorApp {
   private hashSync = new HashSync();
   private paletteDrag: PaletteDrag;
   private pieceDrag: PieceDrag;
+  private library: Library;
 
   constructor() {
     const app = this;
@@ -97,6 +100,12 @@ export class EditorApp {
     };
     this.paletteDrag = new PaletteDrag(host);
     this.pieceDrag = new PieceDrag(host);
+    this.library = new Library({
+      get course() {
+        return app.course;
+      },
+      open: (course) => this.load(course, true),
+    });
     const handlers = {
       onPick: (s: Selection) => this.select(s),
       onViewChange: () => this.placeContext(),
@@ -121,6 +130,9 @@ export class EditorApp {
     const course = await readHash();
     this.load(course ?? basicOval(), !course);
     window.addEventListener('hashchange', () => void this.onHashChange());
+    await showNoticeOnStart();
+    const resumed = await this.library.resume(!!course, basicOval());
+    if (resumed) this.load(resumed, true);
   }
 
   /** Replace the whole course (new / open), clearing history. */
@@ -128,6 +140,7 @@ export class EditorApp {
     this.course = course;
     this.history.clear();
     this.selection = null;
+    this.library.replaced();
     this.refresh(writeUrl);
     this.top.fit();
     this.orbit.fit();
@@ -183,7 +196,10 @@ export class EditorApp {
     }
     this.setHeightView(this.heightView);
     this.renderPanel();
-    if (writeUrl) this.hashSync.write(this.course);
+    if (writeUrl) {
+      this.hashSync.write(this.course);
+      this.library.changed();
+    }
   }
 
   private async onHashChange(): Promise<void> {
@@ -390,6 +406,7 @@ export class EditorApp {
   }
 
   private bindUi(): void {
+    bindAbout();
     bindLevelTools((view) => this.setHeightView(view));
     bindShopping(() => renderCourseInfo(this.course, this.layout, this.checks));
     bindCourseInfo({
