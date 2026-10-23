@@ -9,6 +9,7 @@ import { moveStopper } from '../course/stoppers';
 import { moveStart, nearestRoad, placeTimer } from '../course/timing';
 import { TAP_SLOP, type PropSelection, type Selection } from './selection';
 import type { EditorView } from './view';
+import { perfReport, perfSpan } from './perf';
 
 /** Ports this many screen pixels apart still pull together while dragging. */
 const MAGNET_PX = 12;
@@ -67,6 +68,10 @@ export class PaletteDrag {
   }
 
   move(e: PointerEvent): void {
+    perfReport('pointermove', () => this.preview(e));
+  }
+
+  private preview(e: PointerEvent): void {
     const d = this.paletteDrag;
     if (!d || e.pointerId !== d.pointerId) return;
     if (!d.active) {
@@ -81,7 +86,7 @@ export class PaletteDrag {
     d.preview = preview;
     const layout = preview ? layoutCourse(preview) : this.host.layout;
     const selection: Selection = preview ? { kind: 'piece', index: preview.pieces.length - 1 } : this.host.selection;
-    this.host.view.setData(layout, selection);
+    perfSpan('preview:setData', () => this.host.view.setData(layout, selection));
   }
 
   up(e: PointerEvent, cancelled: boolean): void {
@@ -101,7 +106,7 @@ export class PaletteDrag {
    * it lands about where it would sit there, else on its own (#40).
    */
   private dropCourse(item: PaletteItem, x: number, z: number, noSnap: boolean): Course {
-    const joined = dropJoin(this.host.course, item, x, z, Math.max(DROP_JOIN_MM, this.host.screenMm(DROP_JOIN_PX)));
+    const joined = perfSpan('dropJoin', () => dropJoin(this.host.course, item, x, z, Math.max(DROP_JOIN_MM, this.host.screenMm(DROP_JOIN_PX))));
     if (joined) return joined;
     if (this.host.snapOn && !noSnap) [x, z] = [snap(x), snap(z)];
     return addFreeItem(this.host.course, item, x, z);

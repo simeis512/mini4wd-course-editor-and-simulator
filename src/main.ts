@@ -1,3 +1,9 @@
 import { EditorApp } from './editor/app';
 
-void new EditorApp().start();
+const app = new EditorApp();
+void app.start().then(async () => {
+  if (import.meta.env.DEV && new URLSearchParams(location.search).has('bench')) {
+    const { installBench } = await import('./editor/bench-browser');
+    installBench(app);
+  }
+});

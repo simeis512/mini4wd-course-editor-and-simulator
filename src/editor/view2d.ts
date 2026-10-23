@@ -14,6 +14,7 @@ import { hosePointAt, stopperBounds } from '../course/stoppers';
 import { drawPropSelection, drawStart, drawStoppers, drawTimer, HANDLE_RADIUS, type Painter } from './props2d';
 import { grabs, JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
 import { blink, drawClashMark, drawShortMark, type EditorView, type RunMarks } from './view';
+import { perfSpan } from './perf';
 
 /**
  * Top-down 2D editor view drawn on a canvas. Pointer Events only, so mouse,
@@ -59,6 +60,10 @@ export class TopView implements EditorView {
   }
 
   setData(layout: Layout, selection: Selection): void {
+    perfSpan('view2d', () => this.updateData(layout, selection));
+  }
+
+  private updateData(layout: Layout, selection: Selection): void {
     if (layout !== this.layout) {
       this.layout = layout;
       const tracks = worldTracks(layout);

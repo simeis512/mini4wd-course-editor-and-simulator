@@ -57,6 +57,7 @@ import { exportJson, fileName, HashSync, readCourseFile, readHash } from './shar
 import type { EditorView } from './view';
 import { TopView } from './view2d';
 import { OrbitView } from './view3d';
+import { perfReport, perfSpan } from './perf';
 
 const HISTORY_LIMIT = 200;
 
@@ -228,7 +229,11 @@ export class EditorApp {
   }
 
   private refresh(writeUrl: boolean): void {
-    this.layout = layoutCourse(this.course);
+    perfReport(`refresh:${this.mode}`, () => this.refreshData(writeUrl));
+  }
+
+  private refreshData(writeUrl: boolean): void {
+    this.layout = perfSpan('layout', () => layoutCourse(this.course));
     // Drop a selection that no longer exists (e.g. a port that got closed).
     const s = this.selection;
     if (s?.kind === 'port' && !this.layout.open.some((r) => portKey(r) === portKey(s.ref))) this.selection = null;
@@ -240,18 +245,23 @@ export class EditorApp {
       if (!stopper) this.selection = null;
       else if (s.point !== undefined && (stopper.kind !== 'hose' || s.point >= stopper.points.length)) this.selection = { kind: 'stopper', index: s.index };
     }
-    this.checks = { clashes: [...findClashes(this.layout), ...stopperContacts(this.layout)], laps: checkLaps(this.layout, this.course.dir) };
+    this.checks = {
+      clashes: [...perfSpan('clashes', () => findClashes(this.layout)), ...perfSpan('stopperContacts', () => stopperContacts(this.layout))],
+      laps: perfSpan('laps', () => checkLaps(this.layout, this.course.dir)),
+    };
     for (const view of [this.top, this.orbit]) {
       view.setData(this.layout, this.selection);
       view.setClashes(this.checks.clashes);
     }
     this.setHeightView(this.heightView);
     this.renderPanel();
-    this.share?.later();
-    if (writeUrl) {
-      this.hashSync.write(this.course);
-      this.library.changed();
-    }
+    perfSpan('url+save', () => {
+      this.share?.later();
+      if (writeUrl) {
+        this.hashSync.write(this.course);
+        this.library.changed();
+      }
+    });
   }
 
   private async onHashChange(): Promise<void> {
@@ -602,6 +612,10 @@ export class EditorApp {
   }
 
   private renderPanel(): void {
+    perfSpan('panel', () => this.renderPanelData());
+  }
+
+  private renderPanelData(): void {
     $<HTMLButtonElement>('undo').disabled = !this.history.canUndo;
     $<HTMLButtonElement>('redo').disabled = !this.history.canRedo;
     renderPanels(this.course, this.layout, this.selection);

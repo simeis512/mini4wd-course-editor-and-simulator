@@ -10,6 +10,7 @@ import { HOSE_DIAMETER } from '../course/stoppers';
 import { ArMode } from './ar';
 import { grabs, JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
 import { blink, drawClashMark, drawShortMark, type EditorView, type RunMarks } from './view';
+import { perfSpan } from './perf';
 
 const BACKGROUND = new THREE.Color(0x1b1d22);
 
@@ -176,6 +177,10 @@ export class OrbitView implements EditorView {
   }
 
   setData(layout: Layout, selection: Selection): void {
+    perfSpan('view3d', () => this.updateData(layout, selection));
+  }
+
+  private updateData(layout: Layout, selection: Selection): void {
     this.selection = selection;
     if (layout !== this.layout) {
       this.layout = layout;
