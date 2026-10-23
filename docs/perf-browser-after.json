@@ -1,0 +1,12 @@
+{
+  "browser": "Chrome 155.0.0.0 (Windows x64)",
+  "samples": 20,
+  "results": [
+    {"size":"S","mode":"2d","refresh":{"refresh:2d":8.9,"layout":0.2,"clashes":1.6,"stopperContacts":0,"laps":0.3,"view2d":2,"view3d":1.5,"panel":1.3,"url+save":0.1},"drag":{"pointermove":2.4,"dropJoin":0.8,"view2d":1.4,"preview:setData":1.4},"warmDrag":{"pointermove":0.3,"dropJoin":0}},
+    {"size":"S","mode":"3d","refresh":{"refresh:3d":6.7,"layout":0.1,"clashes":1.7,"stopperContacts":0,"laps":0.2,"view2d":0.3,"view3d":1.7,"panel":1.3,"url+save":0.1},"drag":{"pointermove":3.2,"dropJoin":0.8,"view3d":2.1,"preview:setData":2.2},"warmDrag":{"pointermove":0.1,"dropJoin":0}},
+    {"size":"M","mode":"2d","refresh":{"refresh:2d":24.6,"layout":0.3,"clashes":5.7,"stopperContacts":0,"laps":0.6,"view2d":3.4,"view3d":9.8,"panel":1.3,"url+save":0.1},"drag":{"pointermove":5.5,"dropJoin":2,"view2d":3.3,"preview:setData":3.3},"warmDrag":{"pointermove":3.9,"dropJoin":0,"view2d":3.1,"preview:setData":3.1}},
+    {"size":"M","mode":"3d","refresh":{"refresh:3d":17.2,"layout":0.3,"clashes":5.3,"stopperContacts":0,"laps":0.6,"view2d":0.9,"view3d":7.9,"panel":1.4,"url+save":0.1},"drag":{"pointermove":12.9,"dropJoin":1.8,"view3d":10.1,"preview:setData":10.1},"warmDrag":{"pointermove":16.7,"dropJoin":0,"view3d":16.2,"preview:setData":16.3}},
+    {"size":"L","mode":"2d","refresh":{"refresh:2d":235.9,"layout":1.3,"clashes":25.1,"stopperContacts":182.1,"laps":0.6,"view2d":10.2,"view3d":17.5,"panel":3.5,"url+save":0},"drag":{"pointermove":21.3,"dropJoin":10.3,"view2d":11.8,"preview:setData":11.8},"warmDrag":{"pointermove":11.2,"dropJoin":0,"view2d":10,"preview:setData":10}},
+    {"size":"L","mode":"3d","refresh":{"refresh:3d":225.1,"layout":1,"clashes":24.6,"stopperContacts":172.2,"laps":0.7,"view2d":3,"view3d":17.9,"panel":4,"url+save":0.1},"drag":{"pointermove":183.6,"dropJoin":9.9,"view3d":174.2,"preview:setData":174.3},"warmDrag":{"pointermove":171,"dropJoin":0,"view3d":169.8,"preview:setData":169.8}}
+  ]
+}
