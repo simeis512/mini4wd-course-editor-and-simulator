@@ -18,7 +18,7 @@
       }
       * { box-sizing: border-box; }
       html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, sans-serif; }
-      body { display: grid; grid-template-rows: auto 1fr; grid-template-columns: 1fr 300px; grid-template-areas: 'bar bar' 'stage panel'; overflow: hidden; }
+      body { display: grid; grid-template-rows: auto 1fr; grid-template-columns: 1fr 300px; grid-template-areas: 'bar bar' 'stage panel'; overflow: hidden; transition: grid-template-columns 0.25s ease, grid-template-rows 0.25s ease; }
       #toolbar { grid-area: bar; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
       #toolbar h1 { font-size: 15px; margin: 0 8px 0 0; white-space: nowrap; }
       #toolbar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
@@ -49,17 +49,21 @@
       #panel h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 6px; }
       #panel h2:first-child { margin-top: 0; }
       #palette, #templates { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-      /* The side panel slides out of the way (#64); its tab on the left edge stays on screen to bring it back. */
-      #side { grid-area: panel; position: relative; z-index: 6; width: 300px; min-height: 0; --slide: translateX(100%); transition: transform 0.25s ease; }
-      body.panel-sliding #side { transform: var(--slide); }
-      body.no-slide #side { transition: none; }
-      body.panel-folded { grid-template-columns: 1fr 0; }
-      body.panel-folded #panel { visibility: hidden; }
+      /*
+       * The side panel slides out of the way (#64): its column narrows to
+       * nothing while the panel keeps its width, so it slides off the edge and
+       * the editor widens with it frame by frame. Its tab on the left edge
+       * stays on screen to bring it back.
+       */
+      #side { grid-area: panel; position: relative; z-index: 6; width: 300px; min-height: 0; }
+      body.no-slide { transition: none; }
+      body.panel-folded { grid-template-columns: 1fr 0px; }
+      body.panel-folded #panel { visibility: hidden; transition: visibility 0s 0.25s; }
       #panel-fold { position: absolute; left: -26px; top: 50%; translate: 0 -50%; width: 26px; height: 64px; min-height: 0; padding: 0; border: 1px solid var(--line); border-right: 0; border-radius: 8px 0 0 8px; background: var(--panel); color: var(--muted); font-size: 18px; line-height: 1; }
       #panel-fold:hover { background: #30343d; color: var(--text); }
       #panel-fold .arrow { display: inline-block; transition: transform 0.25s ease; }
-      body.panel-folded #panel-fold .arrow, body.panel-sliding #panel-fold .arrow { transform: rotate(180deg); }
-      @media (prefers-reduced-motion: reduce) { #side, #panel-fold .arrow { transition: none; } }
+      body.panel-folded #panel-fold .arrow { transform: rotate(180deg); }
+      @media (prefers-reduced-motion: reduce) { body, body.panel-folded #panel, #panel-fold .arrow { transition: none; } }
       #palette button, #templates button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; font-size: 12px; line-height: 1.3; text-align: center; touch-action: none; user-select: none; -webkit-user-select: none; }
       #palette button.dim, #templates button.dim { opacity: 0.55; }
       #palette .part-icon, #templates .part-icon { width: 100%; max-width: 64px; aspect-ratio: 1; pointer-events: none; }
@@ -170,13 +174,14 @@
       @media (max-width: 720px) {
         body { grid-template-columns: 1fr; grid-template-rows: auto 1fr minmax(0, 38vh); grid-template-areas: 'bar' 'stage' 'panel'; }
         #panel { border-left: 0; border-top: 1px solid var(--line); }
-        #side { width: auto; --slide: translateY(100%); }
-        body.panel-folded { grid-template-columns: 1fr; grid-template-rows: auto 1fr 0; }
+        /* On phones the panel slides down the same way: its row closes while it keeps its height. */
+        #side { width: auto; height: 38vh; }
+        body.panel-folded { grid-template-columns: 1fr; grid-template-rows: auto 1fr minmax(0, 0vh); }
         #panel-fold { left: 50%; top: -26px; translate: -50% 0; width: 64px; height: 26px; border: 1px solid var(--line); border-bottom: 0; border-radius: 8px 8px 0 0; }
         #panel-fold .arrow { transform: rotate(90deg); }
         /* Clear of the tab along the bottom of the editor. */
         #course-info, #fit { bottom: 34px; }
-        body.panel-folded #panel-fold .arrow, body.panel-sliding #panel-fold .arrow { transform: rotate(-90deg); }
+        body.panel-folded #panel-fold .arrow { transform: rotate(-90deg); }
         #toolbar h1 { display: none; }
       }
     </style>
