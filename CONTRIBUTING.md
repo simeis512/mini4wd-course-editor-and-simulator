@@ -34,6 +34,7 @@ DOM にもビューにも触らない処理が `editor` に 10 行以上あれ�
 | ファイル | 役割 |
 | --- | --- |
 | `app.ts` | 状態（コース・選択・履歴・表示モード）を持ち、操作をつなぐ |
+| `app-ui.ts` / `selected-edits.ts` | UI のイベント接続と、選択に応じた編集操作の呼び分け |
 | `panels.ts` | パーツ一覧（テンプレートを含む）と選択中の設定の DOM 表示 |
 | `side-panel.ts` / `float.ts` | サイドパネルの畳み方と、選択中の設定欄の置き場所 |
 | `checks.ts` | コース欄（検証の結果）の DOM 表示。購入リストは `shopping.ts` |
@@ -43,7 +44,9 @@ DOM にもビューにも触らない処理が `editor` に 10 行以上あれ�
 | `library.ts` / `store.ts` | ブラウザ内（IndexedDB）への保存・一覧・自動保存と、その読み書き |
 | `notice.ts` | 起動時の案内と情報パネル（権利表示・ライセンス） |
 | `view.ts` | 2D/3D ビュー共通のインターフェース `EditorView` |
-| `view2d.ts` / `view3d.ts` | 各ビューの描画とポインター操作（2D の道の外形は `outline2d.ts`） |
+| `view2d.ts` / `view3d.ts` | 各ビューの状態・更新と、カメラ・表示の管理 |
+| `paint2d.ts` / `gesture2d.ts` / `outline2d.ts` | 2D の描画、ポインター操作、道の外形 |
+| `marks3d.ts` / `pick3d.ts` | 3D のマーカー・ハイライトと、レイキャストによる選択 |
 | `ar.ts` / `ar-pose.ts` / `ar-scan.ts` / `ar-depth.ts` / `ar-gesture.ts` | 3D ビューの AR（床への設置・大きさ・向き）、その置き方の計算、見つけた床の点、奥行きの表示とオクルージョン、指での移動・回転 |
 | `history.ts`、`dom.ts`、`icons.ts` など | 小さな部品 |
 
