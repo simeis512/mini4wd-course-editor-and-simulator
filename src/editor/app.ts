@@ -1,63 +1,37 @@
-import { Matrix4 } from 'three';
 import { addFreeItem, itemSpot, joinItem, nextOpenPort, type PaletteItem } from '../course/add';
-import { addAttachment, moveAttachment, removeAttachment } from '../course/attachments';
-import { LEVEL_HEIGHT } from '../course/catalog';
 import {
   emptyCourse,
   layoutCourse,
-  movingGroup,
   portKey,
   sameJoint,
   type Course,
   type Layout,
   type PortRef,
 } from '../course/course';
-import {
-  addPiece,
-  deletePiece,
-  flipPiece,
-  jointBend,
-  jointShift,
-  markIntended,
-  moveGroup,
-  reverseDirection,
-  setBend,
-  setLength,
-  setPose,
-  setShift,
-  setTwist,
-  setVariant,
-  tidyCuts,
-  turnAboutMiddle,
-} from '../course/edit';
+import { addPiece, markIntended, reverseDirection } from '../course/edit';
 import { findClashes } from '../course/clash';
 import { stopperContacts } from '../course/stopper-contact';
-import { asLink, joinableNear, joinPorts, splitJoint } from '../course/joining';
 import { checkLaps } from '../course/laps';
-import type { Pose } from '../course/geometry';
 import { basicOval } from '../course/presets';
-import { raiseRun } from '../course/raise';
-import { bindAttachments } from './attach';
-import { bindCourseInfo, renderCourseInfo, type CourseChecks } from './checks';
+import { renderCourseInfo, type CourseChecks } from './checks';
 import { $, toast } from './dom';
-import { PaletteDrag, PieceDrag, PropDrag, SNAP_STEP, type DragHost } from './drag';
+import { PaletteDrag, PieceDrag, PropDrag, type DragHost } from './drag';
 import { History } from './history';
 import { Library } from './library';
-import { bindLevelTools, levelMax, renderLevelTools, type HeightView } from './levels';
-import { buildPalette, placeContext, POSE_FIELDS, renderPanels, runMarks } from './panels';
+import { levelMax, renderLevelTools, type HeightView } from './levels';
+import { buildPalette, placeContext, renderPanels, runMarks } from './panels';
 import { PropTools } from './props';
 import { isProp, type Selection } from './selection';
-import { bindAbout, showNoticeOnStart } from './notice';
-import { bindShopping } from './shopping';
-import { bindQr } from './qr';
-import { ShareImage } from './share-image';
-import { bindSidePanel } from './side-panel';
-import { bindTurnTools, renderTurnTools } from './turn-tools';
+import { showNoticeOnStart } from './notice';
+import type { ShareImage } from './share-image';
+import { renderTurnTools } from './turn-tools';
 import { exportJson, fileName, HashSync, readCourseFile, readHash } from './share';
 import type { EditorView } from './view';
 import { TopView } from './view2d';
 import { OrbitView } from './view3d';
 import { perfReport, perfSpan } from './perf';
+import { bindAppUi, readRaiseFields } from './app-ui';
+import { editSelection, raiseSides, type SelectedAction } from './selected-edits';
 
 const HISTORY_LIMIT = 200;
 
@@ -167,7 +141,43 @@ export class EditorApp {
       move: (e) => this.paletteDrag.move(e),
       up: (e, cancelled) => this.paletteDrag.up(e, cancelled),
     });
-    this.bindUi();
+    this.share = bindAppUi({
+      get selection() { return app.selection; },
+      top: this.top,
+      checks: {
+        pick: (t) => {
+          if ('stopper' in t) this.props.showStoppers();
+          this.select(this.selectionOf(t));
+        },
+        intended: (ref, on) => this.commit(markIntended(this.course, ref, on), this.selection),
+        reverse: () => this.commit(reverseDirection(this.course), this.selection),
+      },
+      sharing: {
+        get view() { return app.view; },
+        get layout() { return app.layout; },
+        get laps() { return app.checks.laps; },
+        name: () => this.courseTitle(),
+        url: () => this.hashSync.url(),
+        get fileName() { return fileName(app.course); },
+      },
+      setHeightView: (view) => this.setHeightView(view),
+      renderCourseInfo: () => renderCourseInfo(this.course, this.layout, this.checks),
+      overPanel: (e) => this.pieceDrag.overPanel(e),
+      placeContext: () => this.placeContext(),
+      select: (selection) => this.select(selection),
+      setMode: (mode) => this.setMode(mode),
+      undo: () => this.undo(),
+      redo: () => this.redo(),
+      newCourse: async () => {
+        if (await this.library.confirmReplace('新しく作る')) this.load(emptyCourse(), true);
+      },
+      copyUrl: () => this.hashSync.copyUrl(),
+      exportJson: () => exportJson(this.course),
+      importJson: (file) => this.importJson(file),
+      fit: () => this.view.fit(),
+      edit: (action) => this.edit(action),
+      renderPanel: () => this.renderPanel(),
+    });
   }
 
   async start(): Promise<void> {
@@ -316,20 +326,15 @@ export class EditorApp {
     this.commit(next, { kind: 'piece', index: next.pieces.length - 1 });
   }
 
-  private flipSelected(): void {
-    const s = this.selection;
-    if (s?.kind !== 'piece') return;
-    this.commit(flipPiece(this.course, s.index), s);
+  /** Route edits to props or the selected course piece/joint, recording one undo. */
+  private edit(action: SelectedAction): void {
+    if (action.kind === 'delete' && this.props.deleteSelected()) return;
+    if (action.kind === 'rotate' && this.props.turnSelected(action.deg)) return;
+    const next = editSelection({
+      course: this.course, layout: this.layout, selection: this.selection, moveAlone: this.moveAlone,
+    }, action);
+    if (next) this.commit(next.course, next.selection);
   }
-
-  private deleteSelected(): void {
-    if (this.props.deleteSelected()) return;
-    const s = this.selection;
-    if (s?.kind !== 'piece') return;
-    this.commit(deletePiece(this.course, s.index));
-  }
-
-  // ---- Free placement (spec 5.2, 8)
 
   private get snapOn(): boolean {
     return $<HTMLInputElement>('snap').checked;
@@ -339,105 +344,13 @@ export class EditorApp {
     return $<HTMLInputElement>('move-alone').checked;
   }
 
-  /** Move the selected piece, with the pieces joined to it, by a rigid transform in world space. */
-  private moveSelected(by: Matrix4): void {
-    const s = this.selection;
-    if (s?.kind !== 'piece') return;
-    this.commit(tidyCuts(moveGroup(this.course, movingGroup(this.layout, s.index, this.moveAlone), by)), s);
-  }
-
-  /** Turn the selected piece about its middle, + to the left (anticlockwise from above). */
-  private rotateSelected(deg: number): void {
-    if (this.props.turnSelected(deg)) return;
-    const s = this.selection;
-    if (s?.kind !== 'piece') return;
-    this.moveSelected(turnAboutMiddle(this.layout.pieces[s.index], deg));
-  }
-
-  /** Set the selected piece's twist (spec 16.2), or nudge it by `by`. */
-  private twistSelected(deg: number | null, by = 0): void {
-    const s = this.selection;
-    if (s?.kind !== 'piece') return;
-    const twist = (deg ?? this.course.pieces[s.index].twist ?? 0) + by;
-    this.commit(setTwist(this.course, s.index, twist), s);
-  }
-
-  /** Set the selected joint's bend up or down (spec 16.1), or nudge it by `by`. */
-  private bendSelected(deg: number | null, by = 0): void {
-    const s = this.selection;
-    if (s?.kind !== 'joint') return;
-    // A joint that only meets (a piece put back by the magnet) is stored as a link first.
-    const course = asLink(this.course, s.a, s.b);
-    const bend = jointBend(course, s.a, s.b);
-    this.commit(setBend(course, s.a, s.b, { ...bend, pitch: (deg ?? bend.pitch ?? 0) + by }), s);
-  }
-
-  /** Shift the selected joint sideways by `by` lanes (#60). */
-  private shiftSelected(by: number): void {
-    const s = this.selection;
-    if (s?.kind !== 'joint') return;
-    const course = asLink(this.course, s.a, s.b);
-    const next = setShift(course, s.a, s.b, jointShift(course, s.a, s.b) + by);
-    if (next !== course) this.commit(next, s);
-  }
-
-  /**
-   * The selected joint as the side a raise leaves from and the side it goes
-   * into, as chosen, with the course holding it as a link (spec 16.3).
-   */
-  private raiseSides(): { from: PortRef; into: PortRef; course: Course } | null {
-    const s = this.selection;
-    if (s?.kind !== 'joint') return null;
-    const intoA = $('raise-dir').dataset.side === 'a';
-    const [from, into] = intoA ? [s.b, s.a] : [s.a, s.b];
-    return { from, into, course: asLink(this.course, from, into) };
-  }
-
-  private get raiseCount(): number {
-    return Math.max(1, Math.round(Number($<HTMLInputElement>('raise-count').value) || 1));
-  }
-
-  /** Raise the pieces on from the selected joint by bending and twisting them (spec 16.3). */
-  private raiseFromSelected(): void {
-    const sides = this.raiseSides();
-    if (!sides) return;
-    const rise = Number($<HTMLInputElement>('raise-mm').value) || 0;
-    this.commit(raiseRun(sides.course, sides.from, sides.into, this.raiseCount, rise), this.selection);
-  }
-
   /** Blink the pieces a raise from the selected joint would move (spec 16.3). */
   private showRun(): void {
-    const sides = $('raise-box').hidden ? null : this.raiseSides();
-    const marks = sides ? runMarks(sides.course, sides.from, sides.into, this.raiseCount) : null;
+    const fields = readRaiseFields();
+    const sides = $('raise-box').hidden ? null : raiseSides(this.course, this.selection, fields.intoA);
+    const marks = sides ? runMarks(sides.course, sides.from, sides.into, fields.count) : null;
     for (const view of [this.top, this.orbit]) view.setRunMarks(marks);
     this.lit = marks?.pieces ?? [];
-  }
-
-  private splitSelected(): void {
-    const s = this.selection;
-    if (s?.kind !== 'joint') return;
-    this.commit(splitJoint(this.course, s.a, s.b), { kind: 'port', ref: s.b });
-  }
-
-  private joinSelected(): void {
-    const s = this.selection;
-    if (s?.kind !== 'port') return;
-    const other = joinableNear(this.layout, s.ref);
-    if (other) this.commit(joinPorts(this.course, s.ref, other), { kind: 'joint', a: s.ref, b: other });
-  }
-
-  /** Apply an edit to the selected piece, keeping it selected. */
-  private editSelected(edit: (index: number) => Course): void {
-    const s = this.selection;
-    if (s?.kind === 'piece') this.commit(edit(s.index), s);
-  }
-
-  private setPoseFromFields(): void {
-    const s = this.selection;
-    if (s?.kind !== 'piece') return;
-    const [x, y, z, yaw, pitch, roll] = POSE_FIELDS.map((id) => Number($<HTMLInputElement>(id).value) || 0);
-    const pose: Pose = { pos: [x, y, z], rot: [yaw, pitch, roll] };
-    this.commit(setPose(this.course, s.index, pose), s);
   }
 
   private async importJson(file: File): Promise<void> {
@@ -481,137 +394,6 @@ export class EditorApp {
     this.heightView = { ...view, level: Math.min(view.level, levelMax(top)) };
     this.top.setHeightView(this.heightView);
     renderLevelTools(top, this.heightView);
-  }
-
-  private bindUi(): void {
-    bindAbout();
-    bindSidePanel();
-    bindLevelTools((view) => this.setHeightView(view));
-    bindTurnTools(this.top);
-    bindShopping(() => renderCourseInfo(this.course, this.layout, this.checks));
-    bindCourseInfo({
-      pick: (t) => {
-        if ('stopper' in t) this.props.showStoppers();
-        this.select(this.selectionOf(t));
-      },
-      intended: (ref, on) => this.commit(markIntended(this.course, ref, on), this.selection),
-      reverse: () => this.commit(reverseDirection(this.course), this.selection),
-    });
-    // Views capture the pointer while dragging, so its moves still bubble up here.
-    window.addEventListener('pointermove', (e) => this.pieceDrag.overPanel(e));
-    $<HTMLDetailsElement>('course-info').addEventListener('toggle', () => this.placeContext());
-    $('context').querySelector('details')!.addEventListener('toggle', () => this.placeContext());
-    $('context-close').addEventListener('click', () => this.select(null));
-    $('mode-2d').addEventListener('click', () => this.setMode('2d'));
-    $('mode-3d').addEventListener('click', () => this.setMode('3d'));
-    $('undo').addEventListener('click', () => this.undo());
-    $('redo').addEventListener('click', () => this.redo());
-    $('new').addEventListener('click', async () => {
-      if (await this.library.confirmReplace('新しく作る')) this.load(emptyCourse(), true);
-    });
-    $('copy-url').addEventListener('click', () => void this.hashSync.copyUrl());
-    const app = this;
-    bindQr({
-      url: () => this.hashSync.url(),
-      name: () => this.courseTitle(),
-      get fileName() {
-        return fileName(app.course);
-      },
-    });
-    this.share = new ShareImage({
-      get view() {
-        return app.view;
-      },
-      get layout() {
-        return app.layout;
-      },
-      get laps() {
-        return app.checks.laps;
-      },
-      name: () => this.courseTitle(),
-      url: () => this.hashSync.url(),
-      get fileName() {
-        return fileName(app.course);
-      },
-    });
-    $('export').addEventListener('click', () => exportJson(this.course));
-    const file = $<HTMLInputElement>('import-file');
-    $('import').addEventListener('click', () => file.click());
-    file.addEventListener('change', () => {
-      if (file.files?.[0]) void this.importJson(file.files[0]);
-      file.value = '';
-    });
-    $('fit').addEventListener('click', () => this.view.fit());
-    $('flip').addEventListener('click', () => this.flipSelected());
-    $('delete').addEventListener('click', () => this.deleteSelected());
-    $<HTMLSelectElement>('variant').addEventListener('change', (e) => {
-      this.editSelected((i) => setVariant(this.course, i, Number((e.target as HTMLSelectElement).value)));
-    });
-    $('piece-length').addEventListener('change', (e) => {
-      const mm = Number((e.target as HTMLInputElement).value);
-      if (mm) this.editSelected((i) => setLength(this.course, i, mm));
-    });
-    bindAttachments({
-      add: (kind) => this.editSelected((i) => addAttachment(this.course, kind, i)),
-      move: (n, to) => this.editSelected(() => moveAttachment(this.course, n, to)),
-      remove: (n) => this.editSelected(() => removeAttachment(this.course, n)),
-    });
-    $('rot-left').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? 1 : 15));
-    $('rot-right').addEventListener('click', (e) => this.rotateSelected(e.shiftKey ? -1 : -15));
-    // Up and down by one level, a slope's height; Shift for a fine step.
-    $('raise').textContent = `↑${LEVEL_HEIGHT}mm`;
-    $('lower').textContent = `↓${LEVEL_HEIGHT}mm`;
-    $('raise').title = `${LEVEL_HEIGHT}mm（スロープ 1 段）上げる。Shift で ${SNAP_STEP}mm`;
-    $('lower').title = `${LEVEL_HEIGHT}mm（スロープ 1 段）下げる。Shift で ${SNAP_STEP}mm`;
-    const lift = (e: MouseEvent) => (e.shiftKey ? SNAP_STEP : LEVEL_HEIGHT);
-    $('raise').addEventListener('click', (e) => this.moveSelected(new Matrix4().makeTranslation(0, lift(e), 0)));
-    $('lower').addEventListener('click', (e) => this.moveSelected(new Matrix4().makeTranslation(0, -lift(e), 0)));
-    $<HTMLInputElement>('raise-mm').value = String(LEVEL_HEIGHT);
-    for (const id of POSE_FIELDS) $(id).addEventListener('change', () => this.setPoseFromFields());
-    // Angles step 0.5°, or 0.1° with Shift (spec 16.3).
-    const step = (e: MouseEvent) => (e.shiftKey ? 0.1 : 0.5);
-    $('twist-minus').addEventListener('click', (e) => this.twistSelected(null, -step(e)));
-    $('twist-plus').addEventListener('click', (e) => this.twistSelected(null, step(e)));
-    $('twist').addEventListener('change', (e) => this.twistSelected(Number((e.target as HTMLInputElement).value) || 0));
-    $('bend-minus').addEventListener('click', (e) => this.bendSelected(null, -step(e)));
-    $('bend-plus').addEventListener('click', (e) => this.bendSelected(null, step(e)));
-    $('bend-pitch').addEventListener('change', (e) => this.bendSelected(Number((e.target as HTMLInputElement).value) || 0));
-    $('raise-run').addEventListener('click', () => this.raiseFromSelected());
-    $('shift-left').addEventListener('click', () => this.shiftSelected(-1));
-    $('shift-right').addEventListener('click', () => this.shiftSelected(1));
-    $('raise-flip').addEventListener('click', () => {
-      const dir = $('raise-dir');
-      dir.dataset.side = dir.dataset.side === 'a' ? 'b' : 'a';
-      this.renderPanel();
-    });
-    $('raise-count').addEventListener('input', () => this.renderPanel());
-    $('split').addEventListener('click', () => this.splitSelected());
-    $('join').addEventListener('click', () => this.joinSelected());
-
-    window.addEventListener('keydown', (e) => {
-      const t = e.target as HTMLElement;
-      if (t.closest('input, select, textarea')) return;
-      const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        if (e.shiftKey) this.redo();
-        else this.undo();
-      } else if (mod && e.key.toLowerCase() === 'y') {
-        e.preventDefault();
-        this.redo();
-      } else if (!mod && (e.key === 'Delete' || e.key === 'Backspace')) {
-        if (this.selection?.kind === 'joint') this.splitSelected();
-        else this.deleteSelected();
-      } else if (!mod && e.key.toLowerCase() === 'f') {
-        this.flipSelected();
-      } else if (!mod && e.key.toLowerCase() === 'q') {
-        this.rotateSelected(e.shiftKey ? 1 : 15);
-      } else if (!mod && e.key.toLowerCase() === 'e') {
-        this.rotateSelected(e.shiftKey ? -1 : -15);
-      } else if (e.key === 'Escape') {
-        this.select(null);
-      }
-    });
   }
 
   /** The course's name to write on its pictures: its own, or the name it was saved under. */

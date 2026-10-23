@@ -1,17 +1,35 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { Clash } from '../course/clash';
-import { portKey, sameJoint, type Layout, type PlacedPiece } from '../course/course';
+import { portKey, sameJoint, type Layout } from '../course/course';
 import { GLOBAL_SPEC } from '../course/catalog';
 import { supports } from '../course/height';
-import { buildCourseMeshes, buildSupportMesh, MM, pieceTracks, roadOutline } from '../course/mesh';
+import { buildCourseMeshes, buildSupportMesh, MM } from '../course/mesh';
 import { buildPropMeshes } from '../course/props-mesh';
 import { HOSE_DIAMETER } from '../course/stoppers';
 import { ArMode } from './ar';
-import { grabs, JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
-import { blink, drawClashMark, drawShortMark, type EditorView, type RunMarks } from './view';
+import { grabs, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
+import { blink, drawShortMark, type EditorView, type RunMarks } from './view';
 import { perfSpan } from './perf';
 import { disposeGeometries } from './resources';
+import {
+  outlineOf,
+  MARKER_GEOMETRY,
+  MARKER_OPEN,
+  MARKER_SELECTED,
+  MARKER_SPLIT,
+  MARKER_JOINT,
+  MARKER_INTENDED,
+  CLASH_MARK_SIZE,
+  CLASH_MATERIALS,
+  HANDLE_GEOMETRY,
+  HANDLE,
+  JOINT_GEOMETRY,
+  RUN_LEVEL,
+  highlighted,
+  unhighlighted,
+} from './marks3d';
+import { hitAt, markerNear, raycaster, type PickState } from './pick3d';
 
 const BACKGROUND = new THREE.Color(0x1b1d22);
 
@@ -431,157 +449,26 @@ export class OrbitView implements EditorView {
     }
   }
 
+  private get pickState(): PickState {
+    return {
+      canvas: this.renderer.domElement, camera: this.camera, root: this.root,
+      markers: this.markers, pieces: this.pieces, props: this.props,
+      toClient: (world) => this.toClient(world),
+    };
+  }
+
   private raycaster(e: { clientX: number; clientY: number }): THREE.Raycaster {
-    const r = this.renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(ndc, this.camera);
-    return ray;
+    return raycaster(this.pickState, e);
+  }
+
+  private hitAt(e: { clientX: number; clientY: number }) {
+    return hitAt(this.pickState, e);
   }
 
   private pick(e: PointerEvent): void {
-    const marker = this.markerNear(e.clientX, e.clientY);
+    const marker = markerNear(this.pickState, e.clientX, e.clientY);
     if (marker?.userData.port) return this.handlers.onPick({ kind: 'port', ref: marker.userData.port });
     if (marker?.userData.joint) return this.handlers.onPick({ kind: 'joint', ...marker.userData.joint });
     this.handlers.onPick(this.hitAt(e)?.target ?? null);
   }
-
-  /**
-   * What is under a point on the page and where: a point of the selected
-   * hose, else the nearest piece, start line, timer or shown stopper.
-   */
-  private hitAt(e: { clientX: number; clientY: number }): { target: Selection; point: THREE.Vector3 } | null {
-    const ray = this.raycaster(e);
-    const handles = this.markers.children.filter((m) => m.userData.handle);
-    const handle = ray.intersectObjects(handles, false)[0];
-    if (handle) return { target: handle.object.userData.handle, point: handle.point };
-    const props = this.props.filter((g) => g.visible);
-    const hit = ray.intersectObjects([...this.pieces, ...props], true)[0];
-    return hit ? { target: targetOf(hit.object), point: hit.point } : null;
-  }
-
-  /**
-   * The port or joint marker nearest a point on the page, within the same
-   * screen radius as the top view, so the small joint bars are as easy to
-   * hit as in 2D. Ports come first. Fences of the marker's own pieces may
-   * hide it; any other road in front does.
-   */
-  private markerNear(clientX: number, clientY: number): THREE.Object3D | null {
-    this.root.updateMatrixWorld();
-    const eye = this.camera.getWorldPosition(new THREE.Vector3());
-    const ray = new THREE.Raycaster();
-    for (const kind of ['port', 'joint'] as const) {
-      let best: { m: THREE.Object3D; d: number } | null = null;
-      for (const m of this.markers.children) {
-        const data = m.userData[kind];
-        if (!data) continue;
-        const centre = m.localToWorld(new THREE.Vector3(0, MARKER_PICK_HEIGHT, 0));
-        const q = this.toClient(centre);
-        if (!q) continue;
-        const d = Math.hypot(q[0] - clientX, q[1] - clientY);
-        if (d >= (kind === 'port' ? PORT_HIT : JOINT_HIT) || (best && d >= best.d)) continue;
-        const own = kind === 'port' ? [data.piece] : [data.a.piece, data.b.piece];
-        const toward = centre.clone().sub(eye);
-        ray.set(eye, toward.clone().normalize());
-        ray.far = toward.length();
-        const front = ray.intersectObjects(this.pieces, true).some((h) => !own.includes(pieceOf(h.object)));
-        if (!front) best = { m, d };
-      }
-      if (best) return best.m;
-    }
-    return null;
-  }
-}
-
-function pieceOf(object: THREE.Object3D): number | null {
-  let o: THREE.Object3D | null = object;
-  while (o && o.userData.piece === undefined) o = o.parent;
-  return o ? o.userData.piece : null;
-}
-
-/** The piece, start line, timer or stopper a mesh belongs to. */
-function targetOf(object: THREE.Object3D): Selection {
-  let o: THREE.Object3D | null = object;
-  while (o && o.userData.piece === undefined && !o.userData.prop) o = o.parent;
-  if (!o) return null;
-  return o.userData.prop ?? { kind: 'piece', index: o.userData.piece };
-}
-
-const OUTLINE_SOLID = new THREE.LineBasicMaterial({ color: 0x3fd0ff });
-const OUTLINE_DASHED = new THREE.LineDashedMaterial({ color: 0x3fd0ff, dashSize: 50, gapSize: 30 });
-
-/** The edge of a piece's road at the height of its fence tops, one loop per track. */
-function outlineOf(pc: PlacedPiece, index: number, solid: boolean): THREE.Line[] {
-  const y = GLOBAL_SPEC.fenceHeight + 1;
-  return pieceTracks(pc, index).map(({ samples, section }) => {
-    const pts = roadOutline(samples, section, y);
-    const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), solid ? OUTLINE_SOLID : OUTLINE_DASHED);
-    if (!solid) line.computeLineDistances();
-    return line;
-  });
-}
-
-const MARKER_GEOMETRY = new THREE.ConeGeometry(45, 90, 16).rotateX(Math.PI / 2).translate(0, 30, 30);
-const MARKER_OPEN = new THREE.MeshStandardMaterial({ color: 0xff9a2e, emissive: 0x552200 });
-const MARKER_SELECTED = new THREE.MeshStandardMaterial({ color: 0x3fd0ff, emissive: 0x114455 });
-const MARKER_SPLIT = new THREE.MeshStandardMaterial({ color: 0xff5a5a, emissive: 0x551111 });
-const MARKER_JOINT = new THREE.MeshStandardMaterial({ color: 0x39c26b, emissive: 0x0d3d1f });
-/** A port left open on purpose (#13). */
-const MARKER_INTENDED = new THREE.MeshStandardMaterial({ color: 0x8a9099, emissive: 0x22252a });
-
-/** Size of a clash mark on screen, as a share of the view's height. */
-const CLASH_MARK_SIZE = 0.05;
-
-/** A sprite material showing the clash mark, drawn once per kind and shared. */
-function clashMaterial(kind: Clash['kind']): () => THREE.SpriteMaterial {
-  let map: THREE.CanvasTexture | null = null;
-  return () => {
-    if (!map) {
-      const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = 64;
-      const ctx = canvas.getContext('2d')!;
-      ctx.scale(2, 2);
-      drawClashMark(ctx, 16, 16, kind);
-      map = new THREE.CanvasTexture(canvas);
-      map.colorSpace = THREE.SRGBColorSpace;
-    }
-    return new THREE.SpriteMaterial({ map, depthTest: false, sizeAttenuation: false });
-  };
-}
-const CLASH_MATERIALS: Record<Clash['kind'], () => THREE.SpriteMaterial> = {
-  interference: clashMaterial('interference'),
-  clearance: clashMaterial('clearance'),
-  stopper: clashMaterial('stopper'),
-};
-/** A ball on each point of the selected hose, to drag. */
-const HANDLE_GEOMETRY = new THREE.SphereGeometry(18, 16, 12);
-const HANDLE = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x333333 });
-/** Height of a marker's middle above its port, mm, where picking aims. */
-const MARKER_PICK_HEIGHT = 10;
-/** A flat bar across the middle of a joint, standing just above the road. */
-const JOINT_GEOMETRY = new THREE.BoxGeometry(90, 12, 24).translate(0, 8, 0);
-
-/** Highlight level of the pieces a raise would move. */
-const RUN_LEVEL = 3;
-const HIGHLIGHT = [0, 0x0a2a35, 0x1a6680, 0x664400];
-const highlightCache = [0, 1, 2, 3].map(() => new WeakMap<THREE.Material, THREE.Material>());
-const baseOf = new WeakMap<THREE.Material, THREE.Material>();
-
-/** `level` 2: the selection; 1: joined to it; 3: a run about to be raised. */
-function highlighted(m: THREE.Material | THREE.Material[], level: number): THREE.Material {
-  const base = unhighlighted(m);
-  let h = highlightCache[level].get(base);
-  if (!h) {
-    const c = (base as THREE.MeshStandardMaterial).clone();
-    c.emissive = new THREE.Color(HIGHLIGHT[level]);
-    highlightCache[level].set(base, c);
-    baseOf.set(c, base);
-    h = c;
-  }
-  return h;
-}
-
-function unhighlighted(m: THREE.Material | THREE.Material[]): THREE.Material {
-  const single = Array.isArray(m) ? m[0] : m;
-  return baseOf.get(single) ?? single;
 }
