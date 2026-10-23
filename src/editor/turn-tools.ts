@@ -4,7 +4,7 @@ import type { TopView } from './view2d';
 // Buttons to turn the 2D view (#75), beside the height tools. Two fingers or
 // the right mouse button turn it freely; these go round in steps.
 
-export function bindTurnTools(view: TopView): void {
+export function bindTurnTools(view: Pick<TopView, 'turnStep'>): void {
   $('turn-left').addEventListener('click', () => view.turnStep(-1));
   $('turn-right').addEventListener('click', () => view.turnStep(1));
   $('turn-reset').addEventListener('click', () => view.turnStep(0));
