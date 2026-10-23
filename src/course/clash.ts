@@ -44,18 +44,51 @@ interface Solid {
   steps: number[];
   /** Bounds with room for everything tested against it. */
   box: Box3;
+  points: Vector3[];
+  pointBox: Box3;
+  lanePoints: Vector3[];
+  laneBox: Box3;
+  volume: Box3;
+  clearance: Box3;
 }
 
 function solid(track: WorldTrack): Solid {
   const pos = track.samples.map((f) => new Vector3().setFromMatrixPosition(f));
   const reach = Math.max(-track.section.left, track.section.right) + fenceHeight + MACHINE_CLEARANCE;
+  const points = solidPoints(track);
+  const lanePoints = track.samples.flatMap((f) => lanes(track).map((x) => pointOnFrame(f, x, 0)));
+  const steps = pos.slice(1).map((p, i) => p.distanceTo(pos[i]));
   return {
     track,
     pos,
     inverse: track.samples.map((f) => f.clone().invert()),
-    steps: pos.slice(1).map((p, i) => p.distanceTo(pos[i])),
+    steps,
     box: new Box3().setFromPoints(pos).expandByScalar(reach),
+    points,
+    pointBox: new Box3().setFromPoints(points),
+    lanePoints,
+    laneBox: new Box3().setFromPoints(lanePoints),
+    volume: testBounds(track, steps, -roadThickness, fenceHeight),
+    clearance: testBounds(track, steps, -roadThickness - MACHINE_CLEARANCE, -roadThickness),
   };
+}
+
+/** Conservative world bounds of all local cells accepted by localTo, at these heights (#87). */
+function testBounds(track: WorldTrack, steps: number[], bottom: number, top: number): Box3 {
+  const box = new Box3();
+  const p = new Vector3();
+  const last = track.samples.length - 1;
+  track.samples.forEach((frame, i) => {
+    const lo = i > 0 ? -steps[i - 1] / 2 - STEP_SLACK : END_MARGIN;
+    const hi = i < last ? steps[i] / 2 + STEP_SLACK : -END_MARGIN;
+    for (const x of [-track.section.right, -track.section.left]) {
+      for (const y of [bottom, top]) {
+        for (const z of [lo, hi]) box.expandByPoint(p.set(x, y, z).applyMatrix4(frame));
+      }
+    }
+  });
+  // Cover floating-point roundoff in the inverse transform, not physical clearance.
+  return box.expandByScalar(Number.EPSILON * Math.max(1, box.min.length(), box.max.length()) * 16);
 }
 
 /**
@@ -112,15 +145,13 @@ function inSolid(s: Solid, p: Vector3): boolean {
  * and where it is; null when `upper` does not cross over a lane of it.
  */
 function lowestGap(lower: Solid, upper: Solid): { gap: number; at: Vector3 } | null {
+  if (!lower.laneBox.intersectsBox(upper.clearance)) return null;
   let out: { gap: number; at: Vector3 } | null = null;
-  for (const f of lower.track.samples) {
-    for (const x of lanes(lower.track)) {
-      const p = pointOnFrame(f, x, 0);
-      const at = localTo(upper, p);
-      if (!at || at.right < upper.track.section.left || at.right > upper.track.section.right || at.up > -roadThickness) continue;
-      const gap = -at.up - roadThickness;
-      if (!out || gap < out.gap) out = { gap, at: p };
-    }
+  for (const p of lower.lanePoints) {
+    const at = localTo(upper, p);
+    if (!at || at.right < upper.track.section.left || at.right > upper.track.section.right || at.up > -roadThickness) continue;
+    const gap = -at.up - roadThickness;
+    if (!out || gap < out.gap) out = { gap, at: p };
   }
   return out;
 }
@@ -135,7 +166,6 @@ function lowestGap(lower: Solid, upper: Solid): { gap: number; at: Vector3 } | n
 export function findClashes(layout: Layout): Clash[] {
   const tracks = worldTracks(layout);
   const solids = tracks.map(solid);
-  const points = tracks.map(solidPoints);
   const joined = new Set(layout.joints.map((j) => pairKey(j.a.piece, j.b.piece)));
   const clashes: Clash[] = [];
   const found = new Set<string>();
@@ -145,7 +175,8 @@ export function findClashes(layout: Layout): Clash[] {
       if (pa === pb || !solids[a].box.intersectsBox(solids[b].box)) continue;
       const key = pairKey(pa, pb);
       if (!joined.has(key) && !found.has(`i${key}`)) {
-        const hit = points[a].find((p) => inSolid(solids[b], p)) ?? points[b].find((p) => inSolid(solids[a], p));
+        const hit = (solids[a].pointBox.intersectsBox(solids[b].volume) ? solids[a].points.find((p) => inSolid(solids[b], p)) : undefined) ??
+          (solids[b].pointBox.intersectsBox(solids[a].volume) ? solids[b].points.find((p) => inSolid(solids[a], p)) : undefined);
         if (hit) {
           found.add(`i${key}`);
           clashes.push({ kind: 'interference', pieces: [Math.min(pa, pb), Math.max(pa, pb)], at: hit });

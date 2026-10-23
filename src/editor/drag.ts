@@ -1,5 +1,5 @@
 import { Matrix4, type Vector3 } from 'three';
-import { addFreeItem, dropJoin, type PaletteItem } from '../course/add';
+import { addFreeItem, dropJoin, planDrop, type DropPlan, type PaletteItem } from '../course/add';
 import { layoutCourse, movingGroup, type Course, type Layout } from '../course/course';
 import { deletePiece, moveGroup, tidyCuts } from '../course/edit';
 import { applyMagnet, findMagnet, MAGNET_DISTANCE } from '../course/joining';
@@ -50,6 +50,9 @@ export class PaletteDrag {
     from: { x: number; y: number };
     active: boolean;
     preview: Course | null;
+    view?: EditorView;
+    plan?: DropPlan;
+    free?: { course: Course; x: number; z: number; next: Course };
   } | null = null;
   /** The click that ends a drag out of the parts list adds nothing more. */
   private swallowClick = false;
@@ -83,7 +86,9 @@ export class PaletteDrag {
     const at = this.host.view.floorAt(e.clientX, e.clientY);
     const preview = at && this.dropCourse(d.item, at[0], at[1], e.shiftKey);
     if (!preview && !d.preview) return;
+    if (preview === d.preview && d.view === this.host.view) return;
     d.preview = preview;
+    d.view = this.host.view;
     const layout = preview ? layoutCourse(preview) : this.host.layout;
     const selection: Selection = preview ? { kind: 'piece', index: preview.pieces.length - 1 } : this.host.selection;
     perfSpan('preview:setData', () => this.host.view.setData(layout, selection));
@@ -106,10 +111,18 @@ export class PaletteDrag {
    * it lands about where it would sit there, else on its own (#40).
    */
   private dropCourse(item: PaletteItem, x: number, z: number, noSnap: boolean): Course {
-    const joined = perfSpan('dropJoin', () => dropJoin(this.host.course, item, x, z, Math.max(DROP_JOIN_MM, this.host.screenMm(DROP_JOIN_PX))));
+    const d = this.paletteDrag!;
+    const course = this.host.course;
+    const joined = perfSpan('dropJoin', () => {
+      if (d.plan?.course !== course) d.plan = planDrop(course, item);
+      return dropJoin(course, item, x, z, Math.max(DROP_JOIN_MM, this.host.screenMm(DROP_JOIN_PX)), d.plan);
+    });
     if (joined) return joined;
     if (this.host.snapOn && !noSnap) [x, z] = [snap(x), snap(z)];
-    return addFreeItem(this.host.course, item, x, z);
+    if (d.free?.course === course && d.free.x === x && d.free.z === z) return d.free.next;
+    const next = addFreeItem(course, item, x, z);
+    d.free = { course, x, z, next };
+    return next;
   }
 }
 

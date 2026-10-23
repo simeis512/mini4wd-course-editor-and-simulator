@@ -44,6 +44,7 @@ export class TopView implements EditorView {
   private blinking = false;
   private clashes: readonly Clash[] = [];
   private stoppersShown = true;
+  private updating = false;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -61,6 +62,15 @@ export class TopView implements EditorView {
 
   setData(layout: Layout, selection: Selection): void {
     perfSpan('view2d', () => this.updateData(layout, selection));
+  }
+
+  beginUpdate(): void {
+    this.updating = true;
+  }
+
+  endUpdate(): void {
+    this.updating = false;
+    perfSpan('view2d', () => this.draw());
   }
 
   private updateData(layout: Layout, selection: Selection): void {
@@ -178,6 +188,7 @@ export class TopView implements EditorView {
   }
 
   draw(): void {
+    if (this.updating || this.canvas.hidden) return;
     this.paint();
     this.handlers.onViewChange?.();
   }
@@ -198,6 +209,8 @@ export class TopView implements EditorView {
     const dpr = target?.ratio ?? (window.devicePixelRatio || 1);
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
+    // Read dimensions once, not for every vertex (a DOM layout read each time, #87).
+    const toScreen = (x: number, z: number) => this.camera.toScreen(x, z, w, h);
     if (!target && (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr))) {
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
@@ -212,14 +225,14 @@ export class TopView implements EditorView {
     const path = (pts: [number, number][], close: boolean) => {
       ctx.beginPath();
       pts.forEach(([x, z], i) => {
-        const [sx, sy] = this.toScreen(x, z);
+        const [sx, sy] = toScreen(x, z);
         if (i === 0) ctx.moveTo(sx, sy);
         else ctx.lineTo(sx, sy);
       });
       if (close) ctx.closePath();
     };
 
-    const painter: Painter = { ctx, toScreen: (x, z) => this.toScreen(x, z), scale: this.camera.scale };
+    const painter: Painter = { ctx, toScreen, scale: this.camera.scale };
     // Hoses and boxes lie on the floor, under everything (#53).
     if (this.stoppersShown) drawStoppers(painter, layout);
     const range = colorRange(this.topHeight);

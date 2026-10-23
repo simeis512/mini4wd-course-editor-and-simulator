@@ -229,7 +229,15 @@ export class EditorApp {
   }
 
   private refresh(writeUrl: boolean): void {
-    perfReport(`refresh:${this.mode}`, () => this.refreshData(writeUrl));
+    perfReport(`refresh:${this.mode}`, () => {
+      const views = [this.top, this.orbit];
+      for (const view of views) view.beginUpdate();
+      try {
+        this.refreshData(writeUrl);
+      } finally {
+        for (const view of views) view.endUpdate();
+      }
+    });
   }
 
   private refreshData(writeUrl: boolean): void {

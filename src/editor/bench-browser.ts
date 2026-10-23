@@ -38,6 +38,7 @@ export function installBench(editor: EditorApp): void {
         for (const mode of ['2d', '3d'] as const) {
           const samples: Record<string, number>[] = [];
           const drags: Record<string, number>[] = [];
+          const warmDrags: Record<string, number>[] = [];
           for (let i = 0; i < 25; i++) {
             app.load(structuredClone(course), false);
             app.setMode(mode);
@@ -57,12 +58,15 @@ export function installBench(editor: EditorApp): void {
             performance.clearMeasures();
             app.paletteDrag.move({ pointerId: 1, clientX: point[0], clientY: point[1], shiftKey: false } as PointerEvent);
             if (i >= 5) drags.push(entries());
+            performance.clearMeasures();
+            app.paletteDrag.move({ pointerId: 1, clientX: point[0] + 0.5, clientY: point[1], shiftKey: false } as PointerEvent);
+            if (i >= 5) warmDrags.push(entries());
             drag.paletteDrag = null;
           }
           const summarize = (data: Record<string, number>[]) => Object.fromEntries(
             [...new Set(data.flatMap(Object.keys))].map((key) => [key, Number(median(data.map((s) => s[key] ?? 0)).toFixed(3))]),
           );
-          results.push({ size, mode, refresh: summarize(samples), drag: summarize(drags) });
+          results.push({ size, mode, refresh: summarize(samples), drag: summarize(drags), warmDrag: summarize(warmDrags) });
           output.textContent = JSON.stringify({ browser: navigator.userAgent, samples: 20, results }, null, 2);
           await frame();
         }

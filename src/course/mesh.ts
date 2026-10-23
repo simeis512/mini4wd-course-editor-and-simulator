@@ -64,9 +64,16 @@ export function pieceTracks(pc: PlacedPiece, piece: number): WorldTrack[] {
   }));
 }
 
-/** Every stretch of road of the course, piece by piece. */
+const tracksCache = new WeakMap<Layout, WorldTrack[]>();
+
+/** Every stretch of road, shared read-only for this immutable layout's lifetime (#87). */
 export function worldTracks(layout: Layout): WorldTrack[] {
-  return layout.pieces.flatMap((pc, i) => pieceTracks(pc, i));
+  let tracks = tracksCache.get(layout);
+  if (!tracks) {
+    tracks = layout.pieces.flatMap((pc, i) => pieceTracks(pc, i));
+    tracksCache.set(layout, tracks);
+  }
+  return tracks;
 }
 
 /** Whether the point (x, z) lies inside a polygon given in X/Z. */

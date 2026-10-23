@@ -91,16 +91,32 @@ export function itemSpot(course: Course, item: PaletteItem, x: number, z: number
  * dropped at (x, z), within `reach` mm of the middle of its footprint; null
  * when it lands by none (#40).
  */
-export function dropJoin(course: Course, item: PaletteItem, x: number, z: number, reach: number): Course | null {
+export function dropJoin(course: Course, item: PaletteItem, x: number, z: number, reach: number, plan?: DropPlan): Course | null {
   // A piece filling a gap sits about as near from either end, so the way that closes it wins.
   let best: { next: Course; open: number; d: number } | null = null;
+  const targets = plan?.course === course && plan.item === item ? plan : planDrop(course, item);
+  for (const { next, open, cx, cz } of targets.candidates) {
+    const d = Math.hypot(cx - x, cz - z);
+    if (d <= reach && (!best || open < best.open || (open === best.open && d < best.d))) best = { next, open, d };
+  }
+  return best?.next ?? null;
+}
+
+/** Joining alternatives that stay fixed throughout one palette drag (#87). Treat as read-only. */
+export interface DropPlan {
+  course: Course;
+  item: PaletteItem;
+  candidates: { next: Course; open: number; cx: number; cz: number }[];
+}
+
+export function planDrop(course: Course, item: PaletteItem): DropPlan {
+  const candidates: DropPlan['candidates'] = [];
   for (const ref of layoutCourse(course).open) {
     const joined = joinItem(course, item, ref);
     if (!joined) continue;
     const [x0, x1, z0, z1] = addedBounds(joined.course, course.pieces.length);
-    const d = Math.hypot((x0 + x1) / 2 - x, (z0 + z1) / 2 - z);
     const open = layoutCourse(joined.course).open.length;
-    if (d <= reach && (!best || open < best.open || (open === best.open && d < best.d))) best = { next: joined.course, open, d };
+    candidates.push({ next: joined.course, open, cx: (x0 + x1) / 2, cz: (z0 + z1) / 2 });
   }
-  return best?.next ?? null;
+  return { course, item, candidates };
 }

@@ -21,6 +21,9 @@ export function blink(t: number): number {
 
 /** What the editor needs from the 2D and 3D views alike. */
 export interface EditorView {
+  /** Coalesce the synchronous display changes of one refresh into one draw (#87). */
+  beginUpdate(): void;
+  endUpdate(): void;
   /** Show this layout with this selection. */
   setData(layout: Layout, selection: Selection): void;
   /** Blink the pieces a raise would move, or stop with null. */

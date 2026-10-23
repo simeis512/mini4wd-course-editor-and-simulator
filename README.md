@@ -16,8 +16,12 @@
 npm install
 npm run dev        # 開発サーバー（LAN 公開。スマホから AR 確認用）
 npm test           # テスト
+npm run bench     # S/M/L コースへの1ピース追加に関係する計算のベンチ
 npm run build      # 型チェック + ビルド
 ```
+
+追加処理の計測方法と最適化前後の結果は [docs/perf.md](docs/perf.md) を参照。
+URL に `?perf` を付けると、更新・ドラッグ処理の内訳をコンソールと DevTools の User Timing に表示する（通常時は無効）。
 
 WebXR の AR は HTTPS（または localhost）でのみ動作するため、開発サーバーは自己署名証明書の HTTPS で起動する。
 スマホからは `npm run dev` の表示する Network の URL（`https://192.168.x.x:5173/` など、**https** で始まるもの）を開く。

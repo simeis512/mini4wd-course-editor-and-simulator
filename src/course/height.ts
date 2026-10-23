@@ -52,36 +52,47 @@ export interface Support extends Stand {
   piece: number;
 }
 
-/** A track's road seen from above, cut into one quad per sample step, with the highest road surface of each. */
-interface Footprint {
+const supportCache = new WeakMap<Layout, { tracks: readonly WorldTrack[]; result: Support[] }>();
+
+/** One road sample step, with its conservative highest surface. */
+interface RoadQuad {
   track: WorldTrack;
-  quads: { poly: [number, number][]; surface: number }[];
-  box: [number, number, number, number];
+  poly: [number, number][];
+  surface: number;
 }
 
-function footprintOf(track: WorldTrack): Footprint {
+/** Grid granularity only; polygon/height tests still decide contacts exactly (#87). */
+const ROAD_CELL = SUPPORT_SPACING;
+type RoadIndex = Map<string, RoadQuad[]>;
+const cellKey = (x: number, z: number) => `${Math.floor(x / ROAD_CELL)}:${Math.floor(z / ROAD_CELL)}`;
+
+function indexRoad(index: RoadIndex, track: WorldTrack): void {
   const { samples, section } = track;
   const p = new Vector3();
   const edge = (x: number) => samples.map((f) => pointOnFrame(f, x, 0, p).clone());
   const left = edge(section.left);
   const right = edge(section.right);
-  const quads = [];
   for (let i = 0; i + 1 < samples.length; i++) {
     const corners = [left[i], left[i + 1], right[i + 1], right[i]];
-    quads.push({ poly: corners.map((c): [number, number] => [c.x, c.z]), surface: Math.max(...corners.map((c) => c.y)) });
+    const quad: RoadQuad = { track, poly: corners.map((c): [number, number] => [c.x, c.z]), surface: Math.max(...corners.map((c) => c.y)) };
+    const xs = corners.map((c) => c.x / ROAD_CELL);
+    const zs = corners.map((c) => c.z / ROAD_CELL);
+    for (let x = Math.floor(Math.min(...xs)); x <= Math.floor(Math.max(...xs)); x++) {
+      for (let z = Math.floor(Math.min(...zs)); z <= Math.floor(Math.max(...zs)); z++) {
+        const key = `${x}:${z}`;
+        const cell = index.get(key);
+        if (cell) cell.push(quad);
+        else index.set(key, [quad]);
+      }
+    }
   }
-  const all = [...left, ...right];
-  const xs = all.map((v) => v.x);
-  const zs = all.map((v) => v.z);
-  return { track, quads, box: [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)] };
 }
 
 /** Highest surface of other road under the point (x, z) and lower than `y`, or -Infinity when there is none. */
-function roadBelow(footprints: readonly Footprint[], own: WorldTrack, x: number, z: number, y: number): number {
+function roadBelow(index: RoadIndex, own: WorldTrack, x: number, z: number, y: number): number {
   let top = -Infinity;
-  for (const { track, quads, box } of footprints) {
-    if (track === own || x < box[0] || x > box[1] || z < box[2] || z > box[3]) continue;
-    for (const q of quads) if (q.surface < y && q.surface > top && insidePolygon(x, z, q.poly)) top = q.surface;
+  for (const q of index.get(cellKey(x, z)) ?? []) {
+    if (q.track !== own && q.surface < y && q.surface > top && insidePolygon(x, z, q.poly)) top = q.surface;
   }
   return top;
 }
@@ -99,8 +110,20 @@ function roadBelow(footprints: readonly Footprint[], own: WorldTrack, x: number,
  * road. Where there is no room at all, the road is left to span the gap.
  */
 export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTracks(layout)): Support[] {
-  const footprints = tracks.map(footprintOf);
+  const cached = supportCache.get(layout);
+  if (cached?.tracks === tracks) return cached.result;
+  const result = computeSupports(layout, tracks);
+  supportCache.set(layout, { tracks, result });
+  return result;
+}
+
+/** Shared read-only per layout; a new edit always produces a new layout (#87). */
+function computeSupports(layout: Layout, tracks: readonly WorldTrack[]): Support[] {
+  const road: RoadIndex = new Map();
+  for (const track of tracks) indexRoad(road, track);
   const out: Support[] = [];
+  const stands: { poly: [number, number][]; box: [number, number, number, number] }[] = [];
+  const standFrames: StandFrame[] = [];
   // Lowest road first, so stands under a stacked level are in place before
   // the stands that straddle that level are fitted round them.
   const heights = new Map(tracks.map((t) => [t, Math.min(...t.samples.map((f) => f.elements[13]))]));
@@ -126,20 +149,40 @@ export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTr
       const along = new Vector3(0, 0, 1).transformDirection(f).setY(0);
       if (along.lengthSq() < 1e-9) continue;
       along.normalize();
+      // Every leg/crossbar probe is within this conservative radius of the frame.
+      // Keep the original order and exact polygon tests, excluding only distant stands (#87).
+      const radius = Math.max(Math.abs(section.left), Math.abs(section.right)) + SUPPORT_OVERHANG + SUPPORT_REACH +
+        STAND_LEG + 2 * SUPPORT_CLEARANCE + STAND_DEPTH;
+      const [cx, cz] = [f.elements[12], f.elements[14]];
+      const near = (box: readonly number[]) => box[0] <= cx + radius && box[1] >= cx - radius && box[2] <= cz + radius && box[3] >= cz - radius;
+      const nearbyStands = stands.filter((s) => near(s.box));
+      // Adjacent candidate legs test the same across-road positions repeatedly (#87).
+      const belowCache = new Map<number, number>();
+      const standCache = new Map<number, boolean>();
       // Look across the whole depth of the stand: where it meets road below
       // at an angle, its corners reach further than its middle.
       const below = (x: number) => {
+        const cached = belowCache.get(x);
+        if (cached !== undefined) return cached;
         const p = pointOnFrame(f, x, 0);
         let y = -Infinity;
         for (const d of [-STAND_DEPTH / 2, 0, STAND_DEPTH / 2]) {
-          y = Math.max(y, roadBelow(footprints, track, p.x + along.x * d, p.z + along.z * d, top));
+          y = Math.max(y, roadBelow(road, track, p.x + along.x * d, p.z + along.z * d, top));
         }
+        belowCache.set(x, y);
         return y;
       };
       // Whether a stand already placed stands at `x` across the road, anywhere along the stand's depth.
       const onStand = (x: number) => {
+        const cached = standCache.get(x);
+        if (cached !== undefined) return cached;
         const p = pointOnFrame(f, x, 0);
-        return [-STAND_DEPTH / 2, 0, STAND_DEPTH / 2].some((d) => out.some((o) => standContains(o, p.x + along.x * d, p.z + along.z * d)));
+        const hit = [-STAND_DEPTH / 2, 0, STAND_DEPTH / 2].some((d) => {
+          const [x, z] = [p.x + along.x * d, p.z + along.z * d];
+          return nearbyStands.some(({ poly, box }) => x >= box[0] && x <= box[1] && z >= box[2] && z <= box[3] && insidePolygon(x, z, poly));
+        });
+        standCache.set(x, hit);
+        return hit;
       };
       // A leg from `outer` inwards (side −1 left, +1 right) needs clear floor around it.
       const clear = (outer: number, side: -1 | 1) => {
@@ -177,8 +220,14 @@ export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTr
       const stand = { piece: track.piece, left, right, along };
       // Tracks side by side (a ramp beside its lower lanes) can ask for
       // stands in the same place: keep the first.
-      if (out.some((o) => overlaps(o, stand))) continue;
+      const frame = standFrame(stand);
+      if (standFrames.some((o) => overlaps(o, frame))) continue;
       out.push(stand);
+      standFrames.push(frame);
+      const poly = standCorners(stand);
+      const xs = poly.map((p) => p[0]);
+      const zs = poly.map((p) => p[1]);
+      stands.push({ poly, box: [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)] });
     }
   }
   return out.sort((p, q) => p.piece - q.piece);
@@ -190,18 +239,29 @@ function standCorners(s: Stand): [number, number][] {
   return [s.left.clone().sub(d), s.right.clone().sub(d), s.right.clone().add(d), s.left.clone().add(d)].map((v): [number, number] => [v.x, v.z]);
 }
 
-function standContains(s: Stand, x: number, z: number): boolean {
-  return insidePolygon(x, z, standCorners(s));
+interface StandFrame {
+  stand: Stand;
+  middle: Vector3;
+  across: Vector3;
+}
+
+function standFrame(stand: Stand): StandFrame {
+  return {
+    stand,
+    middle: stand.left.clone().add(stand.right).multiplyScalar(0.5).setY(0),
+    across: stand.right.clone().sub(stand.left).setY(0).normalize(),
+  };
 }
 
 /** Whether two stands' footprints overlap, seen from above. */
-function overlaps(a: Stand, b: Stand): boolean {
-  const mid = (s: Stand) => s.left.clone().add(s.right).multiplyScalar(0.5).setY(0);
-  const across = b.right.clone().sub(b.left).setY(0).normalize();
-  const offset = mid(a).sub(mid(b));
-  if (Math.abs(offset.dot(b.along)) >= ((a.depth ?? STAND_DEPTH) + (b.depth ?? STAND_DEPTH)) / 2) return false;
+function overlaps(af: StandFrame, bf: StandFrame): boolean {
+  const [a, b] = [af.stand, bf.stand];
+  // The along test rejects most pairs; avoid allocating vectors for those (#87).
+  const dx = af.middle.x - bf.middle.x;
+  const dz = af.middle.z - bf.middle.z;
+  if (Math.abs(dx * b.along.x + dz * b.along.z) >= ((a.depth ?? STAND_DEPTH) + (b.depth ?? STAND_DEPTH)) / 2) return false;
   const span = (s: Stand) => {
-    const [l, r] = [s.left, s.right].map((p) => p.clone().sub(mid(b)).setY(0).dot(across));
+    const [l, r] = [s.left, s.right].map((p) => (p.x - bf.middle.x) * bf.across.x + (p.z - bf.middle.z) * bf.across.z);
     return [Math.min(l, r), Math.max(l, r)];
   };
   const [a0, a1] = span(a);
