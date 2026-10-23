@@ -8,12 +8,28 @@ import { buildCourseMeshes, buildSupportMesh, MM } from '../course/mesh';
 import { buildPropMeshes } from '../course/props-mesh';
 import { HOSE_DIAMETER } from '../course/stoppers';
 import { ArMode } from './ar';
-import { grabs, JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
+import { grabs, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
 import { blink, drawShortMark, type EditorView, type RunMarks } from './view';
 import { perfSpan } from './perf';
 import { disposeGeometries } from './resources';
-
-import { outlineOf, MARKER_GEOMETRY, MARKER_OPEN, MARKER_SELECTED, MARKER_SPLIT, MARKER_JOINT, MARKER_INTENDED, CLASH_MARK_SIZE, CLASH_MATERIALS, HANDLE_GEOMETRY, HANDLE, MARKER_PICK_HEIGHT, JOINT_GEOMETRY, RUN_LEVEL, highlighted, unhighlighted } from './marks3d';
+import {
+  outlineOf,
+  MARKER_GEOMETRY,
+  MARKER_OPEN,
+  MARKER_SELECTED,
+  MARKER_SPLIT,
+  MARKER_JOINT,
+  MARKER_INTENDED,
+  CLASH_MARK_SIZE,
+  CLASH_MATERIALS,
+  HANDLE_GEOMETRY,
+  HANDLE,
+  JOINT_GEOMETRY,
+  RUN_LEVEL,
+  highlighted,
+  unhighlighted,
+} from './marks3d';
+import { hitAt, markerNear, raycaster, type PickState } from './pick3d';
 
 const BACKGROUND = new THREE.Color(0x1b1d22);
 
@@ -433,78 +449,26 @@ export class OrbitView implements EditorView {
     }
   }
 
+  private get pickState(): PickState {
+    return {
+      canvas: this.renderer.domElement, camera: this.camera, root: this.root,
+      markers: this.markers, pieces: this.pieces, props: this.props,
+      toClient: (world) => this.toClient(world),
+    };
+  }
+
   private raycaster(e: { clientX: number; clientY: number }): THREE.Raycaster {
-    const r = this.renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(ndc, this.camera);
-    return ray;
+    return raycaster(this.pickState, e);
+  }
+
+  private hitAt(e: { clientX: number; clientY: number }) {
+    return hitAt(this.pickState, e);
   }
 
   private pick(e: PointerEvent): void {
-    const marker = this.markerNear(e.clientX, e.clientY);
+    const marker = markerNear(this.pickState, e.clientX, e.clientY);
     if (marker?.userData.port) return this.handlers.onPick({ kind: 'port', ref: marker.userData.port });
     if (marker?.userData.joint) return this.handlers.onPick({ kind: 'joint', ...marker.userData.joint });
     this.handlers.onPick(this.hitAt(e)?.target ?? null);
   }
-
-  /**
-   * What is under a point on the page and where: a point of the selected
-   * hose, else the nearest piece, start line, timer or shown stopper.
-   */
-  private hitAt(e: { clientX: number; clientY: number }): { target: Selection; point: THREE.Vector3 } | null {
-    const ray = this.raycaster(e);
-    const handles = this.markers.children.filter((m) => m.userData.handle);
-    const handle = ray.intersectObjects(handles, false)[0];
-    if (handle) return { target: handle.object.userData.handle, point: handle.point };
-    const props = this.props.filter((g) => g.visible);
-    const hit = ray.intersectObjects([...this.pieces, ...props], true)[0];
-    return hit ? { target: targetOf(hit.object), point: hit.point } : null;
-  }
-
-  /**
-   * The port or joint marker nearest a point on the page, within the same
-   * screen radius as the top view, so the small joint bars are as easy to
-   * hit as in 2D. Ports come first. Fences of the marker's own pieces may
-   * hide it; any other road in front does.
-   */
-  private markerNear(clientX: number, clientY: number): THREE.Object3D | null {
-    this.root.updateMatrixWorld();
-    const eye = this.camera.getWorldPosition(new THREE.Vector3());
-    const ray = new THREE.Raycaster();
-    for (const kind of ['port', 'joint'] as const) {
-      let best: { m: THREE.Object3D; d: number } | null = null;
-      for (const m of this.markers.children) {
-        const data = m.userData[kind];
-        if (!data) continue;
-        const centre = m.localToWorld(new THREE.Vector3(0, MARKER_PICK_HEIGHT, 0));
-        const q = this.toClient(centre);
-        if (!q) continue;
-        const d = Math.hypot(q[0] - clientX, q[1] - clientY);
-        if (d >= (kind === 'port' ? PORT_HIT : JOINT_HIT) || (best && d >= best.d)) continue;
-        const own = kind === 'port' ? [data.piece] : [data.a.piece, data.b.piece];
-        const toward = centre.clone().sub(eye);
-        ray.set(eye, toward.clone().normalize());
-        ray.far = toward.length();
-        const front = ray.intersectObjects(this.pieces, true).some((h) => !own.includes(pieceOf(h.object)));
-        if (!front) best = { m, d };
-      }
-      if (best) return best.m;
-    }
-    return null;
-  }
-}
-
-function pieceOf(object: THREE.Object3D): number | null {
-  let o: THREE.Object3D | null = object;
-  while (o && o.userData.piece === undefined) o = o.parent;
-  return o ? o.userData.piece : null;
-}
-
-/** The piece, start line, timer or stopper a mesh belongs to. */
-function targetOf(object: THREE.Object3D): Selection {
-  let o: THREE.Object3D | null = object;
-  while (o && o.userData.piece === undefined && !o.userData.prop) o = o.parent;
-  if (!o) return null;
-  return o.userData.prop ?? { kind: 'piece', index: o.userData.piece };
 }
