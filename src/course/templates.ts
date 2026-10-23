@@ -1,6 +1,7 @@
 import { getPart, LEVEL_HEIGHT, partOf } from './catalog';
-import { compatible, layoutCourse, type Course, type PieceRec, type PortRef } from './course';
-import { addFreePiece, clone, footprint } from './edit';
+import { compatible, emptyCourse, layoutCourse, type Course, type PieceRec, type PortRef } from './course';
+import { addFreePiece, clone, deletePiece, footprint } from './edit';
+import { chain } from './presets';
 import { raiseRun } from './raise';
 
 // Templates: parts often put down together, added in one go from under the
@@ -57,14 +58,14 @@ export const TEMPLATES: TemplateDef[] = [
   {
     id: 'loop-left',
     name: 'ループ 左',
-    note: `45°カーブ ×8（左回り）。口につなぐと 1 周で ${LEVEL_HEIGHT}mm 上って自分の上を越えます`,
+    note: `45°カーブ ×8（左回り）。1 周で ${LEVEL_HEIGHT}mm 上って自分の上を越えます`,
     pieces: curves(8, 0),
     rise: LEVEL_HEIGHT,
   },
   {
     id: 'loop-right',
     name: 'ループ 右',
-    note: `45°カーブ ×8（右回り）。口につなぐと 1 周で ${LEVEL_HEIGHT}mm 上って自分の上を越えます`,
+    note: `45°カーブ ×8（右回り）。1 周で ${LEVEL_HEIGHT}mm 上って自分の上を越えます`,
     pieces: curves(8, 1),
     rise: LEVEL_HEIGHT,
   },
@@ -98,19 +99,30 @@ export function joinTemplate(course: Course, id: string, at: PortRef): { course:
 }
 
 /**
- * Add the template on its own, lying on the floor, its first piece heading
- * +Z, with the middle of all its pieces' footprints at (x, z).
+ * Add the template on its own, its first piece lying on the floor heading
+ * +Z, with the middle of all its pieces' footprints at (x, z). It is made
+ * as when joined to a port, so a loop still climbs over itself.
  */
 export function addFreeTemplate(course: Course, id: string, x: number, z: number): Course {
   const t = getTemplate(id);
+  // Joined to a straight that is then taken away, leaving the first piece free where it lay.
+  const joined = joinTemplate(chain(['straight']), id, { piece: 0, port: 1 });
+  const alone = joined ? deletePiece(joined.course, 0).pieces : [];
   const first = course.pieces.length;
-  const next = addFreePiece(course, t.pieces[0].part, t.pieces[0].port, x, z);
-  next.pieces.push(...rest(t, first));
+  const next = clone(course);
+  if (alone.length !== t.pieces.length) {
+    // Its first piece cannot follow a straight: lay it on the floor and join the rest to it.
+    next.pieces.push(...addFreePiece(emptyCourse(), t.pieces[0].part, t.pieces[0].port, 0, 0).pieces, ...rest(t, first));
+  } else {
+    next.pieces.push(
+      ...alone.map((rec): PieceRec => ('to' in rec ? { ...rec, to: [rec.to[0] + first, rec.to[1]] } : rec)),
+    );
+  }
   const [x0, x1, z0, z1] = addedBounds(next, first);
   const rec = next.pieces[first] as Extract<PieceRec, { free: unknown }>;
   const round = (v: number) => Math.round(v * 10) / 10;
   const [px, py, pz] = rec.pose.pos;
-  rec.pose = { ...rec.pose, pos: [round(px + x - (x0 + x1) / 2), py, round(pz + z - (z0 + z1) / 2)] };
+  rec.pose = { ...rec.pose, pos: [round(px + x - (x0 + x1) / 2), round(py), round(pz + z - (z0 + z1) / 2)] };
   return next;
 }
 

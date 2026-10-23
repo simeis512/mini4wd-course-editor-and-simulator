@@ -66,14 +66,24 @@ describe('templates', () => {
     expect(joinTemplate(c, 'bank-left', { piece: 1, port: 1 })).toBeNull();
   });
 
-  it('adds on its own centred on a point; a loop alone closes into a ring', () => {
+  it('adds on its own centred on a point, a loop still climbing over itself', () => {
     const c = addFreeTemplate(emptyCourse(), 'loop-left', 300, -200);
     const [x0, x1, z0, z1] = addedBounds(c, 0);
     expect((x0 + x1) / 2).toBeCloseTo(300, 0);
     expect((z0 + z1) / 2).toBeCloseTo(-200, 0);
     const layout = layoutCourse(c);
-    expect(layout.open).toEqual([]);
-    expect(layout.closures).toHaveLength(1);
+    expect(layout.open).toHaveLength(2);
+    expect(at(c, 0, 0).y).toBeCloseTo(0, 6);
+    expect(at(c, 7, 1).y).toBeCloseTo(LEVEL_HEIGHT, -1);
+    expect(findClashes(layout)).toEqual([]);
+  });
+
+  it('adds every template on its own as it would join a port', () => {
+    for (const t of TEMPLATES) {
+      const c = addFreeTemplate(chain(['straight']), t.id, 2000, 0);
+      expect(c.pieces, t.id).toHaveLength(1 + t.pieces.length);
+      expect(layoutCourse(c).problems, t.id).toEqual([]);
+    }
   });
 
   it('keeps clear of the pieces there when added on its own', () => {

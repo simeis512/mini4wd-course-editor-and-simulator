@@ -4,8 +4,7 @@ import { emptyCourse, layoutCourse } from '../course/course';
 import type { PartDef } from '../course/part';
 import { attach, partGeometry, pointOnFrame, type PartGeometry } from '../course/geometry';
 import { crossSection } from '../course/mesh';
-import { chain } from '../course/presets';
-import { addFreeTemplate, joinTemplate } from '../course/templates';
+import { addFreeTemplate } from '../course/templates';
 
 /** Width of floor every icon shows, mm, so the parts keep their sizes relative to each other. */
 const ICON_SPAN = 960;
@@ -22,18 +21,14 @@ export function partIcon(part: PartDef, port: number, variant?: number): SVGSVGE
 }
 
 /**
- * Top view of a template (#63) as it lies joined to a port, its first piece
+ * Top view of a template (#63) as it lies added on its own, its first piece
  * heading up the icon; drawn to fit, so templates show smaller than parts.
- * Joined, a loop climbs, so its shading shows which way round it turns.
+ * A loop climbs, so its shading shows which way round it turns.
  */
 export function templateIcon(id: string): SVGSVGElement {
-  const joined = joinTemplate(chain(['straight']), id, { piece: 0, port: 1 });
-  const course = joined?.course ?? addFreeTemplate(emptyCourse(), id, 0, 0);
-  const layout = layoutCourse(course);
-  // Leave out the straight it was joined to.
-  const pieces = joined ? layout.pieces.slice(1) : layout.pieces;
+  const layout = layoutCourse(addFreeTemplate(emptyCourse(), id, 0, 0));
   return drawIcon(
-    pieces.map((pc) => ({ geometry: pc.geometry, matrix: pc.matrix, color: variantOf(pc.part, pc.rec.variant).color })),
+    layout.pieces.map((pc) => ({ geometry: pc.geometry, matrix: pc.matrix, color: variantOf(pc.part, pc.rec.variant).color })),
     0,
   );
 }
