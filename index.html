@@ -45,21 +45,21 @@
       #turn-reset { min-width: 52px; }
       #height-legend { height: 8px; border-radius: 4px; margin-top: 4px; }
       #height-scale .ends { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
-      #panel { grid-area: panel; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); padding: 10px 12px; }
+      #panel { height: 100%; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); padding: 10px 12px; }
       #panel h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 6px; }
       #panel h2:first-child { margin-top: 0; }
       #palette, #templates { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-      #panel { position: relative; }
-      #panel-fold { position: absolute; top: 6px; right: 8px; z-index: 1; min-height: 0; padding: 0 8px; border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1.2; }
-      #panel-fold .arrow { display: inline-block; }
-      #panel-fold .label { display: none; }
-      body.panel-folded #panel-fold .label { display: inline; }
-      /* Writing down the strip turns the glyph a quarter: a quarter more points it left. */
-      body.panel-folded #panel-fold .arrow { transform: rotate(90deg); }
-      body.panel-folded { grid-template-columns: 1fr 36px; }
-      body.panel-folded #panel { padding: 0; overflow: hidden; }
-      body.panel-folded #panel > :not(#panel-fold) { display: none; }
-      body.panel-folded #panel-fold { position: static; width: 100%; height: 100%; padding: 10px 0; writing-mode: vertical-rl; font-size: 14px; display: flex; align-items: center; justify-content: flex-start; gap: 6px; }
+      /* The side panel slides out of the way (#64); its tab on the left edge stays on screen to bring it back. */
+      #side { grid-area: panel; position: relative; z-index: 6; width: 300px; min-height: 0; --slide: translateX(100%); transition: transform 0.25s ease; }
+      body.panel-sliding #side { transform: var(--slide); }
+      body.no-slide #side { transition: none; }
+      body.panel-folded { grid-template-columns: 1fr 0; }
+      body.panel-folded #panel { visibility: hidden; }
+      #panel-fold { position: absolute; left: -26px; top: 50%; translate: 0 -50%; width: 26px; height: 64px; min-height: 0; padding: 0; border: 1px solid var(--line); border-right: 0; border-radius: 8px 0 0 8px; background: var(--panel); color: var(--muted); font-size: 18px; line-height: 1; }
+      #panel-fold:hover { background: #30343d; color: var(--text); }
+      #panel-fold .arrow { display: inline-block; transition: transform 0.25s ease; }
+      body.panel-folded #panel-fold .arrow, body.panel-sliding #panel-fold .arrow { transform: rotate(180deg); }
+      @media (prefers-reduced-motion: reduce) { #side, #panel-fold .arrow { transition: none; } }
       #palette button, #templates button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; font-size: 12px; line-height: 1.3; text-align: center; touch-action: none; user-select: none; -webkit-user-select: none; }
       #palette button.dim, #templates button.dim { opacity: 0.55; }
       #palette .part-icon, #templates .part-icon { width: 100%; max-width: 64px; aspect-ratio: 1; pointer-events: none; }
@@ -103,7 +103,7 @@
       .attach-list input { width: 64px; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
       .angle input#raise-count { width: 48px; }
       .angle input { width: 64px; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
-      #trash-zone { grid-area: panel; z-index: 5; pointer-events: none; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 15px; font-weight: 600; color: #fff; background: rgba(216, 50, 58, 0.82); border: 3px dashed #fff; }
+      #trash-zone { grid-area: panel; z-index: 7; pointer-events: none; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 15px; font-weight: 600; color: #fff; background: rgba(216, 50, 58, 0.82); border: 3px dashed #fff; }
       #trash-zone.blocked { background: rgba(60, 64, 74, 0.9); font-weight: 400; font-size: 13px; }
       #about { margin-left: auto; width: 34px; padding: 0; border-radius: 50%; font-weight: 700; font-family: Georgia, serif; }
       dialog { width: min(520px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow-y: auto; padding: 14px 18px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 40px #000a; }
@@ -170,10 +170,13 @@
       @media (max-width: 720px) {
         body { grid-template-columns: 1fr; grid-template-rows: auto 1fr minmax(0, 38vh); grid-template-areas: 'bar' 'stage' 'panel'; }
         #panel { border-left: 0; border-top: 1px solid var(--line); }
-        body.panel-folded { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
-        body.panel-folded #panel-fold { writing-mode: horizontal-tb; height: auto; padding: 6px 0; align-items: center; gap: 6px; }
+        #side { width: auto; --slide: translateY(100%); }
+        body.panel-folded { grid-template-columns: 1fr; grid-template-rows: auto 1fr 0; }
+        #panel-fold { left: 50%; top: -26px; translate: -50% 0; width: 64px; height: 26px; border: 1px solid var(--line); border-bottom: 0; border-radius: 8px 8px 0 0; }
         #panel-fold .arrow { transform: rotate(90deg); }
-        body.panel-folded #panel-fold .arrow { transform: rotate(-90deg); }
+        /* Clear of the tab along the bottom of the editor. */
+        #course-info, #fit { bottom: 34px; }
+        body.panel-folded #panel-fold .arrow, body.panel-sliding #panel-fold .arrow { transform: rotate(-90deg); }
         #toolbar h1 { display: none; }
       }
     </style>
@@ -378,44 +381,46 @@
         <div id="info"></div>
       </details>
     </main>
-    <aside id="panel">
-      <button id="panel-fold" aria-controls="panel" aria-expanded="true" aria-label="パーツ一覧を畳む・開く"><span class="arrow">›</span><span class="label">パーツ</span></button>
-      <div id="palette-section">
-        <h2>パーツ</h2>
-        <div id="palette"></div>
-        <p id="palette-hint" class="hint"></p>
-        <h2>テンプレート</h2>
-        <div id="templates"></div>
-        <p class="hint">よく使う組み合わせを一度に追加します。パーツと同じく、クリックで選んだ口につなぐか単体で置き、ドラッグでも置けます。</p>
-        <h2>置き物</h2>
-        <div id="props-palette" class="row">
-          <button data-prop="start" title="START のステッカー。選んだピースか、画面の中央に近い道に置きます">スタート</button>
-          <button data-prop="timer" title="ミニ四駆ラップタイマー（15184）。スタートを置くと、すぐ先に自動で付きます">ラップタイマー</button>
-          <button data-prop="hose" title="床に置くホース。コースアウトしたマシンを止めます">ホース</button>
-          <button data-prop="box" data-size="0" title="マシンを受け止める段ボール箱（小）">箱 小</button>
-          <button data-prop="box" data-size="1" title="マシンを受け止める段ボール箱（中）">箱 中</button>
-          <button data-prop="box" data-size="2" title="マシンを受け止める段ボール箱（大）">箱 大</button>
+    <div id="side">
+      <button id="panel-fold" aria-controls="panel" aria-expanded="true" aria-label="パーツ一覧を畳む・開く"><span class="arrow">›</span></button>
+      <aside id="panel">
+        <div id="palette-section">
+          <h2>パーツ</h2>
+          <div id="palette"></div>
+          <p id="palette-hint" class="hint"></p>
+          <h2>テンプレート</h2>
+          <div id="templates"></div>
+          <p class="hint">よく使う組み合わせを一度に追加します。パーツと同じく、クリックで選んだ口につなぐか単体で置き、ドラッグでも置けます。</p>
+          <h2>置き物</h2>
+          <div id="props-palette" class="row">
+            <button data-prop="start" title="START のステッカー。選んだピースか、画面の中央に近い道に置きます">スタート</button>
+            <button data-prop="timer" title="ミニ四駆ラップタイマー（15184）。スタートを置くと、すぐ先に自動で付きます">ラップタイマー</button>
+            <button data-prop="hose" title="床に置くホース。コースアウトしたマシンを止めます">ホース</button>
+            <button data-prop="box" data-size="0" title="マシンを受け止める段ボール箱（小）">箱 小</button>
+            <button data-prop="box" data-size="1" title="マシンを受け止める段ボール箱（中）">箱 中</button>
+            <button data-prop="box" data-size="2" title="マシンを受け止める段ボール箱（大）">箱 大</button>
+          </div>
+          <label class="row"><input id="show-stoppers" type="checkbox" checked /> 床の置き物（ホース・箱）を表示</label>
         </div>
-        <label class="row"><input id="show-stoppers" type="checkbox" checked /> 床の置き物（ホース・箱）を表示</label>
-      </div>
-      <section id="share-panel" hidden>
-        <h2>SNS用の画像</h2>
-        <p class="hint">枠の中の表示がそのまま画像になります。2D/3D の切り替えや、ドラッグ・ホイールでの向きや拡大はいつも通りできます。</p>
-        <div class="row">
-          <button id="share-landscape" aria-pressed="true">横 16:9</button>
-          <button id="share-portrait" aria-pressed="false">縦 9:16</button>
-          <button id="share-fit">枠に合わせる</button>
-        </div>
-        <label class="share-field">コース名<input id="share-name" type="text" maxlength="60" placeholder="（なし）" /></label>
-        <label><input id="share-facts" type="checkbox" checked /> 全長・大きさ・ピース数</label><br />
-        <label><input id="share-qr" type="checkbox" checked /> QRコード</label>
-        <canvas id="share-preview" aria-label="画像のプレビュー"></canvas>
-        <div class="row">
-          <button id="share-save" class="primary">PNGで保存</button>
-          <button id="share-close">閉じる</button>
-        </div>
-      </section>
-    </aside>
+        <section id="share-panel" hidden>
+          <h2>SNS用の画像</h2>
+          <p class="hint">枠の中の表示がそのまま画像になります。2D/3D の切り替えや、ドラッグ・ホイールでの向きや拡大はいつも通りできます。</p>
+          <div class="row">
+            <button id="share-landscape" aria-pressed="true">横 16:9</button>
+            <button id="share-portrait" aria-pressed="false">縦 9:16</button>
+            <button id="share-fit">枠に合わせる</button>
+          </div>
+          <label class="share-field">コース名<input id="share-name" type="text" maxlength="60" placeholder="（なし）" /></label>
+          <label><input id="share-facts" type="checkbox" checked /> 全長・大きさ・ピース数</label><br />
+          <label><input id="share-qr" type="checkbox" checked /> QRコード</label>
+          <canvas id="share-preview" aria-label="画像のプレビュー"></canvas>
+          <div class="row">
+            <button id="share-save" class="primary">PNGで保存</button>
+            <button id="share-close">閉じる</button>
+          </div>
+        </section>
+      </aside>
+    </div>
     <div id="trash-zone" hidden></div>
     <div id="toast"></div>
     <dialog id="notice-dialog" aria-labelledby="notice-title">
