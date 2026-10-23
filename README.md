@@ -93,7 +93,7 @@ AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari 
 - `src/editor/view2d.ts` / `view3d.ts` 2D 編集ビュー、3D/AR ビュー（共通インターフェースは `view.ts`、AR の設置と操作は `ar.ts`（指の操作は `ar-gesture.ts`）、床の点は `ar-scan.ts`、奥行きの表示とオクルージョンは `ar-depth.ts`、その置き方の計算は `ar-pose.ts`、2D の道の外形は `outline2d.ts`）
 - `src/physics/` Rapier の物理ワールド（シミュレーター用、未接続）
 
-作者はコトン（[simeis512.com](https://simeis512.com/)）。開発には Anthropic の Claude Code を使用している。このアプリは [MIT License](LICENSE)。ミニ四駆・ジャパンカップジュニアサーキットは株式会社タミヤの商標で、本アプリはタミヤとは関係のない非公式アプリ。
+作者はコトン（[simeis512.com](https://simeis512.com/)）。開発には Anthropic の Claude Code と OpenAI の Codex を使用している。このアプリは [MIT License](LICENSE)。ミニ四駆・ジャパンカップジュニアサーキットは株式会社タミヤの商標で、本アプリはタミヤとは関係のない非公式アプリ。
 
 コードの置き場所や実装の進め方のルールは [CONTRIBUTING.md](CONTRIBUTING.md) を参照。
 
