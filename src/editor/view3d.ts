@@ -10,6 +10,8 @@ import { HOSE_DIAMETER } from '../course/stoppers';
 import { ArMode } from './ar';
 import { grabs, JOINT_HIT, PORT_HIT, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
 import { blink, drawClashMark, drawShortMark, type EditorView, type RunMarks } from './view';
+import { perfSpan } from './perf';
+import { disposeGeometries } from './resources';
 
 const BACKGROUND = new THREE.Color(0x1b1d22);
 
@@ -37,6 +39,8 @@ export class OrbitView implements EditorView {
   private outlines = new THREE.Group();
   private layout: Layout | null = null;
   private active = false;
+  private updating = false;
+  private pending: { layout: Layout; selection: Selection } | null = null;
   private downAt: { x: number; y: number } | null = null;
   /** A piece being dragged: the level plane it moves on and where it was grabbed (course mm). */
   private moving: { plane: THREE.Plane; from: THREE.Vector3; dragged: boolean } | null = null;
@@ -176,10 +180,32 @@ export class OrbitView implements EditorView {
   }
 
   setData(layout: Layout, selection: Selection): void {
+    if (this.updating) {
+      this.pending = { layout, selection };
+      return;
+    }
+    perfSpan('view3d', () => this.updateData(layout, selection));
+  }
+
+  beginUpdate(): void {
+    this.updating = true;
+  }
+
+  endUpdate(): void {
+    this.updating = false;
+    const pending = this.pending;
+    this.pending = null;
+    if (pending) this.setData(pending.layout, pending.selection);
+  }
+
+  private updateData(layout: Layout, selection: Selection): void {
     this.selection = selection;
     if (layout !== this.layout) {
       this.layout = layout;
-      for (const p of this.pieces) this.root.remove(p);
+      for (const p of this.pieces) {
+        this.root.remove(p);
+        disposeGeometries(p, true);
+      }
       this.pieces = buildCourseMeshes(layout);
       for (const p of this.pieces) this.root.add(p);
       if (this.supports) {
@@ -188,7 +214,10 @@ export class OrbitView implements EditorView {
       }
       this.supports = buildSupportMesh(supports(layout));
       this.root.add(this.supports);
-      for (const p of this.props) this.root.remove(p);
+      for (const p of this.props) {
+        this.root.remove(p);
+        disposeGeometries(p);
+      }
       this.props = buildPropMeshes(layout);
       for (const p of this.props) this.root.add(p);
       this.showStoppers();
@@ -210,6 +239,7 @@ export class OrbitView implements EditorView {
       });
     });
     this.markRun();
+    disposeGeometries(this.outlines);
     this.outlines.clear();
     if (selection?.kind === 'piece') {
       layout.pieces.forEach((pc, i) => {
@@ -271,8 +301,10 @@ export class OrbitView implements EditorView {
   }
 
   setRunMarks(marks: RunMarks | null): void {
-    this.runMarks = marks?.pieces.length ? marks : null;
-    if (this.layout) this.setData(this.layout, this.selection);
+    const next = marks?.pieces.length ? marks : null;
+    if (next === this.runMarks) return;
+    this.runMarks = next;
+    if (!this.updating && this.layout) this.setData(this.layout, this.selection);
   }
 
   /** Blink the pieces a raise would move, and show the count at the end of a short run. */

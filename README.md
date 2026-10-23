@@ -16,8 +16,12 @@
 npm install
 npm run dev        # 開発サーバー（LAN 公開。スマホから AR 確認用）
 npm test           # テスト
+npm run bench     # S/M/L コースへの1ピース追加に関係する計算のベンチ
 npm run build      # 型チェック + ビルド
 ```
+
+追加処理の計測方法と最適化前後の結果は [docs/perf.md](docs/perf.md) を参照。
+URL に `?perf` を付けると、更新・ドラッグ処理の内訳をコンソールと DevTools の User Timing に表示する（通常時は無効）。
 
 WebXR の AR は HTTPS（または localhost）でのみ動作するため、開発サーバーは自己署名証明書の HTTPS で起動する。
 スマホからは `npm run dev` の表示する Network の URL（`https://192.168.x.x:5173/` など、**https** で始まるもの）を開く。
@@ -93,7 +97,7 @@ AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari 
 - `src/editor/view2d.ts` / `view3d.ts` 2D 編集ビュー、3D/AR ビュー（共通インターフェースは `view.ts`、AR の設置と操作は `ar.ts`（指の操作は `ar-gesture.ts`）、床の点は `ar-scan.ts`、奥行きの表示とオクルージョンは `ar-depth.ts`、その置き方の計算は `ar-pose.ts`、2D の道の外形は `outline2d.ts`）
 - `src/physics/` Rapier の物理ワールド（シミュレーター用、未接続）
 
-作者はコトン（[simeis512.com](https://simeis512.com/)）。開発には Anthropic の Claude Code を使用している。このアプリは [MIT License](LICENSE)。ミニ四駆・ジャパンカップジュニアサーキットは株式会社タミヤの商標で、本アプリはタミヤとは関係のない非公式アプリ。
+作者はコトン（[simeis512.com](https://simeis512.com/)）。開発には Anthropic の Claude Code と OpenAI の Codex を使用している。このアプリは [MIT License](LICENSE)。ミニ四駆・ジャパンカップジュニアサーキットは株式会社タミヤの商標で、本アプリはタミヤとは関係のない非公式アプリ。
 
 コードの置き場所や実装の進め方のルールは [CONTRIBUTING.md](CONTRIBUTING.md) を参照。
 
