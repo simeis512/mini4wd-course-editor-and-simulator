@@ -3,6 +3,7 @@ import type { LapCheck } from '../course/laps';
 import { makeQr, QR_QUIET_MODULES } from '../course/qr';
 import { cardPixels, qrCard } from '../course/qr-card';
 import { courseExtent, frameIn, SHARE_ASPECTS, shareFacts, shareLayout, type Rect, type ShareAspect } from '../course/share-image';
+import { foldPanel } from './side-panel';
 import { $, toast } from './dom';
 import { download } from './share';
 import type { EditorView } from './view';
@@ -99,6 +100,8 @@ export class ShareImage {
 
   private async open(): Promise<void> {
     this.panel.hidden = false;
+    // Its settings are in the side panel.
+    foldPanel(false);
     $('palette-section').hidden = true;
     $('share').setAttribute('aria-pressed', 'true');
     $<HTMLInputElement>('share-name').value = await this.host.name();

@@ -1,8 +1,10 @@
 import { Matrix4, Vector3 } from 'three';
 import { variantOf } from '../course/catalog';
+import { emptyCourse, layoutCourse } from '../course/course';
 import type { PartDef } from '../course/part';
-import { attach, partGeometry, pointOnFrame } from '../course/geometry';
+import { attach, partGeometry, pointOnFrame, type PartGeometry } from '../course/geometry';
 import { crossSection } from '../course/mesh';
+import { addFreeTemplate } from '../course/templates';
 
 /** Width of floor every icon shows, mm, so the parts keep their sizes relative to each other. */
 const ICON_SPAN = 960;
@@ -14,12 +16,40 @@ const SVG = 'http://www.w3.org/2000/svg';
  * from the part's own geometry, so a measured model will show the same way.
  */
 export function partIcon(part: PartDef, port: number, variant?: number): SVGSVGElement {
-  const geo = partGeometry(part);
-  const matrix = attach(new Matrix4(), geo.ports[port]);
+  const geometry = partGeometry(part);
+  return drawIcon([{ geometry, matrix: attach(new Matrix4(), geometry.ports[port]), color: variantOf(part, variant).color }], ICON_SPAN);
+}
+
+/**
+ * Top view of a template (#63) as it lies added on its own, its first piece
+ * heading up the icon; drawn to fit, so templates show smaller than parts.
+ * A loop climbs, so its shading shows which way round it turns.
+ */
+export function templateIcon(id: string): SVGSVGElement {
+  const layout = layoutCourse(addFreeTemplate(emptyCourse(), id, 0, 0));
+  return drawIcon(
+    layout.pieces.map((pc) => ({ geometry: pc.geometry, matrix: pc.matrix, color: variantOf(pc.part, pc.rec.variant).color })),
+    0,
+  );
+}
+
+/** A piece to draw in an icon: its geometry, where it lies, and its colour. */
+interface IconPiece {
+  geometry: PartGeometry;
+  matrix: Matrix4;
+  color: string;
+}
+
+/** Space round a drawing fitted to its icon, as a share of its size. */
+const FIT_MARGIN = 0.08;
+
+/** Top view of pieces, `span` mm of floor across, or just wider than the pieces when they need more. */
+function drawIcon(pieces: IconPiece[], span: number): SVGSVGElement {
   const p = new Vector3();
   // Screen right is world −X and screen up is +Z, as in the top view.
-  const shapes = geo.tracks
-    .map((track) => {
+  const shapes = pieces
+    .flatMap(({ geometry, matrix, color }) => geometry.tracks.map((track) => ({ track, matrix, color })))
+    .map(({ track, matrix, color }) => {
       const samples = track.samples.map((s) => matrix.clone().multiply(s));
       const edge = (x: number) => samples.map((f) => (pointOnFrame(f, x, 0, p), [-p.x, -p.z] as [number, number]));
       const section = crossSection(track.lanes);
@@ -34,6 +64,7 @@ export function partIcon(part: PartDef, port: number, variant?: number): SVGSVGE
         })),
         fences: section.fences.map(edge),
         height: samples.reduce((sum, f) => sum + f.elements[13], 0) / samples.length,
+        color,
       };
     })
     .sort((a, b) => a.height - b.height);
@@ -43,11 +74,11 @@ export function partIcon(part: PartDef, port: number, variant?: number): SVGSVGE
   const ys = pts.map((q) => q[1]);
   const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
   const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const size = Math.max(span, Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) * (span ? 1 : 1 + FIT_MARGIN);
   const svg = document.createElementNS(SVG, 'svg');
-  svg.setAttribute('viewBox', `${cx - ICON_SPAN / 2} ${cy - ICON_SPAN / 2} ${ICON_SPAN} ${ICON_SPAN}`);
+  svg.setAttribute('viewBox', `${cx - size / 2} ${cy - size / 2} ${size} ${size}`);
   svg.setAttribute('aria-hidden', 'true');
   svg.classList.add('part-icon');
-  const color = variantOf(part, variant).color;
   // Lower road is drawn darker, so a slope shows which way it climbs.
   const heights = shapes.flatMap((s) => s.strips.map((q) => q.height));
   const low = Math.min(...heights);
@@ -56,7 +87,7 @@ export function partIcon(part: PartDef, port: number, variant?: number): SVGSVGE
   for (const s of shapes) {
     const road = document.createElementNS(SVG, 'polygon');
     road.setAttribute('points', points(s.polygon));
-    road.setAttribute('fill', color);
+    road.setAttribute('fill', s.color);
     road.setAttribute('stroke', 'rgba(0,0,0,0.55)');
     road.setAttribute('stroke-width', '8');
     svg.appendChild(road);

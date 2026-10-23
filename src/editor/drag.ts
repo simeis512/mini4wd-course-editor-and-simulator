@@ -1,7 +1,7 @@
 import { Matrix4, type Vector3 } from 'three';
-import { dropJoin } from '../course/add';
+import { addFreeItem, dropJoin, type PaletteItem } from '../course/add';
 import { layoutCourse, movingGroup, type Course, type Layout } from '../course/course';
-import { addFreePiece, deletePiece, moveGroup, tidyCuts } from '../course/edit';
+import { deletePiece, moveGroup, tidyCuts } from '../course/edit';
 import { applyMagnet, findMagnet, MAGNET_DISTANCE } from '../course/joining';
 import { $, toast } from './dom';
 import { propPoint } from '../course/props';
@@ -40,12 +40,11 @@ export interface DragHost {
   refresh(writeUrl: boolean): void;
 }
 
-/** Dragging a part out of the parts list (#40). */
+/** Dragging a part or a template out of the parts list (#40, #63). */
 export class PaletteDrag {
-  /** A part being dragged out of the parts list, and the course as it would be if dropped now. */
+  /** A part or template being dragged out of the parts list, and the course as it would be if dropped now. */
   private paletteDrag: {
-    partId: string;
-    port: number | undefined;
+    item: PaletteItem;
     pointerId: number;
     from: { x: number; y: number };
     active: boolean;
@@ -61,10 +60,10 @@ export class PaletteDrag {
     return !this.swallowClick;
   }
 
-  down(e: PointerEvent, partId: string, port: number | undefined): void {
+  down(e: PointerEvent, item: PaletteItem): void {
     if (!e.isPrimary || e.button !== 0) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    this.paletteDrag = { partId, port, pointerId: e.pointerId, from: { x: e.clientX, y: e.clientY }, active: false, preview: null };
+    this.paletteDrag = { item, pointerId: e.pointerId, from: { x: e.clientX, y: e.clientY }, active: false, preview: null };
   }
 
   move(e: PointerEvent): void {
@@ -77,7 +76,7 @@ export class PaletteDrag {
       $('context').hidden = true;
     }
     const at = this.host.view.floorAt(e.clientX, e.clientY);
-    const preview = at && this.dropCourse(d.partId, d.port, at[0], at[1], e.shiftKey);
+    const preview = at && this.dropCourse(d.item, at[0], at[1], e.shiftKey);
     if (!preview && !d.preview) return;
     d.preview = preview;
     const layout = preview ? layoutCourse(preview) : this.host.layout;
@@ -98,14 +97,14 @@ export class PaletteDrag {
   }
 
   /**
-   * The course with `partId` dropped at (x, z): joined to an open port when
+   * The course with `item` dropped at (x, z): joined to an open port when
    * it lands about where it would sit there, else on its own (#40).
    */
-  private dropCourse(partId: string, port: number | undefined, x: number, z: number, noSnap: boolean): Course {
-    const joined = dropJoin(this.host.course, partId, port, x, z, Math.max(DROP_JOIN_MM, this.host.screenMm(DROP_JOIN_PX)));
+  private dropCourse(item: PaletteItem, x: number, z: number, noSnap: boolean): Course {
+    const joined = dropJoin(this.host.course, item, x, z, Math.max(DROP_JOIN_MM, this.host.screenMm(DROP_JOIN_PX)));
     if (joined) return joined;
     if (this.host.snapOn && !noSnap) [x, z] = [snap(x), snap(z)];
-    return addFreePiece(this.host.course, partId, port ?? 0, x, z);
+    return addFreeItem(this.host.course, item, x, z);
   }
 }
 

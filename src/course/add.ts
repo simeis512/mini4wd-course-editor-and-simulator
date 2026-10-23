@@ -1,8 +1,12 @@
 import { Vector3 } from 'three';
 import { getPart, partOf } from './catalog';
-import { compatible, layoutCourse, portKey, type Course, type PortRef } from './course';
-import { addPiece, footprint, setLength } from './edit';
+import { compatible, emptyCourse, layoutCourse, portKey, type Course, type PortRef } from './course';
+import { addFreePiece, addPiece, freeSpot, setLength } from './edit';
 import { FACE } from './geometry';
+import { addedBounds, addFreeTemplate, joinTemplate } from './templates';
+
+/** What a button in the parts list adds: a part, the way round chosen if any, or a template (#63). */
+export type PaletteItem = { part: string; port?: number } | { template: string };
 
 /**
  * Join `partId` to the open port `at`. `port` fixes which of its ports
@@ -65,20 +69,37 @@ export function nextOpenPort(course: Course, port: number): PortRef | null {
 }
 
 /**
- * The course with `partId` joined to the open port it would sit by when
+ * Join `item` to the open port `at`. `port` is the port its last piece joins
+ * by, to go on from. Null when it cannot join there.
+ */
+export function joinItem(course: Course, item: PaletteItem, at: PortRef): { course: Course; port: number } | null {
+  return 'template' in item ? joinTemplate(course, item.template, at) : joinPart(course, item.part, at, item.port);
+}
+
+/** Add `item` on its own, lying on the floor, with the middle of its footprint at (x, z). */
+export function addFreeItem(course: Course, item: PaletteItem, x: number, z: number): Course {
+  return 'template' in item ? addFreeTemplate(course, item.template, x, z) : addFreePiece(course, item.part, item.port ?? 0, x, z);
+}
+
+/** The nearest spot to (x, z) on a `step` mm grid where `item` added on its own overlaps no piece (#41). */
+export function itemSpot(course: Course, item: PaletteItem, x: number, z: number, step?: number): [number, number] {
+  return freeSpot(course, addedBounds(addFreeItem(emptyCourse(), item, 0, 0), 0), x, z, step);
+}
+
+/**
+ * The course with `item` joined to the open port it would sit by when
  * dropped at (x, z), within `reach` mm of the middle of its footprint; null
  * when it lands by none (#40).
  */
-export function dropJoin(course: Course, partId: string, port: number | undefined, x: number, z: number, reach: number): Course | null {
+export function dropJoin(course: Course, item: PaletteItem, x: number, z: number, reach: number): Course | null {
   // A piece filling a gap sits about as near from either end, so the way that closes it wins.
   let best: { next: Course; open: number; d: number } | null = null;
   for (const ref of layoutCourse(course).open) {
-    const joined = joinPart(course, partId, ref, port);
+    const joined = joinItem(course, item, ref);
     if (!joined) continue;
-    const layout = layoutCourse(joined.course);
-    const [x0, x1, z0, z1] = footprint(layout.pieces[layout.pieces.length - 1]);
+    const [x0, x1, z0, z1] = addedBounds(joined.course, course.pieces.length);
     const d = Math.hypot((x0 + x1) / 2 - x, (z0 + z1) / 2 - z);
-    const open = layout.open.length;
+    const open = layoutCourse(joined.course).open.length;
     if (d <= reach && (!best || open < best.open || (open === best.open && d < best.d))) best = { next: joined.course, open, d };
   }
   return best?.next ?? null;

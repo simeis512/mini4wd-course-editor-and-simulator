@@ -1,5 +1,5 @@
 import { Matrix4 } from 'three';
-import { joinPart, nextOpenPort } from '../course/add';
+import { addFreeItem, itemSpot, joinItem, nextOpenPort, type PaletteItem } from '../course/add';
 import { addAttachment, moveAttachment, removeAttachment } from '../course/attachments';
 import { LEVEL_HEIGHT } from '../course/catalog';
 import {
@@ -13,11 +13,9 @@ import {
   type PortRef,
 } from '../course/course';
 import {
-  addFreePiece,
   addPiece,
   deletePiece,
   flipPiece,
-  freeSpot,
   jointBend,
   jointShift,
   markIntended,
@@ -53,6 +51,7 @@ import { bindAbout, showNoticeOnStart } from './notice';
 import { bindShopping } from './shopping';
 import { bindQr } from './qr';
 import { ShareImage } from './share-image';
+import { bindSidePanel } from './side-panel';
 import { bindTurnTools, renderTurnTools } from './turn-tools';
 import { exportJson, fileName, HashSync, readCourseFile, readHash } from './share';
 import type { EditorView } from './view';
@@ -160,10 +159,10 @@ export class EditorApp {
     this.top = new TopView($('view2d'), handlers);
     this.orbit = new OrbitView($('view3d'), handlers);
     buildPalette({
-      click: (partId, port) => {
-        if (this.paletteDrag.clickAdds) this.place(partId, port);
+      click: (item) => {
+        if (this.paletteDrag.clickAdds) this.place(item);
       },
-      down: (e, partId, port) => this.paletteDrag.down(e, partId, port),
+      down: (e, item) => this.paletteDrag.down(e, item),
       move: (e) => this.paletteDrag.move(e),
       up: (e, cancelled) => this.paletteDrag.up(e, cancelled),
     });
@@ -273,29 +272,29 @@ export class EditorApp {
   }
 
   /**
-   * Add a part from the parts list: joined to the selected open port, as the
-   * first piece at the origin, or else on its own in a free spot near the
-   * middle of the view (#41).
+   * Add a part or template from the parts list: joined to the selected open
+   * port, a part as the first piece at the origin, or else on its own in a
+   * free spot near the middle of the view (#41, #63). One edit, so one undo.
    */
-  private place(partId: string, side?: number): void {
+  private place(item: PaletteItem): void {
     const s = this.selection;
-    const port = side ?? 0;
-    if (this.course.pieces.length === 0) {
-      const next = addPiece(this.course, partId, null, port);
+    if (this.course.pieces.length === 0 && 'part' in item) {
+      const port = item.port ?? 0;
+      const next = addPiece(this.course, item.part, null, port);
       this.commit(next, this.nextPort(next, port));
       return;
     }
     if (s?.kind === 'port') {
-      const joined = joinPart(this.course, partId, s.ref, side);
+      const joined = joinItem(this.course, item, s.ref);
       if (joined) {
         this.commit(joined.course, this.nextPort(joined.course, joined.port));
         return;
       }
-      toast('選んだ口にはつなげないパーツなので、単体で置きました');
+      toast(`選んだ口にはつなげない${'template' in item ? 'テンプレート' : 'パーツ'}なので、単体で置きました`);
     }
     const [cx, cz] = this.view.centre;
-    const [x, z] = freeSpot(this.course, partId, port, cx, cz);
-    const next = addFreePiece(this.course, partId, port, x, z);
+    const [x, z] = itemSpot(this.course, item, cx, cz);
+    const next = addFreeItem(this.course, item, x, z);
     this.commit(next, { kind: 'piece', index: next.pieces.length - 1 });
   }
 
@@ -468,6 +467,7 @@ export class EditorApp {
 
   private bindUi(): void {
     bindAbout();
+    bindSidePanel();
     bindLevelTools((view) => this.setHeightView(view));
     bindTurnTools(this.top);
     bindShopping(() => renderCourseInfo(this.course, this.layout, this.checks));

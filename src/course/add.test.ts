@@ -60,12 +60,12 @@ describe('dropJoin', () => {
 
   it('joins a part dropped about where it would sit on an open port', () => {
     const [x, z] = middle(joinPart(course, 'straight', { piece: 0, port: 1 })!.course);
-    const next = dropJoin(course, 'straight', undefined, x + 30, z - 30, 150);
+    const next = dropJoin(course, { part: 'straight' }, x + 30, z - 30, 150);
     expect(next?.pieces[1]).toEqual({ part: 'straight', port: 0, to: [0, 1] });
   });
 
   it('joins nothing when dropped far from every open port', () => {
-    expect(dropJoin(course, 'straight', undefined, 5000, 5000, 150)).toBeNull();
+    expect(dropJoin(course, { part: 'straight' }, 5000, 5000, 150)).toBeNull();
   });
 
   it('prefers the end that closes a gap', () => {
@@ -73,7 +73,7 @@ describe('dropJoin', () => {
     const seven = chain(['curve45', 'curve45', 'curve45', 'curve45', 'curve45', 'curve45', 'curve45']);
     const closing = joinPart(seven, 'curve45', { piece: 6, port: 1 })!.course;
     const [x, z] = middle(closing);
-    const next = dropJoin(seven, 'curve45', undefined, x, z, 150);
+    const next = dropJoin(seven, { part: 'curve45' }, x, z, 150);
     expect(layoutCourse(next!).open).toEqual([]);
   });
 });
