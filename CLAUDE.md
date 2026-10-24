@@ -11,6 +11,7 @@
 - 仮の値は名前付き定数にして `provisional` と出どころ（spec の節や issue）をコメントに書く
 - `PART_CODES` と `variants` は末尾に追加するだけ。URL 形式を変えるなら `FORMAT_VERSION` を上げる
 - `npm test` と `npm run build` を通し、画面の変更はブラウザで確かめてから PR を出す
+- スクリーンショットは PR の本文やコメントに貼り、リポジトリには入れない
 
 ## ブランチ・コミット・PR
 
