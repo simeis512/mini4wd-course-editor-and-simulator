@@ -151,6 +151,7 @@ export class EditorApp {
       },
       leave: () => this.orbit.setPicking(true),
       setMachine: (object) => this.orbit.setMachine(object),
+      aim: (view) => this.orbit.aim(view),
     });
     buildPalette({
       click: (item) => {
