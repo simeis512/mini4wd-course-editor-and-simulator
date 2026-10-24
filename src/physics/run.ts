@@ -2,25 +2,29 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { Quaternion, Vector3 } from 'three';
 import type { Layout } from '../course/course';
 import { MM } from '../course/mesh';
+import { lapMarks, startDirection } from '../course/lap-marks';
 import { laneSpot, laneStart, simCourse, type SimCourse } from '../course/sim-course';
 import { addCourseColliders, type CourseColliders } from './course-colliders';
 import { createMachine, driveMachine, type Machine } from './machine';
 import { STANDARD_MACHINE, type MachineSpec } from './machine-spec';
 import { createPhysicsWorld } from './world';
 
-// One machine running round a course (#27, spec simulator.md): a fixed
-// 1 ms physics step, and the ways a run comes to an end (spec 5).
+// One machine running round a course (#27, #28, spec simulator.md): a fixed
+// 1 ms physics step, laps and lap times at the start line and the timer,
+// and the ways a run comes to an end (spec 5).
 
 /** Physics step, s (spec simulator.md 4, provisional). */
 export const STEP = 1 / 1000;
 /** A machine that gets less than this far along its lane in `STALL_TIME` has stopped (spec simulator.md 5, provisional), mm. */
 export const STALL_DISTANCE = 50;
 export const STALL_TIME = 2;
+/** A machine that gets this far back from the furthest it has been is running the wrong way (spec simulator.md 5, provisional), mm. */
+export const REVERSE_DISTANCE = 200;
 /** How near the end of one lane's line a machine must be to go on to the next lane's, mm. */
 const LANE_HANDOVER = 100;
 
 /** Why a run came to an end (spec simulator.md 5). */
-export type OutReason = 'floor' | 'fall' | 'stopper' | 'stopped';
+export type OutReason = 'floor' | 'fall' | 'stopper' | 'stopped' | 'flipped' | 'reverse';
 
 export interface RunState {
   /** Time since the start, s. */
@@ -32,8 +36,13 @@ export interface RunState {
   quaternion: Quaternion;
   /** Distance run along the lanes since the start, mm. */
   distance: number;
-  /** Times past the start of the lane line it started on. */
+  /** Times past the start line; with none, past where it set off in each lane. */
   laps: number;
+  /**
+   * Lap times, s: between passes of the lap timer (#56) on the lanes it
+   * times, else from the start between passes of the start line.
+   */
+  lapTimes: number[];
   out: OutReason | null;
 }
 
@@ -52,7 +61,18 @@ export class Run {
   private along = 0;
   private done = 0;
   private laps = 0;
+  private lapTimes: number[] = [];
   private best = { distance: 0, time: 0 };
+  /** The furthest along the lanes the machine has been, mm. */
+  private reach = 0;
+  /** Where each lane is a lap on, and where it is timed, mm along it (null: not on that lane). */
+  private lapAt: (number | null)[] = [];
+  private timeAt: (number | null)[] = [];
+  /** When and where along the lanes the lap and the lap time were last taken; the time is null until the timer is first passed. */
+  private lastLap = { distance: 0 };
+  private lastTime: { time: number | null; distance: number } = { time: 0, distance: 0 };
+  /** Two passes of a line closer together than this are one, mm: half the shortest lane. */
+  private minLap = 0;
   private out: OutReason | null = null;
   /** Where along its lane the machine set off, mm. */
   private startAt = 0;
@@ -76,7 +96,7 @@ export class Run {
    * lane to run in.
    */
   static async create(layout: Layout, dir: 1 | -1 = 1, lane = 0, spec = STANDARD_MACHINE): Promise<Run | null> {
-    const course = simCourse(layout, dir);
+    const course = simCourse(layout, startDirection(layout, dir));
     const line = course.lanes[lane];
     if (!line || line.points.length < 2) return null;
     const world = await createPhysicsWorld();
@@ -86,6 +106,13 @@ export class Run {
     const machine = createMachine(world, spec, start.position.clone().multiplyScalar(MM), start.forward);
     const run = new Run(world, course, colliders, machine, lane);
     run.along = run.startAt = start.along;
+    const marks = lapMarks(layout, course.lanes);
+    run.lapAt = layout.start ? marks.start : course.lanes.map((l) => laneStart(layout, l).along);
+    if (layout.timer) {
+      run.timeAt = marks.timer;
+      run.lastTime = { time: null, distance: -Infinity };
+    } else run.timeAt = run.lapAt;
+    run.minLap = Math.min(...course.lanes.map((l) => l.length)) / 2;
     return run;
   }
 
@@ -110,8 +137,33 @@ export class Run {
     this.out = this.checkOut();
   }
 
-  /** Keep up with the machine along its lane, going on to the next lane's line at the end of a lap. */
+  /** Keep up with the machine along its lane, going on to the next lane's line at the end of a lap; count the laps and time them. */
   private follow(): void {
+    const [lane, along] = [this.laneIndex, this.along];
+    this.track();
+    const distance = this.distance();
+    if (this.passed(this.lapAt, lane, along) && distance > this.lastLap.distance + this.minLap) {
+      this.laps++;
+      this.lastLap = { distance };
+    }
+    if (this.passed(this.timeAt, lane, along) && distance > this.lastTime.distance + this.minLap) {
+      if (this.lastTime.time !== null) this.lapTimes.push(this.time - this.lastTime.time);
+      this.lastTime = { time: this.time, distance };
+    }
+    this.reach = Math.max(this.reach, distance);
+  }
+
+  /** Whether the machine went past a mark since it was `along` lane `lane`. */
+  private passed(marks: readonly (number | null)[], lane: number, along: number): boolean {
+    const over = (l: number, from: number, to: number) => {
+      const m = marks[l];
+      return m !== null && m !== undefined && from < m && m <= to;
+    };
+    if (lane === this.laneIndex) return over(lane, along, this.along);
+    return over(lane, along, Infinity) || over(this.laneIndex, -Infinity, this.along);
+  }
+
+  private track(): void {
     const p = this.position();
     const lane = this.course.lanes[this.laneIndex];
     const spot = laneSpot(lane, p);
@@ -120,7 +172,6 @@ export class Run {
       const on = laneSpot(this.course.lanes[next], p);
       if (on.along < LANE_HANDOVER && on.off <= spot.off) {
         this.done += lane.length;
-        this.laps++;
         this.laneIndex = next;
         this.along = on.along;
         return;
@@ -157,8 +208,17 @@ export class Run {
     }
     if (out) return out;
     const distance = this.distance();
+    if (distance < this.reach - REVERSE_DISTANCE) return 'reverse';
     if (distance > this.best.distance + STALL_DISTANCE) this.best = { distance, time: this.time };
-    return this.time - this.best.time > STALL_TIME ? 'stopped' : null;
+    if (this.time - this.best.time <= STALL_TIME) return null;
+    // Stopped upside down, or stopped any other way: on a fence, caught, out of push.
+    return this.up().y < 0 ? 'flipped' : 'stopped';
+  }
+
+  /** The machine's up, as a world direction. */
+  private up(): Vector3 {
+    const r = this.machine.body.rotation();
+    return new Vector3(0, 1, 0).applyQuaternion(new Quaternion(r.x, r.y, r.z, r.w));
   }
 
   private distance(): number {
@@ -174,6 +234,7 @@ export class Run {
       quaternion: new Quaternion(r.x, r.y, r.z, r.w),
       distance: this.distance(),
       laps: this.laps,
+      lapTimes: [...this.lapTimes],
       out: this.out,
     };
   }
