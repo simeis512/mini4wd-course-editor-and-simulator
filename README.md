@@ -92,6 +92,7 @@ AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari 
 - `src/course/add.ts` パーツやテンプレートを口につなぐ・単体で置く場所・ドロップ先を選ぶ、`templates.ts` テンプレート（よく使うパーツの組み合わせ）
 - `src/course/codec.ts` コース ⇄ URL ハッシュ（バイナリ → deflate-raw → base64url）
 - `src/course/height.ts` ピースの高さの範囲（階層フィルター）と支柱の位置
+- `src/course/layout-diff.ts` 配置・形状の差分。変わらない路面、支柱、接触判定、描画用の形を再利用する（#92）
 - `src/course/laps.ts` レーン一巡と各レーンの周長（検証）
 - `src/course/clash.ts` ピース同士の重なりと立体交差の高さ（検証）、`stopper-contact.ts` ホース・箱がほかの物に当たっていないか
 - `src/course/mesh.ts` 3D メッシュ生成（路面＋フェンスの掃引、支柱。シーンは m 単位）
@@ -99,6 +100,7 @@ AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari 
 - `src/course/lap-marks.ts` スタートラインとラップタイマーが各レーンを横切る位置、スタートの矢印から決まる走る向き
 - `src/editor/app.ts` エディタの状態と操作。`app-ui.ts` UI のイベント接続、`selected-edits.ts` 選択に応じた編集操作の呼び分け。`panels.ts` パネル表示、`checks.ts` コース欄（検証の結果）、`shopping.ts` コース欄の購入リスト、`attach.ts` ウォッシュボードの設定欄、`props.ts` 置き物（スタート・タイマー・ホース・箱）の追加と設定欄（2D の描き方は `props2d.ts`）、`drag.ts` ドラッグ操作、`handles.ts` 選んだピースのハンドル（2D/3D の上に重ねて描く）、`share.ts` URL・ファイルでの受け渡し、`library.ts` ブラウザ内の保存と自動保存（IndexedDB は `store.ts`、名前や一覧の決め方は `src/course/saves.ts`）、`notice.ts` 起動時の案内と「i」の情報パネル、`side-panel.ts` サイドパネルを畳む、`float.ts` 設定欄の置き場所、`levels.ts` 2D の高さ表示の設定、`history.ts` 元に戻す／やり直し
 - `src/editor/view2d.ts` / `view3d.ts` 2D 編集ビュー、3D/AR ビュー。2D の描画は `paint2d.ts`、ポインター操作は `gesture2d.ts`、3D のマーカー・ハイライトは `marks3d.ts`、レイキャストと選択は `pick3d.ts`（共通インターフェースは `view.ts`、AR の設置と操作は `ar.ts`（指の操作は `ar-gesture.ts`）、床の点は `ar-scan.ts`、奥行きの表示とオクルージョンは `ar-depth.ts`、その置き方の計算は `ar-pose.ts`、2D の道の外形は `outline2d.ts`）
+- `src/editor/meshes3d.ts` 3D のピース・支柱・置き物のメッシュの保持と、変更時の差し替え・geometry 解放
 - `src/physics/` シミュレーター（Rapier）。`course-colliders.ts` コースを固定の trimesh・落下ゾーンのセンサー・床として入れる（m 単位に直す）、`machine-spec.ts` マシンの仕様とモーター、`machine.ts` マシンの剛体・タイヤ・ローラー、`run.ts` 1 台の走行・周回とラップタイム・コースアウト判定、`machine-mesh.ts` マシンの見た目。画面の走行モードは `src/editor/run-mode.ts`
 
 作者はコトン（[simeis512.com](https://simeis512.com/)）。開発には Anthropic の Claude Code と OpenAI の Codex を使用している。このアプリは [MIT License](LICENSE)。ミニ四駆・ジャパンカップジュニアサーキットは株式会社タミヤの商標で、本アプリはタミヤとは関係のない非公式アプリ。

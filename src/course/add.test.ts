@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { dropJoin, joinPart, nextOpenPort } from './add';
+import { dropJoin, joinItem, joinPart, nextOpenPort, planDrop, type PaletteItem } from './add';
 import { emptyCourse, layoutCourse, type Course } from './course';
 import { addFreePiece, addPiece, footprint, setPose } from './edit';
 import { chain } from './presets';
+import { benchAddition } from './bench-courses';
+import { addedBounds } from './templates';
 
 /** Middle of the last piece's footprint, world X/Z. */
 const middle = (c: Course): [number, number] => {
@@ -77,6 +79,19 @@ describe('dropJoin', () => {
     expect(layoutCourse(next!).open).toEqual([]);
   });
 });
+
+it('keeps every drop candidate equal to full placement, including templates and custom lengths (#92)', () => {
+  const { course } = benchAddition('L');
+  for (const item of [{ part: 'straight' }, { part: 'bridge-approach' }, { part: 'free-straight' }, { template: 'lane-change' }, { template: 'loop-left' }] as PaletteItem[]) {
+    const expected = layoutCourse(course).open.flatMap((ref) => {
+      const joined = joinItem(course, item, ref);
+      if (!joined) return [];
+      const [x0, x1, z0, z1] = addedBounds(joined.course, course.pieces.length);
+      return [{ next: joined.course, open: layoutCourse(joined.course).open.length, cx: (x0 + x1) / 2, cz: (z0 + z1) / 2 }];
+    });
+    expect(planDrop(course, item).candidates).toEqual(expected);
+  }
+}, 30000);
 
 describe('fitLength (#69)', () => {
   /** A straight, and another placed on its own `gap` mm beyond it, facing it. */

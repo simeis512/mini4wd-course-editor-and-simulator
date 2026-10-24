@@ -3,8 +3,8 @@ import { blockCorners, blockFootprint } from './blocks';
 import { GLOBAL_SPEC } from './catalog';
 import type { Layout } from './course';
 import { partStands, pointOnFrame, STAND_BEAM, STAND_DEPTH, STAND_LEG, type Stand } from './geometry';
-import { supports } from './height';
-import { insidePolygon, worldTracks } from './mesh';
+import { supports, type Support } from './height';
+import { insidePolygon, worldTracks, type WorldTrack } from './mesh';
 import { boxOutline, boxSize, hoseCurve, HOSE_DIAMETER } from './stoppers';
 import { timerBlocks } from './timing';
 
@@ -48,6 +48,12 @@ function shape(pts: P[], kind: 'poly' | 'line', y: [number, number], radius = 0)
 
 const { roadThickness, fenceHeight } = GLOBAL_SPEC;
 
+// Shapes and pair results belong to immutable geometry; edits replace only affected entries (#92).
+const roadShapes = new WeakMap<WorldTrack, Shape[]>();
+const supportShapes = new WeakMap<Support, Shape[]>();
+const pairs = new WeakMap<readonly Shape[], WeakMap<readonly Shape[], Vector3 | null>>();
+const stopperCache = new WeakMap<Layout, { key: string; shapes: Shape[] }[]>();
+
 /** A track's road and fences as one quad per sample step. */
 function trackShapes(samples: readonly Matrix4[], left: number, right: number): Shape[] {
   const l = samples.map((f) => pointOnFrame(f, left, 0));
@@ -76,7 +82,14 @@ function standShapes({ left, right, along, depth = STAND_DEPTH }: Stand): Shape[
 function obstacles(layout: Layout): { target: ContactTarget; shapes: Shape[] }[] {
   const out: { target: ContactTarget; shapes: Shape[] }[] = [];
   const tracks = worldTracks(layout);
-  for (const t of tracks) out.push({ target: { kind: 'piece', piece: t.piece }, shapes: trackShapes(t.samples, t.section.left, t.section.right) });
+  for (const t of tracks) {
+    let shapes = roadShapes.get(t);
+    if (!shapes) {
+      shapes = trackShapes(t.samples, t.section.left, t.section.right);
+      roadShapes.set(t, shapes);
+    }
+    out.push({ target: { kind: 'piece', piece: t.piece }, shapes });
+  }
   for (const [piece, pc] of layout.pieces.entries()) {
     const own = partStands(pc.part, pc.geometry).map((s) => ({
       left: s.left.clone().applyMatrix4(pc.matrix),
@@ -86,7 +99,14 @@ function obstacles(layout: Layout): { target: ContactTarget; shapes: Shape[] }[]
     }));
     if (own.length) out.push({ target: { kind: 'support', piece }, shapes: own.flatMap(standShapes) });
   }
-  for (const s of supports(layout, tracks)) out.push({ target: { kind: 'support', piece: s.piece }, shapes: standShapes(s) });
+  for (const s of supports(layout, tracks)) {
+    let shapes = supportShapes.get(s);
+    if (!shapes) {
+      shapes = standShapes(s);
+      supportShapes.set(s, shapes);
+    }
+    out.push({ target: { kind: 'support', piece: s.piece }, shapes });
+  }
   if (layout.timer) {
     // Its body and top; the tape lies flat on the road.
     const shapes = timerBlocks(layout, layout.timer)
@@ -125,12 +145,22 @@ const apart = (a: Shape['box'], b: Shape['box']) => a[1] <= b[0] || b[1] <= a[0]
 
 /** Where any of one set of shapes overlaps any of another, or null. */
 function overlapAny(a: readonly Shape[], b: readonly Shape[]): Vector3 | null {
+  let cached = pairs.get(a);
+  if (!cached) {
+    cached = new WeakMap();
+    pairs.set(a, cached);
+  }
+  if (cached.has(b)) return cached.get(b)!;
   for (const s of a) {
     for (const t of b) {
       const at = overlap(s, t);
-      if (at) return at;
+      if (at) {
+        cached.set(b, at);
+        return at;
+      }
     }
   }
+  cached.set(b, null);
   return null;
 }
 
@@ -233,9 +263,15 @@ function overlap(a: Shape, b: Shape): Vector3 | null {
  * fence tops), its supports, the lap timer, or another stopper (#53). Each
  * pair is reported once.
  */
-export function stopperContacts(layout: Layout): StopperContact[] {
+export function stopperContacts(layout: Layout, previous?: Layout): StopperContact[] {
   if (!layout.stoppers.length) return [];
-  const mine = layout.stoppers.map((_, i) => stopperShapes(layout, i));
+  const old = previous && stopperCache.get(previous);
+  const entries = layout.stoppers.map((s, i) => {
+    const key = JSON.stringify(s);
+    return old?.[i]?.key === key ? old[i] : { key, shapes: stopperShapes(layout, i) };
+  });
+  stopperCache.set(layout, entries);
+  const mine = entries.map((entry) => entry.shapes);
   const mineBox = mine.map(bounds);
   const others = obstacles(layout).map((o) => ({ ...o, box: bounds(o.shapes) }));
   const out: StopperContact[] = [];

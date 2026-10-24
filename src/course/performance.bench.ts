@@ -34,5 +34,24 @@ for (const size of ['S', 'M', 'L'] as BenchSize[]) {
     test('dropJoin', async ({ bench }) => {
       await bench('dropJoin', () => { dropJoin(course, { part: 'straight' }, x, z, 150); }).run(options);
     });
+    // Cold benchmarks above remain comparable to #87. These start from the
+    // already displayed course, as an actual single-piece edit does (#92).
+    const previous = layoutCourse(course);
+    supports(previous);
+    stopperContacts(previous);
+    test('supports:update', async ({ bench }) => {
+      let layout = layoutCourse(next);
+      await bench('supports:update', { beforeEach: () => {
+        layout = layoutCourse(next, previous);
+        worldTracks(layout, previous);
+      } }, () => { supports(layout, worldTracks(layout), previous); }).run(options);
+    });
+    test('stopperContacts:update', async ({ bench }) => {
+      let layout = layoutCourse(next);
+      await bench('stopperContacts:update', { beforeEach: () => {
+        layout = layoutCourse(next, previous);
+        supports(layout, worldTracks(layout, previous), previous);
+      } }, () => { stopperContacts(layout, previous); }).run(options);
+    });
   });
 }

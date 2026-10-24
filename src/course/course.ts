@@ -360,8 +360,8 @@ export function isLevel(frame: Matrix4): boolean {
   return new Vector3(0, 1, 0).transformDirection(frame).y >= LEVEL_COS;
 }
 
-/** Work out where every piece sits from the connection graph. */
-export function layoutCourse(course: Course): Layout {
+/** Work out placement and all joints; reuse unchanged placements from `previous` when supplied (#92). */
+export function layoutCourse(course: Course, previous?: Layout): Layout {
   const pieces: PlacedPiece[] = [];
   const connected = new Set<string>();
   const links: Joint[] = [];
@@ -370,6 +370,11 @@ export function layoutCourse(course: Course): Layout {
   course.pieces.forEach((rec, i) => {
     const part = partOf(rec);
     const geo = pieceGeometry(part, rec.twist);
+    const old = previous?.pieces[i];
+    const anchor = anchorRef(rec);
+    // A matching record is reusable only if its anchor's frame was also retained (#92).
+    const reuse = old?.geometry === geo && (old.rec === rec || JSON.stringify(old.rec) === JSON.stringify(rec)) &&
+      (!anchor || pieces[anchor[0]].ports[anchor[1]] === previous!.pieces[anchor[0]]?.ports[anchor[1]]);
     if (Math.abs(rec.twist ?? 0) > TWIST_LIMIT) problems.push({ kind: 'twist-limit', piece: i, port: 'port' in rec ? rec.port : 0 });
     let matrix: Matrix4;
     if ('to' in rec) {
@@ -377,8 +382,7 @@ export function layoutCourse(course: Course): Layout {
       // A bent joint turns about the joint itself (spec 16.1).
       const shift = rec.shift ?? 0;
       // A shifted joint moves sideways first, then bends about where it now is.
-      const base = shiftedFrame(pieces[j].ports[p], pieces[j].part.ports[p], part.ports[rec.port], shift);
-      matrix = attach(base.multiply(bendMatrix(rec.bend)), geo.ports[rec.port]);
+      matrix = reuse ? old!.matrix : attach(shiftedFrame(pieces[j].ports[p], pieces[j].part.ports[p], part.ports[rec.port], shift).multiply(bendMatrix(rec.bend)), geo.ports[rec.port]);
       if (!compatible(pieces[j].part, p, part, rec.port, shift)) problems.push({ kind: 'cannot-join', piece: i, port: rec.port });
       if (bendAngle(rec.bend) > BEND_LIMIT) problems.push({ kind: 'bend-limit', piece: i, port: rec.port });
       connected.add(portKey({ piece: j, port: p }));
@@ -386,11 +390,11 @@ export function layoutCourse(course: Course): Layout {
       links.push({ a: { piece: j, port: p }, b: { piece: i, port: rec.port }, kind: 'link', shift });
     } else if ('free' in rec) {
       const base = rec.free ? pieces[rec.free[0]].ports[rec.free[1]] : new Matrix4();
-      matrix = attach(base.clone().multiply(poseToMatrix(rec.pose)), geo.ports[rec.port]);
+      matrix = reuse ? old!.matrix : attach(base.clone().multiply(poseToMatrix(rec.pose)), geo.ports[rec.port]);
     } else {
-      matrix = new Matrix4();
+      matrix = reuse ? old!.matrix : new Matrix4();
     }
-    const ports = geo.ports.map((p) => matrix.clone().multiply(p));
+    const ports = reuse ? old!.ports : geo.ports.map((p) => matrix.clone().multiply(p));
     part.ports.forEach((def, p) => {
       if (def.floor && !isLevel(ports[p])) problems.push({ kind: 'not-level', piece: i, port: p });
     });

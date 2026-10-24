@@ -52,13 +52,46 @@ export interface Support extends Stand {
   piece: number;
 }
 
-const supportCache = new WeakMap<Layout, { tracks: readonly WorldTrack[]; result: Support[] }>();
+const supportCache = new WeakMap<Layout, SupportState>();
+type Box = [number, number, number, number];
+interface PlacedStand {
+  support: Support;
+  frame: StandFrame;
+  poly: [number, number][];
+  box: Box;
+}
+interface SupportStep {
+  cells: Map<string, RoadQuad[] | undefined>;
+  regions: Box[];
+  probes: StandFrame[];
+  dependencies: PlacedStand[];
+  stands: PlacedStand[];
+}
+interface SupportState {
+  tracks: readonly WorldTrack[];
+  road: RoadIndex;
+  steps: Map<WorldTrack, SupportStep>;
+  result: Support[];
+}
+const intersects = (a: Box, b: Box) => a[0] <= b[1] && a[1] >= b[0] && a[2] <= b[3] && a[3] >= b[2];
+const sameItems = <T>(a: readonly T[], b: readonly T[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+/** Include the legacy duplicate-frame test even outside the leg-probe regions (#92). */
+function dependencies(step: SupportStep, stands: PlacedStand[]): PlacedStand[] {
+  return stands.filter((s) => step.regions.some((r) => intersects(r, s.box)) || step.probes.some((p) => overlaps(s.frame, p)));
+}
+
+/** An invalidated probe can still choose the same stand: stop propagation there (#92). */
+function sameStand(a: Support, b: Support): boolean {
+  return a.piece === b.piece && a.depth === b.depth && a.left.equals(b.left) && a.right.equals(b.right) && a.along.equals(b.along);
+}
 
 /** One road sample step, with its conservative highest surface. */
 interface RoadQuad {
   track: WorldTrack;
   poly: [number, number][];
   surface: number;
+  box: Box;
 }
 
 /** Grid granularity only; polygon/height tests still decide contacts exactly (#87). */
@@ -74,7 +107,10 @@ function indexRoad(index: RoadIndex, track: WorldTrack): void {
   const right = edge(section.right);
   for (let i = 0; i + 1 < samples.length; i++) {
     const corners = [left[i], left[i + 1], right[i + 1], right[i]];
-    const quad: RoadQuad = { track, poly: corners.map((c): [number, number] => [c.x, c.z]), surface: Math.max(...corners.map((c) => c.y)) };
+    const quad: RoadQuad = {
+      track, poly: corners.map((c): [number, number] => [c.x, c.z]), surface: Math.max(...corners.map((c) => c.y)),
+      box: [Math.min(...corners.map((c) => c.x)), Math.max(...corners.map((c) => c.x)), Math.min(...corners.map((c) => c.z)), Math.max(...corners.map((c) => c.z))],
+    };
     const xs = corners.map((c) => c.x / ROAD_CELL);
     const zs = corners.map((c) => c.z / ROAD_CELL);
     for (let x = Math.floor(Math.min(...xs)); x <= Math.floor(Math.max(...xs)); x++) {
@@ -89,12 +125,33 @@ function indexRoad(index: RoadIndex, track: WorldTrack): void {
 }
 
 /** Highest surface of other road under the point (x, z) and lower than `y`, or -Infinity when there is none. */
-function roadBelow(index: RoadIndex, own: WorldTrack, x: number, z: number, y: number): number {
+function roadBelow(index: RoadIndex, cells: SupportStep['cells'], own: WorldTrack, x: number, z: number, y: number): number {
   let top = -Infinity;
-  for (const q of index.get(cellKey(x, z)) ?? []) {
-    if (q.track !== own && q.surface < y && q.surface > top && insidePolygon(x, z, q.poly)) top = q.surface;
+  const key = cellKey(x, z);
+  const cell = index.get(key);
+  cells.set(key, cell);
+  for (const q of cell ?? []) {
+    if (q.track !== own && q.surface < y && q.surface > top && x >= q.box[0] && x <= q.box[1] && z >= q.box[2] && z <= q.box[3] && insidePolygon(x, z, q.poly)) top = q.surface;
   }
   return top;
+}
+
+/** Copy only edited grid cells; old layouts and their dependency records remain valid (#92). */
+function updateRoad(tracks: readonly WorldTrack[], previous?: SupportState): RoadIndex {
+  const road: RoadIndex = new Map(previous?.road);
+  const current = new Set(tracks);
+  for (const [key, cell] of road) {
+    if (cell.some((q) => !current.has(q.track))) {
+      const kept = cell.filter((q) => current.has(q.track));
+      if (kept.length) road.set(key, kept);
+      else road.delete(key);
+    }
+  }
+  const old = new Set(previous?.tracks);
+  const added: RoadIndex = new Map();
+  for (const track of tracks) if (!old.has(track)) indexRoad(added, track);
+  for (const [key, cell] of added) road.set(key, [...(road.get(key) ?? []), ...cell]);
+  return road;
 }
 
 /**
@@ -109,21 +166,19 @@ function roadBelow(index: RoadIndex, own: WorldTrack, x: number, z: number, y: n
  * there is no room outside it looks further in, as far as the middle of the
  * road. Where there is no room at all, the road is left to span the gap.
  */
-export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTracks(layout)): Support[] {
+export function supports(layout: Layout, tracks: readonly WorldTrack[] = worldTracks(layout), previous?: Layout | null): Support[] {
   const cached = supportCache.get(layout);
   if (cached?.tracks === tracks) return cached.result;
-  const result = computeSupports(layout, tracks);
-  supportCache.set(layout, { tracks, result });
-  return result;
+  const state = computeSupports(layout, tracks, previous ? supportCache.get(previous) : undefined);
+  supportCache.set(layout, state);
+  return state.result;
 }
 
 /** Shared read-only per layout; a new edit always produces a new layout (#87). */
-function computeSupports(layout: Layout, tracks: readonly WorldTrack[]): Support[] {
-  const road: RoadIndex = new Map();
-  for (const track of tracks) indexRoad(road, track);
-  const out: Support[] = [];
-  const stands: { poly: [number, number][]; box: [number, number, number, number] }[] = [];
-  const standFrames: StandFrame[] = [];
+function computeSupports(layout: Layout, tracks: readonly WorldTrack[], previous?: SupportState): SupportState {
+  const road = updateRoad(tracks, previous);
+  const stands: PlacedStand[] = [];
+  const steps = new Map<WorldTrack, SupportStep>();
   // Lowest road first, so stands under a stacked level are in place before
   // the stands that straddle that level are fitted round them.
   const heights = new Map(tracks.map((t) => [t, Math.min(...t.samples.map((f) => f.elements[13]))]));
@@ -131,6 +186,14 @@ function computeSupports(layout: Layout, tracks: readonly WorldTrack[]): Support
     // Parts that come with their own stands (`partStands`) stand on them;
     // only their main road is held up when the whole piece is raised.
     if (layout.pieces[track.piece].part.supports && track.index !== 0) continue;
+    const old = previous?.steps.get(track);
+    if (old && [...old.cells].every(([key, cell]) => road.get(key) === cell) && sameItems(old.dependencies, dependencies(old, stands))) {
+      steps.set(track, old);
+      stands.push(...old.stands);
+      continue;
+    }
+    const step: SupportStep = { cells: new Map(), regions: [], probes: [], dependencies: [], stands: [] };
+    const prior = stands.slice();
     const { samples, section } = track;
     const length = samples.reduce(
       (sum, f, i) => (i === 0 ? 0 : sum + new Vector3().setFromMatrixPosition(f).distanceTo(new Vector3().setFromMatrixPosition(samples[i - 1]))),
@@ -154,6 +217,7 @@ function computeSupports(layout: Layout, tracks: readonly WorldTrack[]): Support
       const radius = Math.max(Math.abs(section.left), Math.abs(section.right)) + SUPPORT_OVERHANG + SUPPORT_REACH +
         STAND_LEG + 2 * SUPPORT_CLEARANCE + STAND_DEPTH;
       const [cx, cz] = [f.elements[12], f.elements[14]];
+      step.regions.push([cx - radius, cx + radius, cz - radius, cz + radius]);
       const near = (box: readonly number[]) => box[0] <= cx + radius && box[1] >= cx - radius && box[2] <= cz + radius && box[3] >= cz - radius;
       const nearbyStands = stands.filter((s) => near(s.box));
       // Adjacent candidate legs test the same across-road positions repeatedly (#87).
@@ -167,7 +231,7 @@ function computeSupports(layout: Layout, tracks: readonly WorldTrack[]): Support
         const p = pointOnFrame(f, x, 0);
         let y = -Infinity;
         for (const d of [-STAND_DEPTH / 2, 0, STAND_DEPTH / 2]) {
-          y = Math.max(y, roadBelow(road, track, p.x + along.x * d, p.z + along.z * d, top));
+          y = Math.max(y, roadBelow(road, step.cells, track, p.x + along.x * d, p.z + along.z * d, top));
         }
         belowCache.set(x, y);
         return y;
@@ -221,16 +285,23 @@ function computeSupports(layout: Layout, tracks: readonly WorldTrack[]): Support
       // Tracks side by side (a ramp beside its lower lanes) can ask for
       // stands in the same place: keep the first.
       const frame = standFrame(stand);
-      if (standFrames.some((o) => overlaps(o, frame))) continue;
-      out.push(stand);
-      standFrames.push(frame);
+      step.probes.push(frame);
+      if (stands.some((o) => overlaps(o.frame, frame))) continue;
       const poly = standCorners(stand);
       const xs = poly.map((p) => p[0]);
       const zs = poly.map((p) => p[1]);
-      stands.push({ poly, box: [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)] });
+      const placed: PlacedStand = { support: stand, frame, poly, box: [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)] };
+      stands.push(placed);
+      step.stands.push(placed);
     }
+    if (old && old.stands.length === step.stands.length && step.stands.every((s, i) => sameStand(s.support, old.stands[i].support))) {
+      stands.splice(stands.length - step.stands.length, step.stands.length, ...old.stands);
+      step.stands = old.stands;
+    }
+    step.dependencies = dependencies(step, prior);
+    steps.set(track, step);
   }
-  return out.sort((p, q) => p.piece - q.piece);
+  return { tracks, road, steps, result: stands.map((s) => s.support).sort((p, q) => p.piece - q.piece) };
 }
 
 /** The corners of a stand seen from above, X/Z. */

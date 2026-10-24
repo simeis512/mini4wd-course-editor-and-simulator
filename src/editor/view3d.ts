@@ -3,15 +3,14 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { Clash } from '../course/clash';
 import { portKey, sameJoint, type Layout } from '../course/course';
 import { GLOBAL_SPEC } from '../course/catalog';
-import { supports } from '../course/height';
-import { buildCourseMeshes, buildSupportMesh, MM } from '../course/mesh';
-import { buildPropMeshes } from '../course/props-mesh';
+import { MM } from '../course/mesh';
 import { HOSE_DIAMETER } from '../course/stoppers';
 import { ArMode } from './ar';
 import { grabs, TAP_SLOP, type DragHandlers, type PickHandlers, type Selection } from './selection';
 import { blink, drawShortMark, type EditorView, type RunMarks } from './view';
 import { perfSpan } from './perf';
 import { disposeGeometries } from './resources';
+import { CourseMeshes } from './meshes3d';
 import {
   outlineOf,
   MARKER_GEOMETRY,
@@ -50,8 +49,7 @@ export class OrbitView implements EditorView {
   /** The start line, timer and stoppers (#56, #53). */
   private props: THREE.Group[] = [];
   private stoppersShown = true;
-  /** Stands under raised road, shown only (#11). */
-  private supports: THREE.Mesh | null = null;
+  private meshes = new CourseMeshes(this.root);
   private markers = new THREE.Group();
   /** Outlines of the selected piece (solid) and the pieces joined to it (dashed), as in the 2D view. */
   private outlines = new THREE.Group();
@@ -244,24 +242,8 @@ export class OrbitView implements EditorView {
     this.selection = selection;
     if (layout !== this.layout) {
       this.layout = layout;
-      for (const p of this.pieces) {
-        this.root.remove(p);
-        disposeGeometries(p, true);
-      }
-      this.pieces = buildCourseMeshes(layout);
-      for (const p of this.pieces) this.root.add(p);
-      if (this.supports) {
-        this.root.remove(this.supports);
-        this.supports.geometry.dispose();
-      }
-      this.supports = buildSupportMesh(supports(layout));
-      this.root.add(this.supports);
-      for (const p of this.props) {
-        this.root.remove(p);
-        disposeGeometries(p);
-      }
-      this.props = buildPropMeshes(layout);
-      for (const p of this.props) this.root.add(p);
+      this.pieces = this.meshes.update(layout);
+      this.props = this.meshes.props;
       this.showStoppers();
     }
     // The selected start line, timer or stopper glows as a piece does.

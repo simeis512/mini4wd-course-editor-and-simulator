@@ -67,8 +67,8 @@ export class TopView implements EditorView {
 
   private updateData(layout: Layout, selection: Selection): void {
     if (layout !== this.layout) {
+      const tracks = worldTracks(layout, this.layout);
       this.layout = layout;
-      const tracks = worldTracks(layout);
       this.heights = pieceHeights(layout, tracks);
       this.outlines = outlinesOf(tracks);
       this.order = lowestFirst(this.outlines);
