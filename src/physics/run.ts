@@ -56,6 +56,8 @@ export class Run {
   private out: OutReason | null = null;
   /** Where along its lane the machine set off, mm. */
   private startAt = 0;
+  /** Time asked for but not yet run, less than a step, s. */
+  private owed = 0;
 
   private constructor(
     readonly world: RAPIER.World,
@@ -87,9 +89,15 @@ export class Run {
     return run;
   }
 
-  /** Run on for `seconds`, in whole physics steps; stops once the machine is out. */
+  /**
+   * Run on for `seconds`, in whole physics steps, keeping what is left
+   * over for the next call; stops once the machine is out.
+   */
   advance(seconds: number): RunState {
-    const steps = Math.max(0, Math.round(seconds / STEP));
+    this.owed += Math.max(0, seconds);
+    // A hair of slack so that whole steps asked for are not lost to rounding.
+    const steps = Math.floor(this.owed / STEP + 1e-6);
+    this.owed -= steps * STEP;
     for (let i = 0; i < steps && !this.out; i++) this.step();
     return this.state();
   }

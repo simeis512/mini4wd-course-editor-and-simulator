@@ -39,6 +39,13 @@
       .share-field input { font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
       #share-preview { display: block; width: 100%; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; background: #1b1d22; }
       #fit { position: absolute; right: 10px; bottom: 10px; }
+      /* Running the machine (#27): its bar over the 3D view, and editing out of the way. */
+      #run-bar { position: absolute; left: 10px; right: 10px; top: 10px; z-index: 4; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; background: rgba(36, 39, 46, 0.92); border: 1px solid var(--line); border-radius: 8px; }
+      #run-bar label { display: flex; gap: 6px; align-items: center; }
+      #run-status { flex: 1; min-width: 12em; font-variant-numeric: tabular-nums; }
+      body.running { grid-template-columns: 1fr 0px; }
+      body.running #toolbar > :not(#run, h1) { pointer-events: none; opacity: 0.4; }
+      body.running #side, body.running #context, body.running #handles, body.running #course-info, body.running #fit { display: none; }
       #height-tools { position: absolute; left: 10px; top: 10px; z-index: 3; width: 210px; padding: 6px 10px; font-size: 13px; background: rgba(36, 39, 46, 0.92); border: 1px solid var(--line); border-radius: 8px; }
       #height-tools label { display: flex; gap: 6px; align-items: center; }
       #height-tools input[type='range'] { flex: 1; min-width: 0; }
@@ -178,7 +185,7 @@
         #panel { border-left: 0; border-top: 1px solid var(--line); }
         /* On phones the panel slides down the same way: its row closes while it keeps its height. */
         #side { width: auto; height: 38vh; }
-        body.panel-folded { grid-template-columns: 1fr; grid-template-rows: auto 1fr minmax(0, 0vh); }
+        body.panel-folded, body.running { grid-template-columns: 1fr; grid-template-rows: auto 1fr minmax(0, 0vh); }
         #panel-fold { left: 50%; top: -26px; translate: -50% 0; width: 64px; height: 26px; border: 1px solid var(--line); border-bottom: 0; border-radius: 8px 8px 0 0; }
         #panel-fold .arrow { transform: rotate(90deg); }
         /* Clear of the tab along the bottom of the editor. */
@@ -193,6 +200,7 @@
       <h1>ミニ四駆コースエディタ</h1>
       <button id="mode-2d" aria-pressed="true">2D</button>
       <button id="mode-3d" aria-pressed="false">3D</button>
+      <button id="run" aria-pressed="false" title="3D ビューでマシンを走らせる（走行モード）">走らせる</button>
       <span class="sep"></span>
       <button id="undo" title="元に戻す (Ctrl+Z)">元に戻す</button>
       <button id="redo" title="やり直し (Ctrl+Y)">やり直し</button>
@@ -213,6 +221,19 @@
       <div id="view3d" hidden></div>
       <canvas id="handles" aria-hidden="true"></canvas>
       <button id="fit">全体を表示</button>
+      <div id="run-bar" hidden>
+        <button id="run-play">スタート</button>
+        <button id="run-reset">リセット</button>
+        <label>レーン
+          <select id="run-lane">
+            <option value="0">左</option>
+            <option value="1">中</option>
+            <option value="2">右</option>
+          </select>
+        </label>
+        <span id="run-status"></span>
+        <button id="run-exit">編集に戻る</button>
+      </div>
       <div id="height-tools">
         <label title="路面を高さで色分けします"><input id="height-colors" type="checkbox" /> 高さで色分け</label>
         <div id="height-scale" hidden>

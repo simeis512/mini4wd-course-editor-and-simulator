@@ -73,6 +73,8 @@ export class OrbitView implements EditorView {
   private shortMark: THREE.Sprite | null = null;
   /** Marks where pieces are in each other's way. */
   private clashMarks = new THREE.Group();
+  private picking = true;
+  private machine: THREE.Object3D | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -170,8 +172,21 @@ export class OrbitView implements EditorView {
     this.renderer.setAnimationLoop(run ? (_, frame) => this.render(frame) : null);
   }
 
+  /** Picking, dragging and the editing marks on or off; the camera still orbits (off while the machine runs, #27). */
+  setPicking(on: boolean): void {
+    this.picking = on;
+    this.markers.visible = on;
+  }
+
+  /** Show a machine running on the course (#27), in course mm, or take it away. */
+  setMachine(object: THREE.Object3D | null): void {
+    if (this.machine) this.root.remove(this.machine);
+    this.machine = object;
+    if (object) this.root.add(object);
+  }
+
   private onDown(e: PointerEvent): void {
-    if (e.target !== this.renderer.domElement || this.renderer.xr.isPresenting) return;
+    if (e.target !== this.renderer.domElement || this.renderer.xr.isPresenting || !this.picking) return;
     this.downAt = { x: e.clientX, y: e.clientY };
     const sel = this.selection;
     if (!sel || !e.isPrimary || e.button !== 0) return;
