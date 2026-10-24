@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
 import type { Layout } from '../course/course';
+import { timedLane } from '../course/lap-marks';
 import type { OutReason, Run } from '../physics/run';
 import { $, toast } from './dom';
 import { RunCamera, type CameraMode, type CameraView } from './run-camera';
@@ -70,6 +71,9 @@ export class RunMode {
     $('run').setAttribute('aria-pressed', 'true');
     document.body.classList.add('running');
     $('run-bar').hidden = false;
+    // Set off first in the lane under the lap timer, so it times the machine.
+    const timed = timedLane(this.host.layout, this.host.dir);
+    if (timed !== null) $<HTMLSelectElement>('run-lane').value = String(timed);
     this.show('読み込み中…');
     this.physics ??= { ...(await import('../physics/run')), ...(await import('../physics/machine-mesh')) };
     if (this.on) await this.reset();

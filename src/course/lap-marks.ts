@@ -30,6 +30,13 @@ function lineOn(pc: PlacedPiece, offset: number, lanes: readonly number[]): Line
   return { frame: roadFrame(pc, offset), from: Math.min(...xs) - half, to: Math.max(...xs) + half };
 }
 
+/** A lane's centre with the distance along it to each point. */
+function withDistances(points: THREE.Vector3[]): Pick<SimLane, 'points' | 'distances'> {
+  const distances = [0];
+  for (let i = 1; i < points.length; i++) distances.push(distances[i - 1] + points[i].distanceTo(points[i - 1]));
+  return { points, distances };
+}
+
 /** The first spot along a lane's centre where it crosses a line, either way, mm; null when it never does. */
 export function crossing(lane: Pick<SimLane, 'points' | 'distances'>, line: Line): number | null {
   const toLine = line.frame.clone().invert();
@@ -83,8 +90,7 @@ export function startDirection(layout: Layout, dir: 1 | -1): 1 | -1 {
   const line = lineOn(pc, start.offset, pc.part.lanes);
   const toLine = frame.clone().invert();
   for (const l of laps) {
-    const distances = [0];
-    for (let i = 1; i < l.points.length; i++) distances.push(distances[i - 1] + l.points[i].distanceTo(l.points[i - 1]));
+    const { distances } = withDistances(l.points);
     const at = crossing({ points: l.points, distances }, line);
     if (at === null) continue;
     // Which way the lane runs through the line, seen from the arrows.
@@ -95,4 +101,16 @@ export function startDirection(layout: Layout, dir: 1 | -1): 1 | -1 {
     return b.z >= a.z ? dir : dir === 1 ? -1 : 1;
   }
   return dir;
+}
+
+/**
+ * Which lane from the left at the start the lap timer times (#28): where a
+ * machine is set to run first, so the timer catches it. Null when there is
+ * no timer, it times every lane, or no lane runs under it.
+ */
+export function timedLane(layout: Layout, dir: 1 | -1): number | null {
+  if (!layout.timer || layout.timer.everyLane) return null;
+  const laps = checkLaps(layout, startDirection(layout, dir), true)?.laps ?? [];
+  const lane = lapMarks(layout, laps.map((l) => withDistances(l.points))).timer.findIndex((at) => at !== null);
+  return lane < 0 ? null : lane;
 }

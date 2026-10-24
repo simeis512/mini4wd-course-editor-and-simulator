@@ -1,7 +1,7 @@
 import { Matrix4, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { layoutCourse } from './course';
-import { crossing, lapMarks, startDirection } from './lap-marks';
+import { crossing, lapMarks, startDirection, timedLane } from './lap-marks';
 import { basicOval } from './presets';
 import { laneStart, simCourse } from './sim-course';
 import { moveStart, placeStart, placeTimer } from './timing';
@@ -62,5 +62,18 @@ describe('startDirection (#28)', () => {
 
   it('keeps the course direction with no start line', () => {
     expect(startDirection(layoutCourse(basicOval()), -1)).toBe(-1);
+  });
+});
+
+describe('timedLane (#28)', () => {
+  it('is the lane the timer reaches over, counted from the left at the start', () => {
+    const course = withStart();
+    expect(timedLane(layoutCourse(course), 1)).toBe(0);
+    expect(timedLane(layoutCourse(placeTimer(course, { side: 'right' })), 1)).toBe(2);
+  });
+
+  it('is none with no timer, or one that times every lane', () => {
+    expect(timedLane(layoutCourse(basicOval()), 1)).toBeNull();
+    expect(timedLane(layoutCourse(placeTimer(withStart(), { everyLane: true })), 1)).toBeNull();
   });
 });
