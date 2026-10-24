@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { getPart, partOf } from './catalog';
-import { compatible, emptyCourse, layoutCourse, portKey, type Course, type PortRef } from './course';
-import { addFreePiece, addPiece, freeSpot, setLength } from './edit';
+import { compatible, emptyCourse, layoutCourse, portKey, type Course, type Layout, type PortRef } from './course';
+import { addFreePiece, addPiece, footprint, freeSpot, setLength } from './edit';
 import { FACE } from './geometry';
 import { addedBounds, addFreeTemplate, joinTemplate } from './templates';
 
@@ -15,19 +15,32 @@ export type PaletteItem = { part: string; port?: number } | { template: string }
  * the part cannot join there.
  */
 export function joinPart(course: Course, partId: string, at: PortRef, port?: number): { course: Course; port: number } | null {
+  const joined = joinPartLayout(course, partId, at, port, undefined);
+  return joined && { course: joined.course, port: joined.port };
+}
+
+/** Compute candidates from the same placed prefix and keep the chosen layout (#92). */
+function joinPartLayout(course: Course, partId: string, at: PortRef, port: number | undefined, base: Layout | undefined): { course: Course; port: number; layout: Layout } | null {
   const part = getPart(partId);
   const target = partOf(course.pieces[at.piece]);
   const ports = part.ports
     .map((_, p) => p)
     .filter((p) => (port === undefined || p === port) && compatible(target, at.port, part, p));
   if (ports.length === 0) return null;
-  const tries = ports.map((p) => addPiece(course, partId, at, p));
-  const fits = tries.findIndex((c) => {
+  // A drag candidate only appends a record. Share the immutable prefix so
+  // layoutCourse can place only the new piece; later edits still clone (#92).
+  const tries = ports.map((p): Course => base ? {
+    ...course, pieces: [...course.pieces, { part: partId, port: p, to: [at.piece, at.port] }],
+  } : addPiece(course, partId, at, p));
+  const layouts: Layout[] = [];
+  const fits = tries.findIndex((c, i) => {
     const index = c.pieces.length - 1;
-    return !layoutCourse(c).problems.some((pr) => pr.piece === index);
+    layouts[i] = layoutCourse(c, base);
+    return !layouts[i].problems.some((pr) => pr.piece === index);
   });
   const chosen = tries[Math.max(0, fits)];
-  return { course: fitLength(chosen, chosen.pieces.length - 1), port: ports[Math.max(0, fits)] };
+  const fitted = fitLength(chosen, chosen.pieces.length - 1);
+  return { course: fitted, port: ports[Math.max(0, fits)], layout: fitted === chosen ? layouts[Math.max(0, fits)] : layoutCourse(fitted, base) };
 }
 
 /**
@@ -111,11 +124,15 @@ export interface DropPlan {
 
 export function planDrop(course: Course, item: PaletteItem): DropPlan {
   const candidates: DropPlan['candidates'] = [];
-  for (const ref of layoutCourse(course).open) {
-    const joined = joinItem(course, item, ref);
+  const base = layoutCourse(course);
+  for (const ref of base.open) {
+    const joined: { course: Course; layout?: Layout } | null = 'part' in item
+      ? joinPartLayout(course, item.part, ref, item.port, base) : joinItem(course, item, ref);
     if (!joined) continue;
-    const [x0, x1, z0, z1] = addedBounds(joined.course, course.pieces.length);
-    const open = layoutCourse(joined.course).open.length;
+    const layout = joined.layout ?? layoutCourse(joined.course, base);
+    const boxes = layout.pieces.slice(course.pieces.length).map(footprint);
+    const [x0, x1, z0, z1] = [Math.min(...boxes.map((b) => b[0])), Math.max(...boxes.map((b) => b[1])), Math.min(...boxes.map((b) => b[2])), Math.max(...boxes.map((b) => b[3]))];
+    const open = layout.open.length;
     candidates.push({ next: joined.course, open, cx: (x0 + x1) / 2, cz: (z0 + z1) / 2 });
   }
   return { course, item, candidates };

@@ -11,6 +11,8 @@ import {
 import { addPiece, markIntended, reverseDirection } from '../course/edit';
 import { findClashes } from '../course/clash';
 import { stopperContacts } from '../course/stopper-contact';
+import { supports } from '../course/height';
+import { worldTracks } from '../course/mesh';
 import { checkLaps } from '../course/laps';
 import { basicOval } from '../course/presets';
 import { renderCourseInfo, type CourseChecks } from './checks';
@@ -272,7 +274,9 @@ export class EditorApp {
   }
 
   private refreshData(writeUrl: boolean): void {
-    this.layout = perfSpan('layout', () => layoutCourse(this.course));
+    const previous = this.layout;
+    this.layout = perfSpan('layout', () => layoutCourse(this.course, previous));
+    perfSpan('supports', () => supports(this.layout, worldTracks(this.layout, previous), previous));
     // Drop a selection that no longer exists (e.g. a port that got closed).
     const s = this.selection;
     if (s?.kind === 'port' && !this.layout.open.some((r) => portKey(r) === portKey(s.ref))) this.selection = null;
@@ -285,7 +289,7 @@ export class EditorApp {
       else if (s.point !== undefined && (stopper.kind !== 'hose' || s.point >= stopper.points.length)) this.selection = { kind: 'stopper', index: s.index };
     }
     this.checks = {
-      clashes: [...perfSpan('clashes', () => findClashes(this.layout)), ...perfSpan('stopperContacts', () => stopperContacts(this.layout))],
+      clashes: [...perfSpan('clashes', () => findClashes(this.layout)), ...perfSpan('stopperContacts', () => stopperContacts(this.layout, previous))],
       laps: perfSpan('laps', () => checkLaps(this.layout, this.course.dir)),
     };
     for (const view of [this.top, this.orbit]) {

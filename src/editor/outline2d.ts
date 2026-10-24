@@ -13,12 +13,17 @@ export interface Outline {
   steps: { polygon: [number, number][]; height: number }[];
 }
 
-/** The road of every track as seen from above. */
+const outlineCache = new WeakMap<WorldTrack, Outline>();
+
+/** The road of every track as seen from above, shared for unchanged world tracks (#92). */
 export function outlinesOf(tracks: readonly WorldTrack[]): Outline[] {
-  return tracks.map(({ piece, samples, section }) => {
+  return tracks.map((track) => {
+    const cached = outlineCache.get(track);
+    if (cached) return cached;
+    const { piece, samples, section } = track;
     const left = trackEdge(samples, section.left).map(xz);
     const right = trackEdge(samples, section.right).map(xz);
-    return {
+    const outline: Outline = {
       piece,
       polygon: roadOutline(samples, section).map(xz),
       fences: section.fences.map((x) => trackEdge(samples, x).map(xz)),
@@ -28,6 +33,8 @@ export function outlinesOf(tracks: readonly WorldTrack[]): Outline[] {
         height: (f.elements[13] + samples[i].elements[13]) / 2,
       })),
     };
+    outlineCache.set(track, outline);
+    return outline;
   });
 }
 

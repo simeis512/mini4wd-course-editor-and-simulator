@@ -50,6 +50,7 @@ DOM にもビューにも触らない処理が `editor` に 10 行以上あれ�
 | `view2d.ts` / `view3d.ts` | 各ビューの状態・更新と、カメラ・表示の管理 |
 | `paint2d.ts` / `gesture2d.ts` / `outline2d.ts` | 2D の描画、ポインター操作、道の外形 |
 | `marks3d.ts` / `pick3d.ts` | 3D のマーカー・ハイライトと、レイキャストによる選択 |
+| `meshes3d.ts` | 3D のピース・支柱・置き物メッシュの保持、変更時の差し替えと geometry 解放 |
 | `ar.ts` / `ar-pose.ts` / `ar-scan.ts` / `ar-depth.ts` / `ar-gesture.ts` | 3D ビューの AR（床への設置・大きさ・向き）、その置き方の計算、見つけた床の点、奥行きの表示とオクルージョン、指での移動・回転 |
 | `history.ts`、`dom.ts`、`icons.ts` など | 小さな部品 |
 

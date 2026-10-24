@@ -1,0 +1,170 @@
+{
+  "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+  "samples": 20,
+  "results": [
+    {
+      "size": "S",
+      "mode": "2d",
+      "refresh": {
+        "layout": 0.3,
+        "refresh:2d": 7.6,
+        "supports": 0.4,
+        "clashes": 2.6,
+        "stopperContacts": 0,
+        "laps": 0.3,
+        "view2d": 1.8,
+        "panel": 1.2,
+        "url+save": 0.1,
+        "view3d": 0.3
+      },
+      "drag": {
+        "pointermove": 1.6,
+        "dropJoin": 0.6,
+        "preview:setData": 0.9,
+        "view2d": 0.9
+      },
+      "warmDrag": {
+        "pointermove": 0.3,
+        "dropJoin": 0
+      }
+    },
+    {
+      "size": "S",
+      "mode": "3d",
+      "refresh": {
+        "refresh:3d": 5.4,
+        "layout": 0.2,
+        "supports": 0.4,
+        "clashes": 2.3,
+        "stopperContacts": 0,
+        "laps": 0.3,
+        "view2d": 0.1,
+        "panel": 1.3,
+        "url+save": 0.1,
+        "view3d": 0.2
+      },
+      "drag": {
+        "pointermove": 2.1,
+        "dropJoin": 0.5,
+        "view3d": 1.1,
+        "preview:setData": 1.2
+      },
+      "warmDrag": {
+        "pointermove": 0.1,
+        "dropJoin": 0
+      }
+    },
+    {
+      "size": "M",
+      "mode": "2d",
+      "refresh": {
+        "layout": 0.5,
+        "refresh:2d": 17.9,
+        "supports": 1.1,
+        "clashes": 8.8,
+        "stopperContacts": 0,
+        "laps": 1.1,
+        "view2d": 2.7,
+        "panel": 2,
+        "url+save": 0,
+        "view3d": 0.6
+      },
+      "drag": {
+        "dropJoin": 1.3,
+        "pointermove": 3.9,
+        "view2d": 2,
+        "preview:setData": 2
+      },
+      "warmDrag": {
+        "pointermove": 2.8,
+        "dropJoin": 0,
+        "view2d": 1.9,
+        "preview:setData": 1.9
+      }
+    },
+    {
+      "size": "M",
+      "mode": "3d",
+      "refresh": {
+        "layout": 0.5,
+        "refresh:3d": 13.2,
+        "supports": 0.8,
+        "clashes": 8.5,
+        "stopperContacts": 0,
+        "laps": 1.1,
+        "view2d": 0.2,
+        "panel": 1.3,
+        "url+save": 0,
+        "view3d": 0.6
+      },
+      "drag": {
+        "pointermove": 4.6,
+        "dropJoin": 1.1,
+        "view3d": 2.8,
+        "preview:setData": 2.9
+      },
+      "warmDrag": {
+        "pointermove": 3.4,
+        "dropJoin": 0,
+        "view3d": 2.7,
+        "preview:setData": 2.8
+      }
+    },
+    {
+      "size": "L",
+      "mode": "2d",
+      "refresh": {
+        "layout": 2.3,
+        "refresh:2d": 68.5,
+        "supports": 8.4,
+        "clashes": 35.5,
+        "stopperContacts": 4.1,
+        "laps": 1.2,
+        "view2d": 5.7,
+        "panel": 6,
+        "url+save": 0,
+        "view3d": 2.4
+      },
+      "drag": {
+        "pointermove": 15.4,
+        "dropJoin": 6.8,
+        "view2d": 5.8,
+        "preview:setData": 5.8
+      },
+      "warmDrag": {
+        "pointermove": 7.9,
+        "dropJoin": 0,
+        "view2d": 5,
+        "preview:setData": 5.1
+      }
+    },
+    {
+      "size": "L",
+      "mode": "3d",
+      "refresh": {
+        "layout": 2.4,
+        "refresh:3d": 58.1,
+        "supports": 9.5,
+        "clashes": 30.3,
+        "stopperContacts": 4.3,
+        "laps": 2.2,
+        "view2d": 0.4,
+        "panel": 6.4,
+        "url+save": 0,
+        "view3d": 2.5
+      },
+      "drag": {
+        "pointermove": 20.8,
+        "dropJoin": 5.6,
+        "view3d": 13.1,
+        "preview:setData": 13.2
+      },
+      "warmDrag": {
+        "pointermove": 14.7,
+        "dropJoin": 0,
+        "view3d": 12.5,
+        "preview:setData": 12.5
+      }
+    }
+  ]
+}

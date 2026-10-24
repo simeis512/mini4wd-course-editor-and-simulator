@@ -5,6 +5,7 @@ import type { Attachment, Layout, PlacedPiece } from './course';
 import { Twist } from './flex';
 import { partGeometry, partStands, pointOnFrame, STAND_BEAM, STAND_DEPTH, STAND_LEG, type PartGeometry, type Stand } from './geometry';
 import { shapeSource } from './model';
+import { changedPieces } from './layout-diff';
 
 /** Scene units are metres; course data is in millimetres. */
 export const MM = 0.001;
@@ -67,10 +68,18 @@ export function pieceTracks(pc: PlacedPiece, piece: number): WorldTrack[] {
 const tracksCache = new WeakMap<Layout, WorldTrack[]>();
 
 /** Every stretch of road, shared read-only for this immutable layout's lifetime (#87). */
-export function worldTracks(layout: Layout): WorldTrack[] {
+export function worldTracks(layout: Layout, previous?: Layout | null): WorldTrack[] {
   let tracks = tracksCache.get(layout);
   if (!tracks) {
-    tracks = layout.pieces.flatMap((pc, i) => pieceTracks(pc, i));
+    const old = previous && tracksCache.get(previous);
+    const changed = old && changedPieces(previous!, layout);
+    const byPiece = new Map<number, WorldTrack[]>();
+    for (const track of old ?? []) {
+      const list = byPiece.get(track.piece) ?? [];
+      list.push(track);
+      byPiece.set(track.piece, list);
+    }
+    tracks = layout.pieces.flatMap((pc, i) => old && !changed!.has(i) ? byPiece.get(i)! : pieceTracks(pc, i));
     tracksCache.set(layout, tracks);
   }
   return tracks;
@@ -215,29 +224,33 @@ function modelMesh(visual: THREE.Object3D, pc: PlacedPiece): THREE.Object3D {
 
 /** One group per piece, placed in world millimetres; the caller scales to metres. */
 export function buildCourseMeshes(layout: Layout, visuals: ModelVisuals = new Map()): THREE.Group[] {
-  return layout.pieces.map((pc, i) => {
-    const color = variantOf(pc.part, pc.rec.variant).color;
-    const group = new THREE.Group();
-    group.name = `piece-${i}`;
-    group.userData.piece = i;
-    const source = shapeSource(pc.part);
-    const visual = source.kind === 'model' && source.model ? visuals.get(pc.part.id) : undefined;
-    if (visual) {
-      group.add(modelMesh(visual, pc));
-    } else {
-      // Procedural, also while a measured model is not loaded (spec 15.1).
-      const geo = sharedPartGeometry(pc.geometry);
-      for (const r of geo.roads) group.add(new THREE.Mesh(r, material(color, 1)));
-      for (const f of geo.fences) group.add(new THREE.Mesh(f, material(color, 0.85)));
-    }
-    // Stands that come with the part are part of the piece, in its colour (#11).
-    const stands = partStands(pc.part, pc.geometry);
-    if (stands.length) group.add(buildSupportMesh(stands, material(color, 0.9, true)));
-    for (const a of layout.attachments) if (a.piece === i) group.add(attachmentMesh(pc, a));
-    group.matrixAutoUpdate = false;
-    group.matrix.copy(pc.matrix);
-    return group;
-  });
+  return layout.pieces.map((_, i) => buildPieceMesh(layout, i, visuals));
+}
+
+/** Build only a changed piece; callers retain the other groups (#92). */
+export function buildPieceMesh(layout: Layout, i: number, visuals: ModelVisuals = new Map()): THREE.Group {
+  const pc = layout.pieces[i];
+  const color = variantOf(pc.part, pc.rec.variant).color;
+  const group = new THREE.Group();
+  group.name = `piece-${i}`;
+  group.userData.piece = i;
+  const source = shapeSource(pc.part);
+  const visual = source.kind === 'model' && source.model ? visuals.get(pc.part.id) : undefined;
+  if (visual) {
+    group.add(modelMesh(visual, pc));
+  } else {
+    // Procedural, also while a measured model is not loaded (spec 15.1).
+    const geo = sharedPartGeometry(pc.geometry);
+    for (const r of geo.roads) group.add(new THREE.Mesh(r, material(color, 1)));
+    for (const f of geo.fences) group.add(new THREE.Mesh(f, material(color, 0.85)));
+  }
+  // Stands that come with the part are part of the piece, in its colour (#11).
+  const stands = partStands(pc.part, pc.geometry);
+  if (stands.length) group.add(buildSupportMesh(stands, material(color, 0.9, true)));
+  for (const a of layout.attachments) if (a.piece === i) group.add(attachmentMesh(pc, a));
+  group.matrixAutoUpdate = false;
+  group.matrix.copy(pc.matrix);
+  return group;
 }
 
 /** Washboards are red, as sold (69572). */
