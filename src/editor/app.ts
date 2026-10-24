@@ -16,6 +16,7 @@ import { basicOval } from '../course/presets';
 import { renderCourseInfo, type CourseChecks } from './checks';
 import { $, toast } from './dom';
 import { PaletteDrag, PieceDrag, PropDrag, type DragHost } from './drag';
+import { HandleTool } from './handles';
 import { History } from './history';
 import { Library } from './library';
 import { levelMax, renderLevelTools, type HeightView } from './levels';
@@ -56,6 +57,8 @@ export class EditorApp {
   private drag: PieceDrag | PropDrag | null = null;
   private props: PropTools;
   private library: Library;
+  /** Handles on the selected piece, over either view (#62). */
+  private handles: HandleTool;
 
   constructor() {
     const app = this;
@@ -117,22 +120,26 @@ export class EditorApp {
       onPick: (s: Selection) => this.select(s),
       onViewChange: () => {
         this.placeContext();
+        this.handles?.draw();
         if (this.top) renderTurnTools(this.top);
         this.share?.later();
       },
       onDragStart: (target: NonNullable<Selection>) => {
         this.drag = target.kind === 'piece' ? this.pieceDrag : isProp(target) ? this.propDrag : null;
+        this.handles.pause(true);
         if (target.kind === 'piece') return this.pieceDrag.start(target.index);
         return isProp(target) && this.propDrag.start(target);
       },
       onDragMove: (dx: number, dz: number, noSnap: boolean) => this.drag?.move(dx, dz, noSnap),
       onDragEnd: (commit: boolean) => {
+        this.handles.pause(false);
         this.drag?.end(commit);
         this.drag = null;
       },
     };
     this.top = new TopView($('view2d'), handlers);
     this.orbit = new OrbitView($('view3d'), handlers);
+    this.handles = new HandleTool($('stage'), host);
     buildPalette({
       click: (item) => {
         if (this.paletteDrag.clickAdds) this.place(item);
@@ -247,6 +254,7 @@ export class EditorApp {
       } finally {
         for (const view of views) view.endUpdate();
       }
+      this.handles.draw();
     });
   }
 
@@ -373,6 +381,7 @@ export class EditorApp {
     $('height-tools').hidden = mode !== '2d';
     this.orbit.setActive(mode === '3d');
     if (mode === '2d') this.top.draw();
+    this.handles.draw();
     this.share?.later();
   }
 
