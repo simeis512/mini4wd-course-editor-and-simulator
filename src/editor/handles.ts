@@ -1,14 +1,19 @@
 import { Vector3 } from 'three';
 import { layoutCourse, movingGroup, type Course, type Layout } from '../course/course';
 import {
-  alongScreen, handleFrame, handleMatrix, lowestPort, nearestRingDeg, ringPoint, snapTo, wrapDeg, type HandleEdit,
+  alongScreen, handleFrame, handleMatrix, lowestPort, nearestRingDeg, ringPoint, snapTo, stopperEdit, stopperFrame, stopperReach, wrapDeg,
+  type HandleEdit, type HandleFrame,
 } from '../course/handles';
+import { hoseLength } from '../course/stoppers';
 import { $ } from './dom';
 import { SNAP_STEP, type DragHost } from './drag';
 import { editSelection } from './selected-edits';
 
 /** Screen radius of the turning ring, px; the other handles are sized from it. */
 const RING_PX = 70;
+/** A hose's or box's ring goes round it this far out, px, but no wider than `RING_MAX_PX` (#62). */
+const RING_CLEAR_PX = 22;
+const RING_MAX_PX = 3 * RING_PX;
 /** Arrow heads sit this far out along the ring's radius. */
 const ARROW_AT = 0.72;
 /** …and their shafts start this far out. */
@@ -24,10 +29,16 @@ const END_ON = 0.3;
 const LIFT_MM_PER_PX = 1;
 /** Turning steps with snapping on, degrees (spec 8, as the turn buttons). */
 const TURN_SNAP = 15;
+/** Growing steps of a hose with snapping on, as a share of its size (provisional, #62). */
+const SCALE_SNAP = 0.05;
+/** The grow handle sits right and down of the ring, this far out, px (clear of the settings box). */
+const SCALE_GAP = 20;
+/** …and its arrows reach this far either way along the diagonal, px. */
+const SCALE_HALF = 12;
 /** Points drawn round the ring. */
 const RING_DRAW_POINTS = 64;
 
-const COLORS = { along: '#ff8a5c', across: '#5ad17a', turn: '#58a6ff', lift: '#e8c547' } as const;
+const COLORS = { along: '#ff8a5c', across: '#5ad17a', turn: '#58a6ff', lift: '#e8c547', scale: '#c58cff' } as const;
 
 type HandleKind = keyof typeof COLORS;
 type Point = [number, number];
@@ -41,15 +52,26 @@ interface ScreenAxis {
   shafts: [Point, Point][];
 }
 
-/** The handles of the selected piece as they show now, in stage px. */
+/** What has handles: the selected piece, or a whole hose or box (#53). */
+type Target = { kind: 'piece' | 'stopper'; index: number };
+
+/** The handles of the selection as they show now, in stage px. */
 interface Shown {
-  index: number;
+  target: Target;
   centre: Vector3;
+  /** The middle on the stage. */
+  middle: Point;
   ringMm: number;
+  ringPx: number;
   ring: Point[];
   along: ScreenAxis | null;
   across: ScreenAxis | null;
-  lift: { at: Point; dir: Point; axis: Point; mm: number };
+  /** Pieces only: stoppers stay on the floor. */
+  lift: { at: Point; dir: Point; axis: Point; mm: number } | null;
+  /** Hoses only. */
+  scale: Point | null;
+  /** Points whose own drag wins over a handle drawn across them (a hose's points). */
+  avoid: Point[];
 }
 
 /** A handle being dragged, and the course as it would be if let go now. */
@@ -71,7 +93,8 @@ interface HandleDrag {
 /**
  * CAD-like handles on the selected piece (#62): two pairs of arrows slide it
  * along or across itself, a ring turns it about its middle and an up/down
- * arrow lifts it, with the group that moves with it. Drawn over whichever
+ * arrow lifts it, with the group that moves with it. A selected hose or box
+ * gets the arrows and ring too, and a hose a diagonal arrow to grow it. Drawn over whichever
  * view is on show, through `EditorView.clientOf`, so 2D and 3D share them.
  */
 export class HandleTool {
@@ -110,9 +133,23 @@ export class HandleTool {
   /** Draw the handles for the course and selection as they are now. */
   draw(): void {
     const layout = this.drag?.previewLayout ?? this.host.layout;
-    const s = this.host.selection;
-    this.shown = !this.paused && s?.kind === 'piece' && layout.pieces[s.index] ? this.measure(layout, s.index) : null;
+    this.shown = this.paused ? null : this.measureSelection(layout);
     this.paint();
+  }
+
+  /** The handles of the selected piece, or of the selected hose or box (not one of a hose's points). */
+  private measureSelection(layout: Layout): Shown | null {
+    const s = this.host.selection;
+    if (s?.kind === 'piece' && layout.pieces[s.index]) return this.measure({ kind: 'piece', index: s.index }, handleFrame(layout.pieces[s.index]));
+    const stopper = s?.kind === 'stopper' && s.point === undefined ? layout.stoppers[s.index] : undefined;
+    if (s?.kind !== 'stopper' || !stopper) return null;
+    const shown = this.measure({ kind: 'stopper', index: s.index }, stopperFrame(stopper), stopperReach(stopper));
+    if (shown && stopper.kind === 'hose') {
+      const out = shown.ringPx * Math.SQRT1_2 + SCALE_GAP;
+      shown.scale = [shown.middle[0] + out, shown.middle[1] + out];
+      shown.avoid = stopper.points.map(([x, z]) => this.toStage(new Vector3(x, 0, z))).filter((p): p is Point => !!p);
+    }
+    return shown;
   }
 
   // ---- Where the handles show
@@ -125,8 +162,8 @@ export class HandleTool {
     return [c[0] - r.left, c[1] - r.top];
   }
 
-  private measure(layout: Layout, index: number): Shown | null {
-    const f = handleFrame(layout.pieces[index]);
+  /** The handles round frame `f`; a ring that would fall inside `reach` mm grows to go round it. */
+  private measure(target: Target, f: HandleFrame, reach = 0): Shown | null {
     const c = this.toStage(f.centre);
     if (!c) return null;
     // Size the ring by the longer of the two level directions as they show.
@@ -139,7 +176,8 @@ export class HandleTool {
       return v ? Math.hypot(...v) : 0;
     }));
     if (pxPer100 <= 0) return null;
-    const ringMm = (RING_PX * 100) / pxPer100;
+    const ringPx = Math.max(RING_PX, Math.min((reach * pxPer100) / 100 + RING_CLEAR_PX, RING_MAX_PX));
+    const ringMm = (ringPx * 100) / pxPer100;
     const ring: Point[] = [];
     for (let i = 0; i <= RING_DRAW_POINTS; i++) {
       const p = this.toStage(ringPoint(f.centre, ringMm, (i * 360) / RING_DRAW_POINTS));
@@ -147,7 +185,7 @@ export class HandleTool {
     }
     const axis = (dir: Vector3): ScreenAxis | null => {
       const v = probe(dir, ringMm);
-      if (!v || Math.hypot(...v) < END_ON * RING_PX) return null;
+      if (!v || Math.hypot(...v) < END_ON * ringPx) return null;
       const at = (k: number): Point => [c[0] + v[0] * k, c[1] + v[1] * k];
       return {
         dir, axis: v, mm: ringMm,
@@ -158,11 +196,14 @@ export class HandleTool {
     // Up as it shows; seen from straight above it does not, so dragging up the screen lifts.
     const up = probe(new Vector3(0, 1, 0), ringMm);
     const upLen = up ? Math.hypot(...up) : 0;
-    const lift = upLen >= END_ON * RING_PX
+    const lift = upLen >= END_ON * ringPx
       ? { dir: [up![0] / upLen, up![1] / upLen] as Point, axis: up!, mm: ringMm }
       : { dir: [0, -1] as Point, axis: [0, -1] as Point, mm: LIFT_MM_PER_PX };
-    const left = Math.min(...ring.map((p) => p[0]), c[0] - RING_PX);
-    return { index, centre: f.centre, ringMm, ring, along: axis(f.along), across: axis(f.across), lift: { ...lift, at: [left - LIFT_GAP, c[1]] } };
+    const left = Math.min(...ring.map((p) => p[0]), c[0] - ringPx);
+    return {
+      target, centre: f.centre, middle: c, ringMm, ringPx, ring, along: axis(f.along), across: axis(f.across),
+      lift: target.kind === 'piece' ? { ...lift, at: [left - LIFT_GAP, c[1]] } : null, scale: null, avoid: [],
+    };
   }
 
   /** The handle under a stage point, if any. */
@@ -170,7 +211,9 @@ export class HandleTool {
     const s = this.shown;
     if (!s) return null;
     const near = (q: Point) => Math.hypot(q[0] - p[0], q[1] - p[1]) <= HANDLE_HIT;
+    if (s.avoid.some(near)) return null;
     if (s.lift && near(s.lift.at)) return 'lift';
+    if (s.scale && near(s.scale)) return 'scale';
     if (s.along?.heads.some(near)) return 'along';
     if (s.across?.heads.some(near)) return 'across';
     for (let i = 1; i < s.ring.length; i++) if (segmentDistance(p, s.ring[i - 1], s.ring[i]) <= HANDLE_HIT * 0.6) return 'turn';
@@ -202,7 +245,7 @@ export class HandleTool {
     const deg = kind === 'turn' ? (nearestRingDeg((q) => this.toStage(q), shown.centre, shown.ringMm, p) ?? 0) : 0;
     this.drag = {
       kind, pointerId: e.pointerId, from: p, shown, start: course, layout,
-      low: lowestPort(layout, movingGroup(layout, shown.index, moveAlone)),
+      low: shown.target.kind === 'piece' ? lowestPort(layout, movingGroup(layout, shown.target.index, moveAlone)) : 0,
       lastDeg: deg, turned: 0, preview: null, previewLayout: null, label: '',
     };
   }
@@ -215,10 +258,11 @@ export class HandleTool {
     }
     if (e.pointerId !== d.pointerId) return;
     const edit = this.editFor(d, this.local(e), !this.host.snapOn || e.shiftKey);
-    const amount = edit.kind === 'turn' ? edit.deg : edit.mm;
+    const amount = edit.kind === 'turn' ? edit.deg : edit.kind === 'scale' ? edit.factor - 1 : edit.mm;
     d.preview = amount ? this.apply(d, edit) : null;
     d.previewLayout = d.preview && layoutCourse(d.preview);
-    d.label = amount ? labelOf(edit) : '';
+    const hose = d.previewLayout?.stoppers[d.shown.target.index];
+    d.label = !amount ? '' : edit.kind === 'scale' && hose?.kind === 'hose' ? `${labelOf(edit)}（長さ ${Math.round(hoseLength(hose))}mm）` : labelOf(edit);
     $('context').hidden = true;
     this.host.view.setData(d.previewLayout ?? d.layout, this.host.selection);
     this.draw();
@@ -247,16 +291,23 @@ export class HandleTool {
       }
       return { kind: 'turn', deg: fine ? Math.round(d.turned) : snapTo(d.turned, TURN_SNAP) };
     }
-    if (d.kind === 'lift') return { kind: 'lift', mm: mm(s.lift.axis, s.lift.mm) };
+    if (d.kind === 'lift') return { kind: 'lift', mm: mm(s.lift!.axis, s.lift!.mm) };
+    if (d.kind === 'scale') {
+      // How much farther from the middle the pointer is than where it grabbed.
+      const from = Math.hypot(d.from[0] - s.middle[0], d.from[1] - s.middle[1]);
+      const k = Math.hypot(p[0] - s.middle[0], p[1] - s.middle[1]) / (from || 1);
+      return { kind: 'scale', factor: fine ? Math.round(k * 100) / 100 : Math.round(snapTo(k, SCALE_SNAP) * 100) / 100 };
+    }
     const a = (d.kind === 'along' ? s.along : s.across)!;
     return { kind: 'slide', dir: a.dir, mm: mm(a.axis, a.mm) };
   }
 
-  /** The course with the group moved by `edit`, as the move buttons would leave it. */
+  /** The course with the stopper, or the piece's group, changed by `edit`, as the buttons would leave it. */
   private apply(d: HandleDrag, edit: HandleEdit): Course | null {
-    const s = d.shown;
-    const by = handleMatrix(d.layout, s.index, edit, d.low);
-    const next = editSelection({ course: d.start, layout: d.layout, selection: { kind: 'piece', index: s.index }, moveAlone: this.host.moveAlone }, { kind: 'move', by });
+    const { kind, index } = d.shown.target;
+    if (kind === 'stopper') return stopperEdit(d.start, index, edit);
+    const by = handleMatrix(d.layout, index, edit, d.low);
+    const next = editSelection({ course: d.start, layout: d.layout, selection: { kind: 'piece', index }, moveAlone: this.host.moveAlone }, { kind: 'move', by });
     return next?.course ?? null;
   }
 
@@ -296,19 +347,16 @@ export class HandleTool {
       if (!a) continue;
       a.shafts.forEach(([from, to]) => arrow(ctx, from, to, COLORS[kind], width(kind)));
     }
-    // Lift arrow, both ways
-    const { at, dir } = s.lift;
-    const tip = (k: number): Point => [at[0] + dir[0] * LIFT_HALF * k, at[1] + dir[1] * LIFT_HALF * k];
-    arrow(ctx, at, tip(1), COLORS.lift, width('lift'));
-    arrow(ctx, at, tip(-1), COLORS.lift, width('lift'));
-    ctx.beginPath();
-    ctx.arc(at[0], at[1], 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = COLORS.lift;
-    ctx.fill();
+    // Lift arrow and grow arrow, both ways
+    if (s.lift) doubleArrow(ctx, s.lift.at, s.lift.dir, LIFT_HALF, COLORS.lift, width('lift'));
+    if (s.scale) doubleArrow(ctx, s.scale, [Math.SQRT1_2, Math.SQRT1_2], SCALE_HALF, COLORS.scale, width('scale'));
     // How far the drag has gone
     const label = this.drag?.label;
     if (label) {
-      const [x, y] = this.drag!.kind === 'lift' ? [at[0], at[1] - LIFT_HALF - 8] : [s.ring[0][0], s.ring[0][1] - 12];
+      const k = this.drag!.kind;
+      const [x, y] = k === 'lift' && s.lift ? [s.lift.at[0], s.lift.at[1] - LIFT_HALF - 8]
+        : k === 'scale' && s.scale ? [s.scale[0], s.scale[1] + SCALE_HALF + 24]
+        : [s.ring[0][0], s.ring[0][1] - 12];
       ctx.font = 'bold 13px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
@@ -325,6 +373,7 @@ export class HandleTool {
 function labelOf(edit: HandleEdit): string {
   const signed = (v: number, unit: string) => `${v > 0 ? '+' : ''}${v}${unit}`;
   if (edit.kind === 'turn') return signed(edit.deg, '°');
+  if (edit.kind === 'scale') return `${Math.round(edit.factor * 100)}%`;
   return edit.kind === 'lift' ? `高さ ${signed(edit.mm, 'mm')}` : signed(edit.mm, 'mm');
 }
 
@@ -344,6 +393,17 @@ function stroke(ctx: CanvasRenderingContext2D, color: string, width: number): vo
   ctx.strokeStyle = color;
   ctx.lineWidth = width;
   ctx.stroke();
+}
+
+/** Arrows both ways from `at` along `dir` (unit), `half` px each, with a dot between. */
+function doubleArrow(ctx: CanvasRenderingContext2D, at: Point, dir: Point, half: number, color: string, width: number): void {
+  const tip = (k: number): Point => [at[0] + dir[0] * half * k, at[1] + dir[1] * half * k];
+  arrow(ctx, at, tip(1), color, width);
+  arrow(ctx, at, tip(-1), color, width);
+  ctx.beginPath();
+  ctx.arc(at[0], at[1], 3.5, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
 }
 
 /** A shaft from `from` with a head at `to`. */

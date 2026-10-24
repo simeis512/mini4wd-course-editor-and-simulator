@@ -39,7 +39,7 @@ DOM にもビューにも触らない処理が `editor` に 10 行以上あれ�
 | `side-panel.ts` / `float.ts` | サイドパネルの畳み方と、選択中の設定欄の置き場所 |
 | `checks.ts` | コース欄（検証の結果）の DOM 表示。購入リストは `shopping.ts` |
 | `drag.ts` | パーツ一覧からのドラッグと、ピース・置き物のドラッグ |
-| `handles.ts` | 選んだピースの移動・回転・高さのハンドル。`EditorView.clientOf` で 2D/3D の上に重ねて描く（計算は `src/course/handles.ts`） |
+| `handles.ts` | 選んだピース・ホース・箱の移動・回転・高さ（ピース）・拡縮（ホース）のハンドル。`EditorView.clientOf` で 2D/3D の上に重ねて描く（計算は `src/course/handles.ts`） |
 | `props.ts` / `props2d.ts` | 置き物（スタート・ラップタイマー・ホース・箱）の追加と設定欄、2D での描き方 |
 | `share.ts` | URL・ファイルでのコースの受け渡し |
 | `library.ts` / `store.ts` | ブラウザ内（IndexedDB）への保存・一覧・自動保存と、その読み書き |
