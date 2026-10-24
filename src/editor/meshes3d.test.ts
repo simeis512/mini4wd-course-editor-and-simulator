@@ -62,7 +62,10 @@ it('updates start/timer meshes when their road moves and releases changed stoppe
   course.start = { piece: 0, offset: 100 };
   course.timer = { piece: 0, offset: 300, side: 'left' };
   course.stoppers = [{ kind: 'box', size: 0, x: 100, z: 100, yaw: 0 }];
-  const meshes = new CourseMeshes(new Group());
+  const root = new Group();
+  const machine = new Group();
+  root.add(machine);
+  const meshes = new CourseMeshes(root);
   meshes.update(layoutCourse(course));
   const before = meshes.props;
   const geometry = (before[2].children[0] as Mesh).geometry;
@@ -74,4 +77,6 @@ it('updates start/timer meshes when their road moves and releases changed stoppe
   expect(meshes.props[1]).not.toBe(before[1]);
   buildPropMeshes(layout).forEach((mesh, i) => expect(positions(meshes.props[i])).toEqual(positions(mesh)));
   expect(disposed).toHaveBeenCalledOnce();
+  // The running machine belongs to OrbitView, not to the retained course meshes (#27, #92).
+  expect(machine.parent).toBe(root);
 });
