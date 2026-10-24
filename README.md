@@ -94,9 +94,10 @@ AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari 
 - `src/course/laps.ts` レーン一巡と各レーンの周長（検証）
 - `src/course/clash.ts` ピース同士の重なりと立体交差の高さ（検証）、`stopper-contact.ts` ホース・箱がほかの物に当たっていないか
 - `src/course/mesh.ts` 3D メッシュ生成（路面＋フェンスの掃引、支柱。シーンは m 単位）
+- `src/course/sim-course.ts` シミュレーターへの受け渡し（同じ掃引からの衝突メッシュ、レーンごとの中心線と位置の求め方、開いた口の先の落下ゾーン。mm 単位）
 - `src/editor/app.ts` エディタの状態と操作。`app-ui.ts` UI のイベント接続、`selected-edits.ts` 選択に応じた編集操作の呼び分け。`panels.ts` パネル表示、`checks.ts` コース欄（検証の結果）、`shopping.ts` コース欄の購入リスト、`attach.ts` ウォッシュボードの設定欄、`props.ts` 置き物（スタート・タイマー・ホース・箱）の追加と設定欄（2D の描き方は `props2d.ts`）、`drag.ts` ドラッグ操作、`handles.ts` 選んだピースのハンドル（2D/3D の上に重ねて描く）、`share.ts` URL・ファイルでの受け渡し、`library.ts` ブラウザ内の保存と自動保存（IndexedDB は `store.ts`、名前や一覧の決め方は `src/course/saves.ts`）、`notice.ts` 起動時の案内と「i」の情報パネル、`side-panel.ts` サイドパネルを畳む、`float.ts` 設定欄の置き場所、`levels.ts` 2D の高さ表示の設定、`history.ts` 元に戻す／やり直し
 - `src/editor/view2d.ts` / `view3d.ts` 2D 編集ビュー、3D/AR ビュー。2D の描画は `paint2d.ts`、ポインター操作は `gesture2d.ts`、3D のマーカー・ハイライトは `marks3d.ts`、レイキャストと選択は `pick3d.ts`（共通インターフェースは `view.ts`、AR の設置と操作は `ar.ts`（指の操作は `ar-gesture.ts`）、床の点は `ar-scan.ts`、奥行きの表示とオクルージョンは `ar-depth.ts`、その置き方の計算は `ar-pose.ts`、2D の道の外形は `outline2d.ts`）
-- `src/physics/` Rapier の物理ワールド（シミュレーター用、未接続）
+- `src/physics/` Rapier の物理ワールド（シミュレーター用、画面には未接続）。`course-colliders.ts` コースを固定の trimesh と落下ゾーンのセンサーとして入れる（m 単位に直す）
 
 作者はコトン（[simeis512.com](https://simeis512.com/)）。開発には Anthropic の Claude Code と OpenAI の Codex を使用している。このアプリは [MIT License](LICENSE)。ミニ四駆・ジャパンカップジュニアサーキットは株式会社タミヤの商標で、本アプリはタミヤとは関係のない非公式アプリ。
 
