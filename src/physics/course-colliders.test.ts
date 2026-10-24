@@ -8,7 +8,7 @@ import { createPhysicsWorld } from './world';
 
 /** A ball of radius `r` m dropped at (x, y, z) m, stepped for `seconds`. */
 function drop(world: RAPIER.World, [x, y, z]: [number, number, number], r: number, vx = 0, seconds = 1): RAPIER.RigidBody {
-  const ball = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x, y, z).setLinvel(vx, 0, 0));
+  const ball = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x, y, z).setLinvel(vx, 0, 0).setCcdEnabled(true));
   world.createCollider(RAPIER.ColliderDesc.ball(r), ball);
   for (let t = 0; t < seconds * 60; t++) world.step();
   return ball;

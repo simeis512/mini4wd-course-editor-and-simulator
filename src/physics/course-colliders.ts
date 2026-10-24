@@ -16,8 +16,9 @@ export interface CourseColliders {
 function trimesh(mesh: TriMesh): RAPIER.ColliderDesc | null {
   if (!mesh.indices.length) return null;
   const vertices = mesh.vertices.map((v) => v * MM);
-  // The pieces' boxes meet edge to edge; merging and fixing internal edges keeps wheels from catching on the seams.
-  const flags = RAPIER.TriMeshFlags.MERGE_DUPLICATE_VERTICES | RAPIER.TriMeshFlags.FIX_INTERNAL_EDGES;
+  // The pieces' boxes meet edge to edge; merging and fixing internal edges keeps wheels from catching on the seams,
+  // and with the faces' outward sides known a roller pressed into a fence is pushed back out the side it came in.
+  const flags = RAPIER.TriMeshFlags.MERGE_DUPLICATE_VERTICES | RAPIER.TriMeshFlags.FIX_INTERNAL_EDGES | RAPIER.TriMeshFlags.ORIENTED;
   return RAPIER.ColliderDesc.trimesh(vertices, mesh.indices, flags);
 }
 

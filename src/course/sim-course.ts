@@ -3,7 +3,7 @@ import { GLOBAL_SPEC, portLaneOffsets } from './catalog';
 import { offsetFrame, type Block } from './blocks';
 import type { Layout, PortRef } from './course';
 import { checkLaps } from './laps';
-import { attachmentGeometry, sharedPartGeometry } from './mesh';
+import { attachmentGeometry, buildPartGeometry } from './mesh';
 import { buildPropMeshes } from './props-mesh';
 
 // What the simulator needs from a course (spec 9, #26): collision meshes
@@ -170,7 +170,8 @@ export function simCourse(layout: Layout, dir: 1 | -1 = 1): SimCourse {
   const road: { geometry: THREE.BufferGeometry; matrix: THREE.Matrix4 }[] = [];
   const fences: typeof road = [];
   layout.pieces.forEach((pc, i) => {
-    const geo = sharedPartGeometry(pc.geometry);
+    // Open-ended, so where pieces meet there is no end face for a wheel or roller to catch on.
+    const geo = buildPartGeometry(pc.geometry, false);
     for (const geometry of geo.roads) road.push({ geometry, matrix: pc.matrix });
     for (const geometry of geo.fences) fences.push({ geometry, matrix: pc.matrix });
     for (const a of layout.attachments) if (a.piece === i) road.push({ geometry: attachmentGeometry(pc, a), matrix: pc.matrix });
