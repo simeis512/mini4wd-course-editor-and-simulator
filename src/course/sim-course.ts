@@ -3,7 +3,6 @@ import { GLOBAL_SPEC, portLaneOffsets } from './catalog';
 import { offsetFrame, type Block } from './blocks';
 import type { Layout, PortRef } from './course';
 import { checkLaps } from './laps';
-import { roadFrame } from './timing';
 import { attachmentGeometry, buildPartGeometry } from './mesh';
 import { buildPropMeshes } from './props-mesh';
 
@@ -24,8 +23,6 @@ export interface SimLane {
   lane: number;
   /** The lane it comes back to the start in; null when the lane breaks off. */
   next: number | null;
-  /** The port where it breaks off and machines in it run off the road; null when it comes round. */
-  broken: PortRef | null;
   /** Lane centre on the road surface, world mm. */
   points: THREE.Vector3[];
   /** Distance along the lane to each point, mm. */
@@ -151,17 +148,22 @@ export function laneSpot(lane: Pick<SimLane, 'points' | 'distances'>, p: THREE.V
   return best;
 }
 
-/** Each lane from the start of the laps (`checkLaps`), with distances along it. */
-function simLanes(layout: Layout, dir: 1 | -1): SimLane[] {
-  // Over jumps too: a machine flies on to where it lands (#28).
-  const check = checkLaps(layout, dir, true);
+/**
+ * Each lane the simulator runs in, with distances along it: from the start
+ * line's piece the way its arrows point (#28), or with no start line from
+ * the start of the laps (`checkLaps`) the way the course runs.
+ */
+export function simLanes(layout: Layout, dir: 1 | -1): SimLane[] {
+  const start = layout.start && layout.pieces[layout.start.piece] ? layout.start : null;
+  // Over jumps too: a machine flies on to where it lands.
+  const check = start ? checkLaps(layout, start.reverse ? -1 : 1, { jumps: true, from: start.piece }) : checkLaps(layout, dir, { jumps: true });
   if (!check) return [];
-  return check.laps.map(({ lane, next, broken, points }) => {
+  return check.laps.map(({ lane, next, points }) => {
     // Pieces meet end to end, so drop the repeated point at each joint.
     const pts = points.filter((p, i) => i === 0 || p.distanceToSquared(points[i - 1]) > 1e-6);
     const distances = [0];
     for (let i = 1; i < pts.length; i++) distances.push(distances[i - 1] + pts[i].distanceTo(pts[i - 1]));
-    return { lane, next, broken, points: pts, distances, length: distances[distances.length - 1] };
+    return { lane, next, points: pts, distances, length: distances[distances.length - 1] };
   });
 }
 
@@ -202,39 +204,6 @@ export function simCourse(layout: Layout, dir: 1 | -1 = 1): SimCourse {
 export function insideBox(box: Pick<Block, 'frame' | 'size'>, p: THREE.Vector3): boolean {
   const local = p.clone().applyMatrix4(box.frame.clone().invert());
   return Math.abs(local.x) <= box.size[0] / 2 && Math.abs(local.y) <= box.size[1] / 2 && Math.abs(local.z) <= box.size[2] / 2;
-}
-
-/** Where a machine sets off in a lane: a spot on its centre and the way along it, world mm. */
-export interface LaneStart {
-  position: THREE.Vector3;
-  /** Unit vector along the lane. */
-  forward: THREE.Vector3;
-  /** Distance along the lane, mm. */
-  along: number;
-}
-
-/** How far into the lane a machine sets off with no start line: its whole length on the road (#27, provisional), mm. */
-export const START_IN = 100;
-
-/** How far along the lane the direction is taken over, mm. */
-const START_HEADING_SPAN = 20;
-
-/**
- * Where a machine's middle sets off in a lane (#27): with its front, `front`
- * mm ahead of its middle, at the start line (#56) when there is one (owner,
- * 2026-10-24), else a little way into the lane.
- */
-export function laneStart(layout: Layout, lane: Pick<SimLane, 'points' | 'distances' | 'length'>, front = 0): LaneStart {
-  let along = Math.min(START_IN, lane.length);
-  if (layout.start && layout.pieces[layout.start.piece]) {
-    const line = new THREE.Vector3().setFromMatrixPosition(roadFrame(layout.pieces[layout.start.piece], layout.start.offset));
-    along = Math.max(0, laneSpot(lane, line).along - front);
-  }
-  const position = pointAlong(lane, along);
-  const ahead = pointAlong(lane, Math.min(lane.length, along + START_HEADING_SPAN));
-  const behind = pointAlong(lane, Math.max(0, along - START_HEADING_SPAN));
-  const forward = ahead.sub(behind).normalize();
-  return { position, forward, along };
 }
 
 /** The point `along` mm along a lane's centre. */

@@ -62,7 +62,7 @@ describe('checkLaps', () => {
 describe('jumps (#28)', () => {
   it('leaves a lane broken at the ramp for the editor, and carries it on to the landing for the simulator', () => {
     const layout = layoutCourse(rampJumpOval());
-    const right = (jumps: boolean) => checkLaps(layout, 1, jumps)!.laps[2];
+    const right = (jumps: boolean) => checkLaps(layout, 1, { jumps })!.laps[2];
     expect(right(false).next).toBeNull();
     expect(right(false).broken).toMatchObject({ piece: 13, port: 2 });
     expect(right(true).next).not.toBeNull();

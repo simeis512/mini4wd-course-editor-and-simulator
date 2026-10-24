@@ -24,7 +24,6 @@ export interface RunModeHost {
 
 const OUT_TEXT: Record<OutReason, string> = {
   floor: 'コースアウト：床に落ちた',
-  fall: 'コースアウト：コースの端から落ちた',
   stopper: 'コースアウト：ホース・箱に当たった',
   stopped: 'コースアウト：止まった（2秒進まない）',
   flipped: 'コースアウト：ひっくり返って止まった',

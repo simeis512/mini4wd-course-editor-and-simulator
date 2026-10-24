@@ -191,13 +191,14 @@ function turning(points: readonly Vector3[]): number {
 
 /**
  * Follow every lane from the start line (spec 7, #16): the lanes cross into
- * the first piece by its first port, or by its second when the course runs
- * the other way (`dir` -1), and laps are counted each time they cross that
- * joint again. With `jumps`, a lane goes on over a jump to where it lands
- * (`jumpLanding`), as the simulator runs it. Null for a course with no pieces.
+ * the first piece (or the piece `from`) by its first port, or by its second
+ * when the course runs the other way (`dir` -1), and laps are counted each
+ * time they cross that joint again. With `jumps`, a lane goes on over a jump
+ * to where it lands (`jumpLanding`), as the simulator runs it. Null for a
+ * course with no pieces.
  */
-export function checkLaps(layout: Layout, dir: 1 | -1 = 1, jumps = false): LapCheck | null {
-  const first = layout.pieces[0];
+export function checkLaps(layout: Layout, dir: 1 | -1 = 1, { jumps = false, from = 0 }: { jumps?: boolean; from?: number } = {}): LapCheck | null {
+  const first = layout.pieces[from];
   if (!first) return null;
   // A shifted joint is shifted the same seen from either side (#60).
   const partner = new Map<string, PortRef & { shift: number }>();
@@ -205,7 +206,7 @@ export function checkLaps(layout: Layout, dir: 1 | -1 = 1, jumps = false): LapCh
     partner.set(portKey(j.a), { ...j.b, shift: j.shift });
     partner.set(portKey(j.b), { ...j.a, shift: j.shift });
   }
-  const start: PortRef = { piece: 0, port: dir === -1 && first.part.ports.length > 1 ? 1 : 0 };
+  const start: PortRef = { piece: from, port: dir === -1 && first.part.ports.length > 1 ? 1 : 0 };
   // Running into the piece is looking back into the port, so its left is the port's right.
   const lanes = portLaneOffsets(first.part.ports[start.port])
     .sort((a, b) => b.right - a.right)

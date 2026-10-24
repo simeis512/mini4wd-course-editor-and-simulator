@@ -25,10 +25,10 @@ describe('Run (#27, spec simulator.md)', () => {
     run.free();
   });
 
-  it('runs off the open end into the fall zone', async () => {
+  it('runs off the open end and is out once it touches the floor (owner, 2026-10-24)', async () => {
     const run = (await Run.create(straights(2)))!;
     const s = run.advance(5);
-    expect(s.out).toBe('fall');
+    expect(s.out).toBe('floor');
     expect(s.distance).toBeGreaterThan(900);
     run.free();
   });
@@ -123,7 +123,8 @@ describe('Run (#27, spec simulator.md)', () => {
   }, 30000);
 
   it('calls a machine that runs the wrong way out', async () => {
-    const run = (await Run.create(layoutCourse(placeStart(chain(Array(12).fill('straight')), 6, 270))))!;
+    // Back over the start of the lanes, onto the end of the lap before.
+    const run = (await Run.create(layoutCourse(placeStart(basicOval(), 0, 270))))!;
     run.machine.body.setRotation({ x: 0, y: 1, z: 0, w: 0 }, true);
     let s = run.advance(0);
     while (!s.out && s.time < 3) s = run.advance(0.01);

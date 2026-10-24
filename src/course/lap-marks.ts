@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { GLOBAL_SPEC, laneOffset } from './catalog';
 import type { Layout, PlacedPiece } from './course';
-import { checkLaps } from './laps';
-import type { SimLane } from './sim-course';
+import { laneSpot, pointAlong, simLanes, type SimLane } from './sim-course';
 import { roadFrame, timerLane } from './timing';
 
 // Where the start line and the lap timer (#56) cross each lane the
-// simulator runs in, for lap counting and lap times (#28, spec simulator.md 6).
+// simulator runs in, for where machines set off, lap counting and lap times
+// (#27, #28, spec simulator.md 6).
 
 /**
  * How far above or below a line a lane may cross it and still be on it, mm:
@@ -28,13 +28,6 @@ function lineOn(pc: PlacedPiece, offset: number, lanes: readonly number[]): Line
   // Looking along the road, lanes count from the left, which is + X.
   const xs = lanes.map((l) => -laneOffset(l));
   return { frame: roadFrame(pc, offset), from: Math.min(...xs) - half, to: Math.max(...xs) + half };
-}
-
-/** A lane's centre with the distance along it to each point. */
-function withDistances(points: THREE.Vector3[]): Pick<SimLane, 'points' | 'distances'> {
-  const distances = [0];
-  for (let i = 1; i < points.length; i++) distances.push(distances[i - 1] + points[i].distanceTo(points[i - 1]));
-  return { points, distances };
 }
 
 /** The first spot along a lane's centre where it crosses a line, either way, mm; null when it never does. */
@@ -78,39 +71,48 @@ export function lapMarks(layout: Layout, lanes: readonly Pick<SimLane, 'points' 
 }
 
 /**
- * The way round to run so that machines set off the way the start line's
- * arrows point (#56): `dir`, or the other way. With no start line, `dir`.
- */
-export function startDirection(layout: Layout, dir: 1 | -1): 1 | -1 {
-  const { start } = layout;
-  const pc = start && layout.pieces[start.piece];
-  const laps = pc && checkLaps(layout, dir)?.laps;
-  if (!pc || !laps) return dir;
-  const frame = roadFrame(pc, start.offset, start.reverse);
-  const line = lineOn(pc, start.offset, pc.part.lanes);
-  const toLine = frame.clone().invert();
-  for (const l of laps) {
-    const { distances } = withDistances(l.points);
-    const at = crossing({ points: l.points, distances }, line);
-    if (at === null) continue;
-    // Which way the lane runs through the line, seen from the arrows.
-    const i = distances.findIndex((d) => d > at);
-    if (i <= 0) continue;
-    const a = l.points[i - 1].clone().applyMatrix4(toLine);
-    const b = l.points[i].clone().applyMatrix4(toLine);
-    return b.z >= a.z ? dir : dir === 1 ? -1 : 1;
-  }
-  return dir;
-}
-
-/**
  * Which lane from the left at the start the lap timer times (#28): where a
  * machine is set to run first, so the timer catches it. Null when there is
  * no timer, it times every lane, or no lane runs under it.
  */
 export function timedLane(layout: Layout, dir: 1 | -1): number | null {
   if (!layout.timer || layout.timer.everyLane) return null;
-  const laps = checkLaps(layout, startDirection(layout, dir), true)?.laps ?? [];
-  const lane = lapMarks(layout, laps.map((l) => withDistances(l.points))).timer.findIndex((at) => at !== null);
+  const lane = lapMarks(layout, simLanes(layout, dir)).timer.findIndex((at) => at !== null);
   return lane < 0 ? null : lane;
+}
+
+/** Where a machine sets off in a lane: a spot on its centre and the way along it, world mm. */
+export interface LaneStart {
+  position: THREE.Vector3;
+  /** Unit vector along the lane. */
+  forward: THREE.Vector3;
+  /** Distance along the lane, mm. */
+  along: number;
+}
+
+/** How far into the lane a machine sets off with no start line: its whole length on the road (#27, provisional), mm. */
+export const START_IN = 100;
+
+/** How far along the lane the direction is taken over, mm. */
+const START_HEADING_SPAN = 20;
+
+/**
+ * Where a machine's middle sets off in a lane (#27): with its front, `front`
+ * mm ahead of its middle, at the start line (#56) when there is one (owner,
+ * 2026-10-24), else a little way into the lane.
+ */
+export function laneStart(layout: Layout, lane: Pick<SimLane, 'points' | 'distances' | 'length'>, front = 0): LaneStart {
+  let along = Math.min(START_IN, lane.length);
+  const { start } = layout;
+  const pc = start && layout.pieces[start.piece];
+  if (pc) {
+    // Where the lane runs through the line; a lane that never does, beside the middle of it.
+    const at = crossing(lane, lineOn(pc, start.offset, pc.part.lanes)) ?? laneSpot(lane, new THREE.Vector3().setFromMatrixPosition(roadFrame(pc, start.offset))).along;
+    along = Math.max(0, at - front);
+  }
+  const position = pointAlong(lane, along);
+  const ahead = pointAlong(lane, Math.min(lane.length, along + START_HEADING_SPAN));
+  const behind = pointAlong(lane, Math.max(0, along - START_HEADING_SPAN));
+  const forward = ahead.sub(behind).normalize();
+  return { position, forward, along };
 }

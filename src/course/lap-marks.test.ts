@@ -1,9 +1,9 @@
 import { Matrix4, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { layoutCourse } from './course';
-import { crossing, lapMarks, startDirection, timedLane } from './lap-marks';
-import { basicOval } from './presets';
-import { laneStart, simCourse } from './sim-course';
+import { crossing, laneStart, lapMarks, START_IN, timedLane } from './lap-marks';
+import { basicOval, chain, rampJumpOval } from './presets';
+import { simCourse } from './sim-course';
 import { moveStart, placeStart, placeTimer } from './timing';
 
 const withStart = () => placeStart(basicOval(), 0, 270);
@@ -51,17 +51,49 @@ describe('lapMarks (#28)', () => {
   });
 });
 
-describe('startDirection (#28)', () => {
-  it('runs the way the start arrows point, whichever way round the course is set', () => {
-    const layout = layoutCourse(withStart());
-    expect(startDirection(layout, 1)).toBe(1);
-    expect(startDirection(layout, -1)).toBe(1);
-    const back = layoutCourse(moveStart(withStart(), { reverse: true }));
-    expect(startDirection(back, 1)).toBe(-1);
+describe('laneStart (#27)', () => {
+  it('sets off a little way into the lane, facing along it', () => {
+    const layout = layoutCourse(chain(['straight', 'straight']));
+    const lane = simCourse(layout).lanes[1];
+    const s = laneStart(layout, lane);
+    expect(s.along).toBe(START_IN);
+    expect(s.position.distanceTo(new Vector3(0, 0, START_IN))).toBeLessThan(1e-6);
+    expect(s.forward.z).toBeCloseTo(1, 6);
   });
 
-  it('keeps the course direction with no start line', () => {
-    expect(startDirection(layoutCourse(basicOval()), -1)).toBe(-1);
+  it('sets off across from the start line, the lanes starting on its piece', () => {
+    const layout = layoutCourse(placeStart(chain(['straight', 'straight']), 1, 100));
+    const lane = simCourse(layout).lanes[0];
+    const s = laneStart(layout, lane);
+    expect(s.along).toBeCloseTo(100, 3);
+    expect(s.position.z).toBeCloseTo(640, 3);
+    // The left lane is + X.
+    expect(s.position.x).toBeCloseTo(120, 3);
+  });
+
+  it("sets the machine's front on the start line", () => {
+    const layout = layoutCourse(placeStart(chain(['straight', 'straight']), 1, 100));
+    expect(laneStart(layout, simCourse(layout).lanes[0], 80).along).toBeCloseTo(20, 3);
+  });
+
+  it('runs the way the start arrows point, whichever way round the course is set', () => {
+    const forward = layoutCourse(withStart());
+    expect(laneStart(forward, simCourse(forward, -1).lanes[0]).forward.z).toBeCloseTo(1, 6);
+    const back = layoutCourse(moveStart(withStart(), { reverse: true }));
+    expect(laneStart(back, simCourse(back, 1).lanes[0]).forward.z).toBeCloseTo(-1, 6);
+  });
+
+  it('puts the machine on the start line in a lane that does not come round to it from the first piece', () => {
+    // The jump oval's right lane leaves the road at the ramp before the start line's piece.
+    const course = placeStart(rampJumpOval(), 1, 270);
+    const layout = layoutCourse(course);
+    const lanes = simCourse(layout).lanes;
+    lanes.forEach((lane, i) => {
+      const s = laneStart(layout, lane);
+      expect(s.position.y).toBeCloseTo(0, 6);
+      expect(s.position.z).toBeCloseTo(1080 + 270, 0);
+      expect(s.position.x).toBeCloseTo(120 - 120 * i, 0);
+    });
   });
 });
 

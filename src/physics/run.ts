@@ -2,8 +2,8 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { Quaternion, Vector3 } from 'three';
 import type { Layout } from '../course/course';
 import { MM } from '../course/mesh';
-import { lapMarks, startDirection } from '../course/lap-marks';
-import { laneSpot, laneStart, simCourse, type FallZone, type SimCourse } from '../course/sim-course';
+import { laneStart, lapMarks } from '../course/lap-marks';
+import { laneSpot, simCourse, type SimCourse } from '../course/sim-course';
 import { addCourseColliders, type CourseColliders } from './course-colliders';
 import { createMachine, driveMachine, type Machine } from './machine';
 import { frontReach, STANDARD_MACHINE, type MachineSpec } from './machine-spec';
@@ -24,7 +24,7 @@ export const REVERSE_DISTANCE = 200;
 const LANE_HANDOVER = 100;
 
 /** Why a run came to an end (spec simulator.md 5). */
-export type OutReason = 'floor' | 'fall' | 'stopper' | 'stopped' | 'flipped' | 'reverse';
+export type OutReason = 'floor' | 'stopper' | 'stopped' | 'flipped' | 'reverse';
 
 export interface RunState {
   /** Time since the start, s. */
@@ -96,7 +96,7 @@ export class Run {
    * lane to run in.
    */
   static async create(layout: Layout, dir: 1 | -1 = 1, lane = 0, spec = STANDARD_MACHINE): Promise<Run | null> {
-    const course = simCourse(layout, startDirection(layout, dir));
+    const course = simCourse(layout, dir);
     const line = course.lanes[lane];
     if (!line || line.points.length < 2) return null;
     const world = await createPhysicsWorld();
@@ -160,6 +160,8 @@ export class Run {
       return m !== null && m !== undefined && from < m && m <= to;
     };
     if (lane === this.laneIndex) return over(lane, along, this.along);
+    // Handed back to the lane before, it went back over nothing.
+    if (this.course.lanes[lane].next !== this.course.lanes[this.laneIndex].lane) return false;
     return over(lane, along, Infinity) || over(this.laneIndex, -Infinity, this.along);
   }
 
@@ -177,6 +179,18 @@ export class Run {
         return;
       }
     }
+    // Backwards past the start of the line, onto the end of the lane that comes round into it.
+    const back = this.course.lanes.findIndex((l) => l.next === lane.lane);
+    if (back >= 0 && spot.along < LANE_HANDOVER) {
+      const before = this.course.lanes[back];
+      const on = laneSpot(before, p);
+      if (on.along > before.length - LANE_HANDOVER && on.off < spot.off) {
+        this.done -= before.length;
+        this.laneIndex = back;
+        this.along = on.along;
+        return;
+      }
+    }
     this.along = spot.along;
   }
 
@@ -189,11 +203,6 @@ export class Run {
     const kinds = this.colliders.kinds;
     let out: OutReason | null = null;
     for (const c of this.machine.colliders) {
-      this.world.intersectionPairsWith(c, (other) => {
-        const k = kinds.get(other.handle);
-        // Only off the end of its own lane: flying over the end of another, as in a jump, is not falling.
-        if (k?.kind === 'fall' && k.zone && !k.zone.intended && this.runsOff(k.zone)) out = 'fall';
-      });
       this.world.contactPairsWith(c, (other) => {
         const k = kinds.get(other.handle)?.kind;
         if (k !== 'floor' && k !== 'props') return;
@@ -214,12 +223,6 @@ export class Run {
     if (this.time - this.best.time <= STALL_TIME) return null;
     // Stopped upside down, or stopped any other way: on a fence, caught, out of push.
     return this.up().y < 0 ? 'flipped' : 'stopped';
-  }
-
-  /** Whether a fall zone is past where the machine's lane breaks off. */
-  private runsOff(zone: FallZone): boolean {
-    const end = this.course.lanes[this.laneIndex].broken;
-    return !!end && end.piece === zone.at.piece && end.port === zone.at.port;
   }
 
   /** The machine's up, as a world direction. */
