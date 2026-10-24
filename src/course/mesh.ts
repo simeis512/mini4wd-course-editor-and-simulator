@@ -159,6 +159,16 @@ export function buildPartGeometry(geo: PartGeometry): { roads: THREE.BufferGeome
 }
 
 const partGeometryCache = new WeakMap<PartGeometry, ReturnType<typeof buildPartGeometry>>();
+
+/** `buildPartGeometry`, built once per geometry and shared read-only. */
+export function sharedPartGeometry(geo: PartGeometry): ReturnType<typeof buildPartGeometry> {
+  let out = partGeometryCache.get(geo);
+  if (!out) {
+    out = buildPartGeometry(geo);
+    partGeometryCache.set(geo, out);
+  }
+  return out;
+}
 const materialCache = new Map<string, THREE.MeshStandardMaterial>();
 
 /** `doubleSided` for stands, whose slabs' winding follows the road. */
@@ -212,11 +222,7 @@ export function buildCourseMeshes(layout: Layout, visuals: ModelVisuals = new Ma
       group.add(modelMesh(visual, pc));
     } else {
       // Procedural, also while a measured model is not loaded (spec 15.1).
-      let geo = partGeometryCache.get(pc.geometry);
-      if (!geo) {
-        geo = buildPartGeometry(pc.geometry);
-        partGeometryCache.set(pc.geometry, geo);
-      }
+      const geo = sharedPartGeometry(pc.geometry);
       for (const r of geo.roads) group.add(new THREE.Mesh(r, material(color, 1)));
       for (const f of geo.fences) group.add(new THREE.Mesh(f, material(color, 0.85)));
     }
@@ -236,9 +242,13 @@ export const ATTACHMENT_COLOR = '#e5483f';
 const ATTACHMENT_SINK = 0.5;
 
 /** A washboard on its piece, part-local: a plate on the road, sloping down to thin tabs at its ends. */
-function attachmentMesh(pc: PlacedPiece, a: Attachment): THREE.Mesh {
+export function attachmentGeometry(pc: PlacedPiece, a: Attachment): THREE.BufferGeometry {
   const { frames, tops, half } = attachmentShape(pc, a);
-  const mesh = new THREE.Mesh(sweepBox(frames, -half, half, -ATTACHMENT_SINK, tops), material(ATTACHMENT_COLOR, 1));
+  return sweepBox(frames, -half, half, -ATTACHMENT_SINK, tops);
+}
+
+function attachmentMesh(pc: PlacedPiece, a: Attachment): THREE.Mesh {
+  const mesh = new THREE.Mesh(attachmentGeometry(pc, a), material(ATTACHMENT_COLOR, 1));
   mesh.name = 'attachment';
   return mesh;
 }
