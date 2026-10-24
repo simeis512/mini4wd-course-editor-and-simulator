@@ -97,3 +97,8 @@ export function driveForce(spec: MachineSpec, speed: number): number {
 export function freeSpeed(spec: MachineSpec): number {
   return ((spec.motor.freeRpm / spec.gearRatio) * 2 * Math.PI * spec.tyreRadius) / 60;
 }
+
+/** How far the front of the machine reaches ahead of the chassis middle: the chassis, a front roller or a front tyre, m. */
+export function frontReach(spec: MachineSpec): number {
+  return Math.max(spec.size[2] / 2, spec.wheelbase / 2 + spec.tyreRadius, ...spec.rollers.map((r) => r.at[2] + r.radius));
+}

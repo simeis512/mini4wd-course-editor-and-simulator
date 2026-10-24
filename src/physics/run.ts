@@ -6,7 +6,7 @@ import { lapMarks, startDirection } from '../course/lap-marks';
 import { laneSpot, laneStart, simCourse, type FallZone, type SimCourse } from '../course/sim-course';
 import { addCourseColliders, type CourseColliders } from './course-colliders';
 import { createMachine, driveMachine, type Machine } from './machine';
-import { STANDARD_MACHINE, type MachineSpec } from './machine-spec';
+import { frontReach, STANDARD_MACHINE, type MachineSpec } from './machine-spec';
 import { createPhysicsWorld } from './world';
 
 // One machine running round a course (#27, #28, spec simulator.md): a fixed
@@ -102,7 +102,7 @@ export class Run {
     const world = await createPhysicsWorld();
     world.timestep = STEP;
     const colliders = addCourseColliders(world, course);
-    const start = laneStart(layout, line);
+    const start = laneStart(layout, line, frontReach(spec) / MM);
     const machine = createMachine(world, spec, start.position.clone().multiplyScalar(MM), start.forward);
     const run = new Run(world, course, colliders, machine, lane);
     run.along = run.startAt = start.along;

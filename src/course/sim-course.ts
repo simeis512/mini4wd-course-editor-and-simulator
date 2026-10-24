@@ -220,14 +220,15 @@ export const START_IN = 100;
 const START_HEADING_SPAN = 20;
 
 /**
- * Where a machine sets off in a lane (#27): across from the start line
- * (#56) when there is one, else a little way into the lane.
+ * Where a machine's middle sets off in a lane (#27): with its front, `front`
+ * mm ahead of its middle, at the start line (#56) when there is one (owner,
+ * 2026-10-24), else a little way into the lane.
  */
-export function laneStart(layout: Layout, lane: Pick<SimLane, 'points' | 'distances' | 'length'>): LaneStart {
+export function laneStart(layout: Layout, lane: Pick<SimLane, 'points' | 'distances' | 'length'>, front = 0): LaneStart {
   let along = Math.min(START_IN, lane.length);
   if (layout.start && layout.pieces[layout.start.piece]) {
     const line = new THREE.Vector3().setFromMatrixPosition(roadFrame(layout.pieces[layout.start.piece], layout.start.offset));
-    along = laneSpot(lane, line).along;
+    along = Math.max(0, laneSpot(lane, line).along - front);
   }
   const position = pointAlong(lane, along);
   const ahead = pointAlong(lane, Math.min(lane.length, along + START_HEADING_SPAN));

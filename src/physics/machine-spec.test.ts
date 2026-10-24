@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { driveForce, freeSpeed, motorTorque, STANDARD_MACHINE } from './machine-spec';
+import { driveForce, freeSpeed, frontReach, motorTorque, STANDARD_MACHINE } from './machine-spec';
 
 describe('motor (spec simulator.md 3)', () => {
   const m = STANDARD_MACHINE.motor;
@@ -15,5 +15,11 @@ describe('motor (spec simulator.md 3)', () => {
     expect(freeSpeed(STANDARD_MACHINE)).toBeCloseTo(3.89, 2);
     expect(driveForce(STANDARD_MACHINE, 0)).toBeCloseTo((0.0035 * 4.2 * 0.7) / 0.013, 9);
     expect(driveForce(STANDARD_MACHINE, freeSpeed(STANDARD_MACHINE))).toBeCloseTo(0, 9);
+  });
+});
+
+describe('frontReach', () => {
+  it('reaches to the front of the front rollers on the standard machine', () => {
+    expect(frontReach(STANDARD_MACHINE)).toBeCloseTo(0.075 + 0.0065, 9);
   });
 });

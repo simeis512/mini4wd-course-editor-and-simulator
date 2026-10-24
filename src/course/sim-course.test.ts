@@ -163,6 +163,11 @@ describe('laneStart (#27)', () => {
     expect(s.position.x).toBeCloseTo(120, 3);
   });
 
+  it("sets the machine's front on the start line", () => {
+    const layout = layoutCourse(placeStart(chain(['straight', 'straight']), 1, 100));
+    expect(laneStart(layout, simCourse(layout).lanes[0], 80).along).toBeCloseTo(560, 3);
+  });
+
   it('finds points along a lane', () => {
     const lane = { points: [new Vector3(0, 0, 0), new Vector3(0, 0, 100), new Vector3(100, 0, 100)], distances: [0, 100, 200] };
     expect(pointAlong(lane, 150).toArray()).toEqual([50, 0, 100]);
