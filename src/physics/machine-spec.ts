@@ -37,6 +37,11 @@ export interface MachineSpec {
   rollers: RollerSpec[];
   /** Tyre grip on the road: the most the tyres push along the road per newton they press on it. */
   grip: number;
+  /**
+   * Friction of the rollers on the fences. They turn on bearings, so along
+   * the fence they hold back next to nothing; the colliders do not turn, so
+   * this stands in for the bearings' drag (#29).
+   */
   rollerFriction: number;
   rollerRestitution: number;
 }
@@ -71,7 +76,8 @@ export const STANDARD_MACHINE: MachineSpec = {
     { at: [-ROLLER_X, ROLLER_Y, -0.07], ...ROLLER },
   ],
   grip: 1,
-  rollerFriction: 0.1,
+  // Near nothing, as for rollers that turn freely (#29, provisional).
+  rollerFriction: 0.01,
   rollerRestitution: 0.2,
 };
 

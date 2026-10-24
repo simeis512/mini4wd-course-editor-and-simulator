@@ -4,7 +4,7 @@ import { driveForce, type MachineSpec } from './machine-spec';
 
 // A machine in the physics world (#27, spec simulator.md 2): the chassis
 // as one rigid body, the tyres as Rapier's ray-cast wheels driven by the
-// motor, and the rollers as cylinders on the chassis. Machine axes are the
+// motor, and the rollers as balls on the chassis. Machine axes are the
 // parts' axes: + X left, + Y up, + Z forward.
 
 /**
@@ -78,12 +78,17 @@ export function createMachine(world: RAPIER.World, spec: MachineSpec, position: 
   const [w, h, l] = spec.size;
   const colliders = [
     world.createCollider(RAPIER.ColliderDesc.cuboid(w / 2, h / 2, l / 2).setMass(spec.mass).setFriction(CHASSIS_FRICTION), body),
+    // Balls, not cylinders: a cylinder running along a trimesh fence catches on its
+    // triangles and loses most of its speed, where a ball slides on. Only the
+    // roller's radius matters against the upright fences.
     ...spec.rollers.map((r) =>
       world.createCollider(
-        RAPIER.ColliderDesc.cylinder(r.height / 2, r.radius)
+        RAPIER.ColliderDesc.ball(r.radius)
           .setTranslation(r.at[0], r.at[1] - rideHeight(spec), r.at[2])
           .setMass(0)
           .setFriction(spec.rollerFriction)
+          // The fences' own friction must not add to it.
+          .setFrictionCombineRule(RAPIER.CoefficientCombineRule.Min)
           .setRestitution(spec.rollerRestitution),
         body,
       ),

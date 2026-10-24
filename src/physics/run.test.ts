@@ -36,8 +36,9 @@ describe('Run (#27, spec simulator.md)', () => {
     const run = (await Run.create(layoutCourse(basicOval())))!;
     let s = run.advance(0);
     let high = 0;
-    for (let t = 0; t < 30 && s.laps < 3 && !s.out; t++) {
-      s = run.advance(1);
+    // Looked at often enough not to miss the short run over the bridge.
+    while (s.time < 30 && s.laps < 3 && !s.out) {
+      s = run.advance(0.01);
       high = Math.max(high, s.position.y);
     }
     expect(s.out).toBeNull();
@@ -45,6 +46,21 @@ describe('Run (#27, spec simulator.md)', () => {
     // Over the bridge once in three laps.
     expect(high).toBeGreaterThan(80);
     run.free();
+  }, 30000);
+
+  it('keeps its speed along the fences in every lane: the rollers do not catch', async () => {
+    for (const lane of [0, 1, 2]) {
+      const run = (await Run.create(layoutCourse(basicOval()), 1, lane))!;
+      let s = run.advance(1);
+      let slowest = Infinity;
+      while (s.laps < 1 && !s.out && s.time < 10) {
+        s = run.advance(0.01);
+        slowest = Math.min(slowest, s.speed);
+      }
+      expect(s.laps).toBe(1);
+      expect(slowest).toBeGreaterThan(0.6 * freeSpeed(STANDARD_MACHINE));
+      run.free();
+    }
   }, 30000);
 
   it('lands from a drop onto the road without falling through it (spec simulator.md 4)', async () => {
