@@ -1,7 +1,8 @@
+import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { layoutCourse } from './course';
-import { checkLaps } from './laps';
-import { basicOval, chain } from './presets';
+import { checkLaps, jumpLanding } from './laps';
+import { basicOval, chain, rampJumpOval } from './presets';
 
 const ring = () => chain(Array(8).fill('curve45'));
 
@@ -55,5 +56,26 @@ describe('checkLaps', () => {
 
   it('has nothing to check on an empty course', () => {
     expect(checkLaps(layoutCourse({ v: 1, catalog: 1, pieces: [] }))).toBeNull();
+  });
+});
+
+describe('jumps (#28)', () => {
+  it('leaves a lane broken at the ramp for the editor, and carries it on to the landing for the simulator', () => {
+    const layout = layoutCourse(rampJumpOval());
+    const right = (jumps: boolean) => checkLaps(layout, 1, jumps)!.laps[2];
+    expect(right(false).next).toBeNull();
+    expect(right(false).broken).toMatchObject({ piece: 13, port: 2 });
+    expect(right(true).next).not.toBeNull();
+    expect(right(true).broken).toBeNull();
+  });
+
+  it('lands in the lane ahead that faces back, in line with where the lane leaves', () => {
+    const layout = layoutCourse(rampJumpOval());
+    const from = new Vector3().setFromMatrixPosition(layout.pieces[13].ports[2]);
+    // The right lane of the free straight, which only the jump reaches.
+    expect(jumpLanding(layout, { piece: 13, port: 2 }, from)).toEqual({ piece: 1, port: 0, lane: 2 });
+    // Nothing in line beyond the far end of a plain run of straights.
+    const plain = layoutCourse(chain(['straight', 'straight']));
+    expect(jumpLanding(plain, { piece: 1, port: 1 }, new Vector3(0, 0, 1080))).toBeNull();
   });
 });

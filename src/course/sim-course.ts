@@ -24,6 +24,8 @@ export interface SimLane {
   lane: number;
   /** The lane it comes back to the start in; null when the lane breaks off. */
   next: number | null;
+  /** The port where it breaks off and machines in it run off the road; null when it comes round. */
+  broken: PortRef | null;
   /** Lane centre on the road surface, world mm. */
   points: THREE.Vector3[];
   /** Distance along the lane to each point, mm. */
@@ -151,14 +153,15 @@ export function laneSpot(lane: Pick<SimLane, 'points' | 'distances'>, p: THREE.V
 
 /** Each lane from the start of the laps (`checkLaps`), with distances along it. */
 function simLanes(layout: Layout, dir: 1 | -1): SimLane[] {
-  const check = checkLaps(layout, dir);
+  // Over jumps too: a machine flies on to where it lands (#28).
+  const check = checkLaps(layout, dir, true);
   if (!check) return [];
-  return check.laps.map(({ lane, next, points }) => {
+  return check.laps.map(({ lane, next, broken, points }) => {
     // Pieces meet end to end, so drop the repeated point at each joint.
     const pts = points.filter((p, i) => i === 0 || p.distanceToSquared(points[i - 1]) > 1e-6);
     const distances = [0];
     for (let i = 1; i < pts.length; i++) distances.push(distances[i - 1] + pts[i].distanceTo(pts[i - 1]));
-    return { lane, next, points: pts, distances, length: distances[distances.length - 1] };
+    return { lane, next, broken, points: pts, distances, length: distances[distances.length - 1] };
   });
 }
 

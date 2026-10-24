@@ -3,7 +3,7 @@ import { Quaternion, Vector3 } from 'three';
 import type { Layout } from '../course/course';
 import { MM } from '../course/mesh';
 import { lapMarks, startDirection } from '../course/lap-marks';
-import { laneSpot, laneStart, simCourse, type SimCourse } from '../course/sim-course';
+import { laneSpot, laneStart, simCourse, type FallZone, type SimCourse } from '../course/sim-course';
 import { addCourseColliders, type CourseColliders } from './course-colliders';
 import { createMachine, driveMachine, type Machine } from './machine';
 import { STANDARD_MACHINE, type MachineSpec } from './machine-spec';
@@ -191,7 +191,8 @@ export class Run {
     for (const c of this.machine.colliders) {
       this.world.intersectionPairsWith(c, (other) => {
         const k = kinds.get(other.handle);
-        if (k?.kind === 'fall' && !k.zone?.intended) out = 'fall';
+        // Only off the end of its own lane: flying over the end of another, as in a jump, is not falling.
+        if (k?.kind === 'fall' && k.zone && !k.zone.intended && this.runsOff(k.zone)) out = 'fall';
       });
       this.world.contactPairsWith(c, (other) => {
         const k = kinds.get(other.handle)?.kind;
@@ -213,6 +214,12 @@ export class Run {
     if (this.time - this.best.time <= STALL_TIME) return null;
     // Stopped upside down, or stopped any other way: on a fence, caught, out of push.
     return this.up().y < 0 ? 'flipped' : 'stopped';
+  }
+
+  /** Whether a fall zone is past where the machine's lane breaks off. */
+  private runsOff(zone: FallZone): boolean {
+    const end = this.course.lanes[this.laneIndex].broken;
+    return !!end && end.piece === zone.at.piece && end.port === zone.at.port;
   }
 
   /** The machine's up, as a world direction. */

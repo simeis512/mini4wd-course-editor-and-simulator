@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { layoutCourse } from '../course/course';
-import { basicOval, chain } from '../course/presets';
+import { basicOval, chain, rampJumpOval } from '../course/presets';
 import { addStopper } from '../course/stoppers';
 import { rideHeight } from './machine';
 import { freeSpeed, STANDARD_MACHINE } from './machine-spec';
@@ -140,6 +140,16 @@ describe('Run (#27, spec simulator.md)', () => {
     expect(run.advance(STALL_TIME + 0.5).out).toBe('flipped');
     run.free();
   });
+
+  it('flies off a jump ramp and lands on the road ahead without being called out (#28)', async () => {
+    // The right lane runs up the ramp: in every lane in turn, so each takes the jump.
+    const run = (await Run.create(layoutCourse(rampJumpOval()), 1, 2))!;
+    let s = run.advance(0);
+    while (s.laps < 3 && !s.out && s.time < 20) s = run.advance(0.05);
+    expect(s.out).toBeNull();
+    expect(s.laps).toBe(3);
+    run.free();
+  }, 30000);
 
   it('calls a machine that runs into a hose out', async () => {
     const c = addStopper(chain(Array(6).fill('straight')), { kind: 'hose', points: [[60, 600], [180, 600]], color: 0 });
