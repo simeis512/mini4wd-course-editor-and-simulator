@@ -178,6 +178,15 @@ export class OrbitView implements EditorView {
     this.markers.visible = on;
   }
 
+  /** Look from `eye` at `target` (course mm) with the orbit controls off, or hand the camera back to them (#28). */
+  aim(view: { eye: THREE.Vector3; target: THREE.Vector3 } | null): void {
+    this.controls.enabled = !view && !this.renderer.xr.isPresenting;
+    if (!view) return;
+    this.root.updateMatrixWorld();
+    this.camera.position.copy(this.root.localToWorld(view.eye.clone()));
+    this.controls.target.copy(this.root.localToWorld(view.target.clone()));
+  }
+
   /** Show a machine running on the course (#27), in course mm, or take it away. */
   setMachine(object: THREE.Object3D | null): void {
     if (this.machine) this.root.remove(this.machine);

@@ -30,3 +30,22 @@ export function basicOval(): Course {
   );
   return course;
 }
+
+/**
+ * The basic oval with a jump in place of the wave (the owner's course,
+ * 2026-10-24, #28): a bridge approach after the first straight sends the
+ * right lane up off its upper port and over a gap onto the next straight,
+ * which the other two lanes reach under it through its lower port.
+ */
+export function rampJumpOval(): Course {
+  // The oval without the wave and the straight before it, which the ramp and the free straight stand for.
+  const oval = basicOval();
+  const pieces: PieceRec[] = [
+    oval.pieces[0],
+    { part: 'straight', port: 0, free: null, pose: { pos: [0, 0, 1080], rot: [0, 0, 0] } },
+    // The rest of the oval, each joined one piece further back.
+    ...oval.pieces.slice(3).map((rec): PieceRec => ('to' in rec ? { ...rec, to: [rec.to[0] - 1, rec.to[1]] } : rec)),
+    { part: 'bridge-approach', port: 0, to: [0, 1] },
+  ];
+  return { ...oval, pieces };
+}

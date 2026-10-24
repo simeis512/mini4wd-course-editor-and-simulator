@@ -225,10 +225,17 @@
         <button id="run-play">スタート</button>
         <button id="run-reset">リセット</button>
         <label>レーン
-          <select id="run-lane">
+          <select id="run-lane" autocomplete="off">
             <option value="0">左</option>
             <option value="1">中</option>
             <option value="2">右</option>
+          </select>
+        </label>
+        <label title="走っている間のカメラ。固定のときはドラッグで自由に動かせます">視点
+          <select id="run-camera">
+            <option value="follow">追従</option>
+            <option value="overhead">俯瞰</option>
+            <option value="free">固定</option>
           </select>
         </label>
         <span id="run-status"></span>

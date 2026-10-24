@@ -1,5 +1,5 @@
-import { Vector3 } from 'three';
-import { laneLinks, laneOffset, portLaneOffsets } from './catalog';
+import { Matrix4, Vector3 } from 'three';
+import { GLOBAL_SPEC, laneLinks, laneOffset, portLaneOffsets } from './catalog';
 import type { PartDef } from './part';
 import { jointLanes, portKey, type Layout, type PlacedPiece, type PortRef } from './course';
 import { pointOnFrame, type PartGeometry } from './geometry';
@@ -107,8 +107,43 @@ export interface LapCheck {
 /** More steps than any real course takes; stops a lap that never comes back. */
 const MAX_STEPS = 10000;
 
-/** Follow one lane from the start line until it crosses it again. */
-function runLap(layout: Layout, partner: Map<string, PortRef & { shift: number }>, start: PortRef, lane: number): Lap {
+/** How far ahead of where it leaves the road a machine can land, mm (#28, provisional). */
+export const JUMP_REACH = 1500;
+/** How squarely a landing port must face back at the take-off: the cosine of the most it may turn away (30°). */
+const JUMP_FACING = Math.cos(Math.PI / 6);
+
+const forwardOf = (frame: Matrix4) => new Vector3(0, 0, 1).transformDirection(frame).setY(0).normalize();
+
+/**
+ * Where a lane that runs off the road lands (#28), as off a jump ramp: the
+ * lane of an open port, or a lane that ends at a joint, ahead that faces
+ * back at it, in line with where the lane left. The nearest such; null when
+ * there is none.
+ */
+export function jumpLanding(layout: Layout, takeoff: PortRef, from: Vector3): LaneEntry | null {
+  const ahead = forwardOf(layout.pieces[takeoff.piece].ports[takeoff.port]);
+  let best: (LaneEntry & { reach: number }) | null = null;
+  const ends = [...layout.open.map((o) => ({ ...o, lanes: null })), ...layout.deadEnds];
+  for (const o of ends) {
+    if (o.piece === takeoff.piece && o.port === takeoff.port) continue;
+    const pc = layout.pieces[o.piece];
+    const frame = pc.ports[o.port];
+    if (forwardOf(frame).dot(ahead) > -JUMP_FACING) continue;
+    for (const { lane, right } of portLaneOffsets(pc.part.ports[o.port])) {
+      if (o.lanes && !o.lanes.includes(lane)) continue;
+      const d = pointOnFrame(frame, right, 0).sub(from);
+      const reach = d.dot(ahead);
+      const side = d.setY(0).addScaledVector(ahead, -reach).length();
+      if (reach > 0 && reach <= JUMP_REACH && side <= GLOBAL_SPEC.lanePitch / 2 && (!best || reach < best.reach)) {
+        best = { piece: o.piece, port: o.port, lane, reach };
+      }
+    }
+  }
+  return best && { piece: best.piece, port: best.port, lane: best.lane };
+}
+
+/** Follow one lane from the start line until it crosses it again; over jumps too when `jumps`. */
+function runLap(layout: Layout, partner: Map<string, PortRef & { shift: number }>, start: PortRef, lane: number, jumps: boolean): Lap {
   let at: LaneEntry = { ...start, lane };
   const points: Vector3[] = [];
   let length = 0;
@@ -126,8 +161,13 @@ function runLap(layout: Layout, partner: Map<string, PortRef & { shift: number }
     const leave = { piece: at.piece, port: out.port };
     const other = partner.get(portKey(leave));
     const match = other && jointLanes(pc.part, out.port, layout.pieces[other.piece].part, other.port, other.shift).find(([l]) => l === out.lane);
-    if (!other || !match) return { lane, next: null, length, broken: leave, points };
-    at = { piece: other.piece, port: other.port, lane: match[1] };
+    if (other && match) at = { piece: other.piece, port: other.port, lane: match[1] };
+    else {
+      // Off the road: through the air to where it lands, the lane going straight there.
+      const landing = jumps ? jumpLanding(layout, leave, points[points.length - 1]) : null;
+      if (!landing) return { lane, next: null, length, broken: leave, points };
+      at = landing;
+    }
     if (at.piece === start.piece && at.port === start.port) return { lane, next: at.lane, length, broken: null, points };
   }
   return { lane, next: null, length, broken: null, points };
@@ -151,12 +191,14 @@ function turning(points: readonly Vector3[]): number {
 
 /**
  * Follow every lane from the start line (spec 7, #16): the lanes cross into
- * the first piece by its first port, or by its second when the course runs
- * the other way (`dir` -1), and laps are counted each time they cross that
- * joint again. Null for a course with no pieces.
+ * the first piece (or the piece `from`) by its first port, or by its second
+ * when the course runs the other way (`dir` -1), and laps are counted each
+ * time they cross that joint again. With `jumps`, a lane goes on over a jump
+ * to where it lands (`jumpLanding`), as the simulator runs it. Null for a
+ * course with no pieces.
  */
-export function checkLaps(layout: Layout, dir: 1 | -1 = 1): LapCheck | null {
-  const first = layout.pieces[0];
+export function checkLaps(layout: Layout, dir: 1 | -1 = 1, { jumps = false, from = 0 }: { jumps?: boolean; from?: number } = {}): LapCheck | null {
+  const first = layout.pieces[from];
   if (!first) return null;
   // A shifted joint is shifted the same seen from either side (#60).
   const partner = new Map<string, PortRef & { shift: number }>();
@@ -164,12 +206,12 @@ export function checkLaps(layout: Layout, dir: 1 | -1 = 1): LapCheck | null {
     partner.set(portKey(j.a), { ...j.b, shift: j.shift });
     partner.set(portKey(j.b), { ...j.a, shift: j.shift });
   }
-  const start: PortRef = { piece: 0, port: dir === -1 && first.part.ports.length > 1 ? 1 : 0 };
+  const start: PortRef = { piece: from, port: dir === -1 && first.part.ports.length > 1 ? 1 : 0 };
   // Running into the piece is looking back into the port, so its left is the port's right.
   const lanes = portLaneOffsets(first.part.ports[start.port])
     .sort((a, b) => b.right - a.right)
     .map((o) => o.lane);
-  const laps = lanes.map((lane) => runLap(layout, partner, start, lane));
+  const laps = lanes.map((lane) => runLap(layout, partner, start, lane, jumps));
   const broken = laps.some((l) => l.next === null);
   const cycle: number[] = [];
   if (!broken && lanes.length) {

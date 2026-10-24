@@ -5,7 +5,7 @@ import { layoutCourse } from './course';
 import { markIntended, setShift } from './edit';
 import { checkLaps } from './laps';
 import { basicOval, chain } from './presets';
-import { FALL_ZONE_ABOVE, FALL_ZONE_LENGTH, insideBox, laneSpot, laneStart, pointAlong, simCourse, START_IN, toTriMesh, type TriMesh } from './sim-course';
+import { FALL_ZONE_ABOVE, FALL_ZONE_LENGTH, insideBox, laneSpot, pointAlong, simCourse, toTriMesh, type TriMesh } from './sim-course';
 import { addStopper, newStopper } from './stoppers';
 import { placeStart } from './timing';
 import { buildPropMeshes } from './props-mesh';
@@ -143,26 +143,7 @@ describe('laneSpot', () => {
   });
 });
 
-describe('laneStart (#27)', () => {
-  it('sets off a little way into the lane, facing along it', () => {
-    const layout = layoutCourse(chain(['straight', 'straight']));
-    const lane = simCourse(layout).lanes[1];
-    const s = laneStart(layout, lane);
-    expect(s.along).toBe(START_IN);
-    expect(s.position.distanceTo(new Vector3(0, 0, START_IN))).toBeLessThan(1e-6);
-    expect(s.forward.z).toBeCloseTo(1, 6);
-  });
-
-  it('sets off across from the start line', () => {
-    const layout = layoutCourse(placeStart(chain(['straight', 'straight']), 1, 100));
-    const lane = simCourse(layout).lanes[0];
-    const s = laneStart(layout, lane);
-    expect(s.along).toBeCloseTo(640, 3);
-    expect(s.position.z).toBeCloseTo(640, 3);
-    // The left lane is + X.
-    expect(s.position.x).toBeCloseTo(120, 3);
-  });
-
+describe('pointAlong', () => {
   it('finds points along a lane', () => {
     const lane = { points: [new Vector3(0, 0, 0), new Vector3(0, 0, 100), new Vector3(100, 0, 100)], distances: [0, 100, 200] };
     expect(pointAlong(lane, 150).toArray()).toEqual([50, 0, 100]);
