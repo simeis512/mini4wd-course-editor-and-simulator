@@ -1,6 +1,7 @@
 import { Matrix4, Vector3 } from 'three';
-import type { Layout, PlacedPiece } from './course';
+import type { Course, Layout, PlacedPiece, Stopper } from './course';
 import { pieceMiddle, turnAboutMiddle } from './edit';
+import { boxOutline, HOSE_DIAMETER, hoseCurve, hoseMiddle, moveStopper, scaleHose, turnStopper } from './stoppers';
 
 /**
  * Drag handles on the selected piece, as in CAD (#62): arrows to slide it
@@ -15,11 +16,15 @@ export interface HandleFrame {
   across: Vector3;
 }
 
-/** A handle edit: slide by `mm` along a level direction, turn by `deg` (+ anticlockwise from above), or lift by `mm`. */
+/**
+ * A handle edit: slide by `mm` along a level direction, turn by `deg`
+ * (+ anticlockwise from above), lift by `mm`, or grow by `factor` (hoses).
+ */
 export type HandleEdit =
   | { kind: 'slide'; dir: Vector3; mm: number }
   | { kind: 'turn'; deg: number }
-  | { kind: 'lift'; mm: number };
+  | { kind: 'lift'; mm: number }
+  | { kind: 'scale'; factor: number };
 
 /**
  * The handle frame of a placed piece. "Along" runs from its first port to its
@@ -38,6 +43,41 @@ export function handleFrame(pc: PlacedPiece): HandleFrame {
   // Left of "along" seen from above (parts' right is -X, so left is +X when facing +Z).
   const across = new Vector3(along.z, 0, -along.x);
   return { centre: pieceMiddle(pc), along, across };
+}
+
+/**
+ * The handle frame of a hose or box on the floor: a box faces its open side
+ * (+ Z turned by its yaw), a hose has no way it faces so it keeps the world's.
+ */
+export function stopperFrame(s: Stopper): HandleFrame {
+  if (s.kind === 'hose') {
+    const [x, z] = hoseMiddle(s);
+    return { centre: new Vector3(x, 0, z), along: new Vector3(0, 0, 1), across: new Vector3(1, 0, 0) };
+  }
+  const t = (s.yaw * Math.PI) / 180;
+  const along = new Vector3(Math.sin(t), 0, Math.cos(t));
+  return { centre: new Vector3(s.x, 0, s.z), along, across: new Vector3(along.z, 0, -along.x) };
+}
+
+/** How far a hose or box reaches from the middle of its handles on the floor, mm, so its ring can go round it. */
+export function stopperReach(s: Stopper): number {
+  const c = stopperFrame(s).centre;
+  const [pts, r] = s.kind === 'hose' ? [hoseCurve(s, 20), HOSE_DIAMETER / 2] : [boxOutline(s).outline, 0];
+  return Math.max(...pts.map(([x, z]) => Math.hypot(x - c.x, z - c.z))) + r;
+}
+
+/** `course` with stopper `index` slid, turned or grown by a handle; stoppers stay on the floor. */
+export function stopperEdit(course: Course, index: number, edit: HandleEdit): Course {
+  switch (edit.kind) {
+    case 'slide':
+      return moveStopper(course, index, edit.dir.x * edit.mm, edit.dir.z * edit.mm);
+    case 'turn':
+      return turnStopper(course, index, edit.deg);
+    case 'scale':
+      return scaleHose(course, index, edit.factor);
+    case 'lift':
+      return course;
+  }
 }
 
 /**
@@ -117,5 +157,7 @@ export function handleMatrix(layout: Layout, index: number, edit: HandleEdit, lo
       return turnAboutMiddle(layout.pieces[index], edit.deg);
     case 'lift':
       return new Matrix4().makeTranslation(0, Math.max(edit.mm, -Math.max(low, 0)), 0);
+    case 'scale':
+      return new Matrix4();
   }
 }

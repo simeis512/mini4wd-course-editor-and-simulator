@@ -1,9 +1,9 @@
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { layoutCourse, movingGroup } from './course';
+import { emptyCourse, layoutCourse, movingGroup } from './course';
 import { moveGroup, pieceMiddle } from './edit';
 import {
-  alongScreen, handleFrame, handleMatrix, lowestPort, nearestRingDeg, ringPoint, snapTo, wrapDeg,
+  alongScreen, handleFrame, handleMatrix, lowestPort, nearestRingDeg, ringPoint, snapTo, stopperEdit, stopperFrame, stopperReach, wrapDeg,
 } from './handles';
 import { chain } from './presets';
 
@@ -89,5 +89,45 @@ describe('handleMatrix', () => {
     const raised = layoutCourse(moveGroup(course, new Set([0]), handleMatrix(layout, 0, { kind: 'lift', mm: 110 }, low)));
     expect(lowestPort(raised, [0])).toBeCloseTo(110);
     expect(handleMatrix(raised, 0, { kind: 'lift', mm: -200 }, lowestPort(raised, [0])).elements[13]).toBeCloseTo(-110);
+  });
+});
+
+describe('stopper handles', () => {
+  const box = { kind: 'box' as const, size: 1, x: 100, z: 200, yaw: 90 };
+  const hose = { kind: 'hose' as const, points: [[0, 0], [100, 0], [100, 100], [0, 100]] as [number, number][], closed: true, color: 0 };
+  const course = { ...emptyCourse(), stoppers: [box, hose] };
+
+  it('faces a box the way its open side does', () => {
+    const f = stopperFrame(box);
+    expect(f.centre.toArray()).toEqual([100, 0, 200]);
+    expect(f.along.x).toBeCloseTo(1);
+    expect(f.across.z).toBeCloseTo(-1);
+  });
+
+  it('puts a hose\'s handles at its middle', () => {
+    expect(stopperFrame(hose).centre.toArray()).toEqual([50, 0, 50]);
+  });
+
+  it('slides and turns a box as its ring and arrows show', () => {
+    const slid = stopperEdit(course, 0, { kind: 'slide', dir: stopperFrame(box).along, mm: 30 });
+    expect(slid.stoppers![0]).toMatchObject({ x: 130, z: 200 });
+    expect(stopperEdit(course, 0, { kind: 'turn', deg: 45 }).stoppers![0]).toMatchObject({ yaw: 135 });
+    expect(stopperEdit(course, 0, { kind: 'lift', mm: 50 })).toBe(course);
+  });
+
+  it('grows a hose about its middle', () => {
+    const grown = stopperEdit(course, 1, { kind: 'scale', factor: 2 }).stoppers![1];
+    expect(grown.kind === 'hose' && grown.points).toEqual([[-50, -50], [150, -50], [150, 150], [-50, 150]]);
+    expect(course.stoppers[1]).toBe(hose);
+  });
+
+  it('reaches round a box\'s corners and a hose\'s curve', () => {
+    expect(stopperReach(box)).toBeCloseTo(Math.hypot(200, 125));
+    expect(stopperReach(hose)).toBeGreaterThan(Math.hypot(50, 50));
+  });
+
+  it('never shrinks a hose to a point', () => {
+    const shrunk = stopperEdit(course, 1, { kind: 'scale', factor: 0 }).stoppers![1];
+    expect(shrunk.kind === 'hose' && shrunk.points[1]).toEqual([55, 45]);
   });
 });
