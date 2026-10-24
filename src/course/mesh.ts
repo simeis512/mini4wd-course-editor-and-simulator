@@ -95,9 +95,10 @@ export function halfWidth(laneCount: number): number {
 /**
  * Sweep a rectangle (lateral `x0..x1`, height `y0..y1`) along the frames;
  * `y1` may give the top at each frame. Each side gets its own vertices so
- * the corners stay sharp.
+ * the corners stay sharp. Without `caps` the ends are left open, as where
+ * pieces meet end to end.
  */
-function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y1: number | readonly number[]): THREE.BufferGeometry {
+function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y1: number | readonly number[], caps = true): THREE.BufferGeometry {
   const top = (i: number) => (typeof y1 === 'number' ? y1 : y1[i]);
   // Corners anticlockwise when looking along the centreline; null height is the top.
   const corners: [number, number | null][] = [
@@ -125,10 +126,10 @@ function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y
       indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
     }
   }
-  for (const [i, flip] of [
+  for (const [i, flip] of caps ? ([
     [0, true],
     [n - 1, false],
-  ] as const) {
+  ] as const) : []) {
     const base = positions.length / 3;
     for (const [x, y] of corners) {
       pointOnFrame(frames[i], x, y ?? top(i), p);
@@ -144,21 +145,34 @@ function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y
   return geo;
 }
 
-/** Road and fence meshes swept along a part's (or twisted piece's) geometry, in part-local millimetres. */
-export function buildPartGeometry(geo: PartGeometry): { roads: THREE.BufferGeometry[]; fences: THREE.BufferGeometry[] } {
+/**
+ * Road and fence meshes swept along a part's (or twisted piece's) geometry,
+ * in part-local millimetres; open-ended without `caps`.
+ */
+export function buildPartGeometry(geo: PartGeometry, caps = true): { roads: THREE.BufferGeometry[]; fences: THREE.BufferGeometry[] } {
   const roads: THREE.BufferGeometry[] = [];
   const fences: THREE.BufferGeometry[] = [];
   for (const { samples, lanes } of geo.tracks) {
     const section = crossSection(lanes);
-    roads.push(sweepBox(samples, section.left, section.right, -roadThickness, 0));
+    roads.push(sweepBox(samples, section.left, section.right, -roadThickness, 0, caps));
     for (const x of section.fences) {
-      fences.push(sweepBox(samples, x - fenceThickness / 2, x + fenceThickness / 2, 0, fenceHeight));
+      fences.push(sweepBox(samples, x - fenceThickness / 2, x + fenceThickness / 2, 0, fenceHeight, caps));
     }
   }
   return { roads, fences };
 }
 
 const partGeometryCache = new WeakMap<PartGeometry, ReturnType<typeof buildPartGeometry>>();
+
+/** `buildPartGeometry`, built once per geometry and shared read-only. */
+function sharedPartGeometry(geo: PartGeometry): ReturnType<typeof buildPartGeometry> {
+  let out = partGeometryCache.get(geo);
+  if (!out) {
+    out = buildPartGeometry(geo);
+    partGeometryCache.set(geo, out);
+  }
+  return out;
+}
 const materialCache = new Map<string, THREE.MeshStandardMaterial>();
 
 /** `doubleSided` for stands, whose slabs' winding follows the road. */
@@ -212,11 +226,7 @@ export function buildCourseMeshes(layout: Layout, visuals: ModelVisuals = new Ma
       group.add(modelMesh(visual, pc));
     } else {
       // Procedural, also while a measured model is not loaded (spec 15.1).
-      let geo = partGeometryCache.get(pc.geometry);
-      if (!geo) {
-        geo = buildPartGeometry(pc.geometry);
-        partGeometryCache.set(pc.geometry, geo);
-      }
+      const geo = sharedPartGeometry(pc.geometry);
       for (const r of geo.roads) group.add(new THREE.Mesh(r, material(color, 1)));
       for (const f of geo.fences) group.add(new THREE.Mesh(f, material(color, 0.85)));
     }
@@ -236,9 +246,13 @@ export const ATTACHMENT_COLOR = '#e5483f';
 const ATTACHMENT_SINK = 0.5;
 
 /** A washboard on its piece, part-local: a plate on the road, sloping down to thin tabs at its ends. */
-function attachmentMesh(pc: PlacedPiece, a: Attachment): THREE.Mesh {
+export function attachmentGeometry(pc: PlacedPiece, a: Attachment): THREE.BufferGeometry {
   const { frames, tops, half } = attachmentShape(pc, a);
-  const mesh = new THREE.Mesh(sweepBox(frames, -half, half, -ATTACHMENT_SINK, tops), material(ATTACHMENT_COLOR, 1));
+  return sweepBox(frames, -half, half, -ATTACHMENT_SINK, tops);
+}
+
+function attachmentMesh(pc: PlacedPiece, a: Attachment): THREE.Mesh {
+  const mesh = new THREE.Mesh(attachmentGeometry(pc, a), material(ATTACHMENT_COLOR, 1));
   mesh.name = 'attachment';
   return mesh;
 }
