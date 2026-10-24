@@ -30,6 +30,7 @@ import { exportJson, fileName, HashSync, readCourseFile, readHash } from './shar
 import type { EditorView } from './view';
 import { TopView } from './view2d';
 import { OrbitView } from './view3d';
+import { RunMode } from './run-mode';
 import { perfReport, perfSpan } from './perf';
 import { bindAppUi, readRaiseFields } from './app-ui';
 import { editSelection, raiseSides, type SelectedAction } from './selected-edits';
@@ -140,6 +141,17 @@ export class EditorApp {
     this.top = new TopView($('view2d'), handlers);
     this.orbit = new OrbitView($('view3d'), handlers);
     this.handles = new HandleTool($('stage'), host);
+    new RunMode({
+      get layout() { return app.layout; },
+      get dir() { return app.course.dir ?? 1; },
+      enter: () => {
+        this.select(null);
+        this.setMode('3d');
+        this.orbit.setPicking(false);
+      },
+      leave: () => this.orbit.setPicking(true),
+      setMachine: (object) => this.orbit.setMachine(object),
+    });
     buildPalette({
       click: (item) => {
         if (this.paletteDrag.clickAdds) this.place(item);

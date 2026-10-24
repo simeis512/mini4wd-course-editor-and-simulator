@@ -127,6 +127,8 @@ export function bindAppUi(host: AppUiHost): ShareImage {
   window.addEventListener('keydown', (e) => {
     const t = e.target as HTMLElement;
     if (t.closest('input, select, textarea')) return;
+    // No editing while the machine runs (#27).
+    if (document.body.classList.contains('running')) return;
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.key.toLowerCase() === 'z') {
       e.preventDefault();
