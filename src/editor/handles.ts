@@ -38,7 +38,7 @@ const SCALE_HALF = 12;
 /** Points drawn round the ring. */
 const RING_DRAW_POINTS = 64;
 
-const COLORS = { along: '#ff8a5c', across: '#5ad17a', turn: '#58a6ff', lift: '#e8c547', scale: '#c58cff', scaleX: '#c58cff', scaleZ: '#c58cff' } as const;
+const COLORS = { along: '#ff8a5c', across: '#5ad17a', turn: '#58a6ff', lift: '#e8c547', scale: '#c58cff', scaleX: '#ff7ab8', scaleZ: '#5fd3e0' } as const;
 
 type HandleKind = keyof typeof COLORS;
 type Point = [number, number];
