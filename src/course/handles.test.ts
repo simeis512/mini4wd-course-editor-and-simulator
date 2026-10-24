@@ -126,6 +126,13 @@ describe('stopper handles', () => {
     expect(stopperReach(hose)).toBeGreaterThan(Math.hypot(50, 50));
   });
 
+  it('stretches a hose along one axis only', () => {
+    const wide = stopperEdit(course, 1, { kind: 'scale', factor: 2, axis: 'x' }).stoppers![1];
+    expect(wide.kind === 'hose' && wide.points).toEqual([[-50, 0], [150, 0], [150, 100], [-50, 100]]);
+    const deep = stopperEdit(course, 1, { kind: 'scale', factor: 0.5, axis: 'z' }).stoppers![1];
+    expect(deep.kind === 'hose' && deep.points).toEqual([[0, 25], [100, 25], [100, 75], [0, 75]]);
+  });
+
   it('never shrinks a hose to a point', () => {
     const shrunk = stopperEdit(course, 1, { kind: 'scale', factor: 0 }).stoppers![1];
     expect(shrunk.kind === 'hose' && shrunk.points[1]).toEqual([55, 45]);

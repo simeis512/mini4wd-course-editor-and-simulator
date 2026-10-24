@@ -213,14 +213,15 @@ export function hoseMiddle(h: Hose): [number, number] {
   return [h.points.reduce((sum, p) => sum + p[0], 0) / n, h.points.reduce((sum, p) => sum + p[1], 0) / n];
 }
 
-/** Grow or shrink a hose about its middle by `factor`, to whole mm (#62). */
-export function scaleHose(course: Course, index: number, factor: number): Course {
+/** Grow or shrink a hose about its middle by `factor`, to whole mm: every way, or only along X or Z (#62). */
+export function scaleHose(course: Course, index: number, factor: number, axis?: 'x' | 'z'): Course {
   const k = Math.max(factor, HOSE_SCALE_MIN);
+  const [kx, kz] = [axis === 'z' ? 1 : k, axis === 'x' ? 1 : k];
   return withStoppers(course, (list) => {
     const h = list[index];
     if (h.kind !== 'hose') return;
     const [cx, cz] = hoseMiddle(h);
-    h.points = h.points.map(([x, z]) => [Math.round(cx + (x - cx) * k) || 0, Math.round(cz + (z - cz) * k) || 0]);
+    h.points = h.points.map(([x, z]) => [Math.round(cx + (x - cx) * kx) || 0, Math.round(cz + (z - cz) * kz) || 0]);
   });
 }
 

@@ -18,13 +18,14 @@ export interface HandleFrame {
 
 /**
  * A handle edit: slide by `mm` along a level direction, turn by `deg`
- * (+ anticlockwise from above), lift by `mm`, or grow by `factor` (hoses).
+ * (+ anticlockwise from above), lift by `mm`, or grow by `factor` (hoses),
+ * every way or only along X or Z.
  */
 export type HandleEdit =
   | { kind: 'slide'; dir: Vector3; mm: number }
   | { kind: 'turn'; deg: number }
   | { kind: 'lift'; mm: number }
-  | { kind: 'scale'; factor: number };
+  | { kind: 'scale'; factor: number; axis?: 'x' | 'z' };
 
 /**
  * The handle frame of a placed piece. "Along" runs from its first port to its
@@ -74,7 +75,7 @@ export function stopperEdit(course: Course, index: number, edit: HandleEdit): Co
     case 'turn':
       return turnStopper(course, index, edit.deg);
     case 'scale':
-      return scaleHose(course, index, edit.factor);
+      return scaleHose(course, index, edit.factor, edit.axis);
     case 'lift':
       return course;
   }
