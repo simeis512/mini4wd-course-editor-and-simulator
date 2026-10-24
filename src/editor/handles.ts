@@ -38,7 +38,7 @@ const SCALE_HALF = 12;
 /** Points drawn round the ring. */
 const RING_DRAW_POINTS = 64;
 
-const COLORS = { along: '#ff8a5c', across: '#5ad17a', turn: '#58a6ff', lift: '#e8c547', scale: '#c58cff' } as const;
+const COLORS = { along: '#ff8a5c', across: '#5ad17a', turn: '#58a6ff', lift: '#e8c547', scale: '#c58cff', scaleX: '#c58cff', scaleZ: '#c58cff' } as const;
 
 type HandleKind = keyof typeof COLORS;
 type Point = [number, number];
@@ -68,8 +68,8 @@ interface Shown {
   across: ScreenAxis | null;
   /** Pieces only: stoppers stay on the floor. */
   lift: { at: Point; dir: Point; axis: Point; mm: number } | null;
-  /** Hoses only. */
-  scale: Point | null;
+  /** Hoses only: grow every way (diagonal), or along the world's X or Z, named as they show (横/縦). */
+  scales: { kind: 'scale' | 'scaleX' | 'scaleZ'; at: Point; dir: Point; name: string }[];
   /** Points whose own drag wins over a handle drawn across them (a hose's points). */
   avoid: Point[];
 }
@@ -145,8 +145,18 @@ export class HandleTool {
     if (s?.kind !== 'stopper' || !stopper) return null;
     const shown = this.measure({ kind: 'stopper', index: s.index }, stopperFrame(stopper), stopperReach(stopper));
     if (shown && stopper.kind === 'hose') {
+      const [mx, my] = shown.middle;
       const out = shown.ringPx * Math.SQRT1_2 + SCALE_GAP;
-      shown.scale = [shown.middle[0] + out, shown.middle[1] + out];
+      shown.scales.push({ kind: 'scale', at: [mx + out, my + out], dir: [Math.SQRT1_2, Math.SQRT1_2], name: '' });
+      // One handle per axis just outside the ring, on whichever side lies right or down on the screen.
+      for (const [kind, a] of [['scaleX', shown.across], ['scaleZ', shown.along]] as const) {
+        if (!a) continue;
+        const len = Math.hypot(...a.axis);
+        let dir: Point = [a.axis[0] / len, a.axis[1] / len];
+        if (dir[0] + dir[1] < 0) dir = [-dir[0], -dir[1]];
+        const r = shown.ringPx + SCALE_GAP;
+        shown.scales.push({ kind, at: [mx + dir[0] * r, my + dir[1] * r], dir, name: Math.abs(dir[0]) >= Math.abs(dir[1]) ? '横 ' : '縦 ' });
+      }
       shown.avoid = stopper.points.map(([x, z]) => this.toStage(new Vector3(x, 0, z))).filter((p): p is Point => !!p);
     }
     return shown;
@@ -202,7 +212,7 @@ export class HandleTool {
     const left = Math.min(...ring.map((p) => p[0]), c[0] - ringPx);
     return {
       target, centre: f.centre, middle: c, ringMm, ringPx, ring, along: axis(f.along), across: axis(f.across),
-      lift: target.kind === 'piece' ? { ...lift, at: [left - LIFT_GAP, c[1]] } : null, scale: null, avoid: [],
+      lift: target.kind === 'piece' ? { ...lift, at: [left - LIFT_GAP, c[1]] } : null, scales: [], avoid: [],
     };
   }
 
@@ -213,7 +223,8 @@ export class HandleTool {
     const near = (q: Point) => Math.hypot(q[0] - p[0], q[1] - p[1]) <= HANDLE_HIT;
     if (s.avoid.some(near)) return null;
     if (s.lift && near(s.lift.at)) return 'lift';
-    if (s.scale && near(s.scale)) return 'scale';
+    const grow = s.scales.find((g) => near(g.at));
+    if (grow) return grow.kind;
     if (s.along?.heads.some(near)) return 'along';
     if (s.across?.heads.some(near)) return 'across';
     for (let i = 1; i < s.ring.length; i++) if (segmentDistance(p, s.ring[i - 1], s.ring[i]) <= HANDLE_HIT * 0.6) return 'turn';
@@ -259,10 +270,11 @@ export class HandleTool {
     if (e.pointerId !== d.pointerId) return;
     const edit = this.editFor(d, this.local(e), !this.host.snapOn || e.shiftKey);
     const amount = edit.kind === 'turn' ? edit.deg : edit.kind === 'scale' ? edit.factor - 1 : edit.mm;
+    const name = d.shown.scales.find((g) => g.kind === d.kind)?.name ?? '';
     d.preview = amount ? this.apply(d, edit) : null;
     d.previewLayout = d.preview && layoutCourse(d.preview);
     const hose = d.previewLayout?.stoppers[d.shown.target.index];
-    d.label = !amount ? '' : edit.kind === 'scale' && hose?.kind === 'hose' ? `${labelOf(edit)}（長さ ${Math.round(hoseLength(hose))}mm）` : labelOf(edit);
+    d.label = !amount ? '' : edit.kind === 'scale' && hose?.kind === 'hose' ? `${name}${labelOf(edit)}（長さ ${Math.round(hoseLength(hose))}mm）` : labelOf(edit);
     $('context').hidden = true;
     this.host.view.setData(d.previewLayout ?? d.layout, this.host.selection);
     this.draw();
@@ -292,11 +304,15 @@ export class HandleTool {
       return { kind: 'turn', deg: fine ? Math.round(d.turned) : snapTo(d.turned, TURN_SNAP) };
     }
     if (d.kind === 'lift') return { kind: 'lift', mm: mm(s.lift!.axis, s.lift!.mm) };
-    if (d.kind === 'scale') {
-      // How much farther from the middle the pointer is than where it grabbed.
-      const from = Math.hypot(d.from[0] - s.middle[0], d.from[1] - s.middle[1]);
-      const k = Math.hypot(p[0] - s.middle[0], p[1] - s.middle[1]) / (from || 1);
-      return { kind: 'scale', factor: fine ? Math.round(k * 100) / 100 : Math.round(snapTo(k, SCALE_SNAP) * 100) / 100 };
+    if (d.kind === 'scale' || d.kind === 'scaleX' || d.kind === 'scaleZ') {
+      // How much farther from the middle the pointer is than where it grabbed: straight out, or along the axis.
+      const g = s.scales.find((h) => h.kind === d.kind)!;
+      const out = (q: Point) => d.kind === 'scale'
+        ? Math.hypot(q[0] - s.middle[0], q[1] - s.middle[1])
+        : (q[0] - s.middle[0]) * g.dir[0] + (q[1] - s.middle[1]) * g.dir[1];
+      const k = out(p) / (out(d.from) || 1);
+      const factor = fine ? Math.round(k * 100) / 100 : Math.round(snapTo(k, SCALE_SNAP) * 100) / 100;
+      return { kind: 'scale', factor, axis: d.kind === 'scaleX' ? 'x' : d.kind === 'scaleZ' ? 'z' : undefined };
     }
     const a = (d.kind === 'along' ? s.along : s.across)!;
     return { kind: 'slide', dir: a.dir, mm: mm(a.axis, a.mm) };
@@ -349,13 +365,14 @@ export class HandleTool {
     }
     // Lift arrow and grow arrow, both ways
     if (s.lift) doubleArrow(ctx, s.lift.at, s.lift.dir, LIFT_HALF, COLORS.lift, width('lift'));
-    if (s.scale) doubleArrow(ctx, s.scale, [Math.SQRT1_2, Math.SQRT1_2], SCALE_HALF, COLORS.scale, width('scale'));
+    for (const g of s.scales) doubleArrow(ctx, g.at, g.dir, SCALE_HALF, COLORS[g.kind], width(g.kind), true);
     // How far the drag has gone
     const label = this.drag?.label;
     if (label) {
       const k = this.drag!.kind;
+      const grow = s.scales.find((g) => g.kind === k);
       const [x, y] = k === 'lift' && s.lift ? [s.lift.at[0], s.lift.at[1] - LIFT_HALF - 8]
-        : k === 'scale' && s.scale ? [s.scale[0], s.scale[1] + SCALE_HALF + 24]
+        : grow ? [grow.at[0], grow.at[1] + SCALE_HALF + 24]
         : [s.ring[0][0], s.ring[0][1] - 12];
       ctx.font = 'bold 13px system-ui, sans-serif';
       ctx.textAlign = 'center';
@@ -395,13 +412,14 @@ function stroke(ctx: CanvasRenderingContext2D, color: string, width: number): vo
   ctx.stroke();
 }
 
-/** Arrows both ways from `at` along `dir` (unit), `half` px each, with a dot between. */
-function doubleArrow(ctx: CanvasRenderingContext2D, at: Point, dir: Point, half: number, color: string, width: number): void {
+/** Arrows both ways from `at` along `dir` (unit), `half` px each, with a dot between (a square for growing). */
+function doubleArrow(ctx: CanvasRenderingContext2D, at: Point, dir: Point, half: number, color: string, width: number, square = false): void {
   const tip = (k: number): Point => [at[0] + dir[0] * half * k, at[1] + dir[1] * half * k];
   arrow(ctx, at, tip(1), color, width);
   arrow(ctx, at, tip(-1), color, width);
   ctx.beginPath();
-  ctx.arc(at[0], at[1], 3.5, 0, Math.PI * 2);
+  if (square) ctx.rect(at[0] - 4, at[1] - 4, 8, 8);
+  else ctx.arc(at[0], at[1], 3.5, 0, Math.PI * 2);
   ctx.fillStyle = color;
   ctx.fill();
 }
