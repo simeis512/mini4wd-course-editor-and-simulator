@@ -35,6 +35,8 @@ const CARDBOARD = 5;
 const LOOP_RADIUS = 200;
 /** Points round a new hose's loop. */
 const LOOP_POINTS = 6;
+/** A hose is never shrunk below this share of its size in one go (#62). */
+const HOSE_SCALE_MIN = 0.1;
 /** Fewest points a hose keeps: two for a line, three for a loop. */
 const minPoints = (h: Hose) => (h.closed ? 3 : 2);
 
@@ -205,6 +207,24 @@ export function moveStopper(course: Course, index: number, dx: number, dz: numbe
   });
 }
 
+/** The middle of a hose's points (X, Z mm): what it turns and grows about. */
+export function hoseMiddle(h: Hose): [number, number] {
+  const n = h.points.length;
+  return [h.points.reduce((sum, p) => sum + p[0], 0) / n, h.points.reduce((sum, p) => sum + p[1], 0) / n];
+}
+
+/** Grow or shrink a hose about its middle by `factor`, to whole mm: every way, or only along X or Z (#62). */
+export function scaleHose(course: Course, index: number, factor: number, axis?: 'x' | 'z'): Course {
+  const k = Math.max(factor, HOSE_SCALE_MIN);
+  const [kx, kz] = [axis === 'z' ? 1 : k, axis === 'x' ? 1 : k];
+  return withStoppers(course, (list) => {
+    const h = list[index];
+    if (h.kind !== 'hose') return;
+    const [cx, cz] = hoseMiddle(h);
+    h.points = h.points.map(([x, z]) => [Math.round(cx + (x - cx) * kx) || 0, Math.round(cz + (z - cz) * kz) || 0]);
+  });
+}
+
 /** Turn a stopper about its middle by `deg`, + to the left (anticlockwise from above), as pieces turn. */
 export function turnStopper(course: Course, index: number, deg: number): Course {
   return withStoppers(course, (list) => {
@@ -213,8 +233,7 @@ export function turnStopper(course: Course, index: number, deg: number): Course 
       s.yaw = Math.round((((s.yaw + deg) % 360) + 540) % 360 - 180) || 0;
       return;
     }
-    const cx = s.points.reduce((sum, p) => sum + p[0], 0) / s.points.length;
-    const cz = s.points.reduce((sum, p) => sum + p[1], 0) / s.points.length;
+    const [cx, cz] = hoseMiddle(s);
     // The same turn as a piece's: about + Y.
     const [c, n] = [Math.cos((deg * Math.PI) / 180), Math.sin((deg * Math.PI) / 180)];
     s.points = s.points.map(([x, z]) => [Math.round(cx + (x - cx) * c + (z - cz) * n) || 0, Math.round(cz - (x - cx) * n + (z - cz) * c) || 0]);

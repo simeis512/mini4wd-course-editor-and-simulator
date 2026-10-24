@@ -371,6 +371,8 @@ export class OrbitView implements EditorView {
 
   /** Point on the page over a scene point, or null when it is behind the camera. */
   private toClient(world: THREE.Vector3): [number, number] | null {
+    // The orbit controls move the camera before the frame that updates its matrices.
+    this.camera.updateMatrixWorld();
     const p = world.clone().project(this.camera);
     if (p.z > 1) return null;
     const r = this.renderer.domElement.getBoundingClientRect();
