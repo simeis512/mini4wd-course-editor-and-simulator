@@ -39,6 +39,14 @@ for (const size of ['S', 'M', 'L'] as BenchSize[]) {
     const previous = layoutCourse(course);
     supports(previous);
     stopperContacts(previous);
+    findClashes(previous);
+    test('findClashes:update', async ({ bench }) => {
+      let layout = layoutCourse(next);
+      await bench('findClashes:update', { beforeEach: () => {
+        layout = layoutCourse(next, previous);
+        worldTracks(layout, previous);
+      } }, () => { findClashes(layout, previous); }).run(options);
+    });
     test('supports:update', async ({ bench }) => {
       let layout = layoutCourse(next);
       await bench('supports:update', { beforeEach: () => {

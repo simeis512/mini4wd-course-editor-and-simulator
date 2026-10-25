@@ -289,7 +289,7 @@ export class EditorApp {
       else if (s.point !== undefined && (stopper.kind !== 'hose' || s.point >= stopper.points.length)) this.selection = { kind: 'stopper', index: s.index };
     }
     this.checks = {
-      clashes: [...perfSpan('clashes', () => findClashes(this.layout)), ...perfSpan('stopperContacts', () => stopperContacts(this.layout, previous))],
+      clashes: [...perfSpan('clashes', () => findClashes(this.layout, previous)), ...perfSpan('stopperContacts', () => stopperContacts(this.layout, previous))],
       laps: perfSpan('laps', () => checkLaps(this.layout, this.course.dir)),
     };
     for (const view of [this.top, this.orbit]) {

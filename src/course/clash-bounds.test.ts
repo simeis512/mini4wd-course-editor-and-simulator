@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { findClashes } from './clash';
 import { layoutCourse, type Course, type PieceRec } from './course';
+import { deletePiece, flipPiece, setLength, setPose, setTwist, setVariant } from './edit';
 
 /** Dense, seeded poses exercise sloping/twisted roads and multi-track parts (#87). */
 function crowded(seed: number): Course {
@@ -29,5 +30,25 @@ for (const seed of [87, 2026, 512]) {
     expect(clashes.some((c) => c.kind === 'interference')).toBe(true);
     expect(clashes.some((c) => c.kind === 'clearance')).toBe(true);
     expect(clashes).toMatchSnapshot();
+  });
+
+  it(`matches full clash tests across dense multi-track edits (seed ${seed}, #101)`, () => {
+    const course = crowded(seed);
+    let previous = layoutCourse(course);
+    findClashes(previous);
+    for (const next of [
+      setVariant(course, 0, 1),
+      setTwist(course, 0, 2.5),
+      setLength(course, 6, 500),
+      flipPiece(course, 5),
+      setPose(course, 5, { pos: [0, 70, 0], rot: [90, 10, -10] }),
+      deletePiece(course, 0),
+      deletePiece(course, 5),
+      course,
+    ]) {
+      const layout = layoutCourse(next, previous);
+      expect(findClashes(layout, previous)).toEqual(findClashes(layoutCourse(next)));
+      previous = layout;
+    }
   });
 }
