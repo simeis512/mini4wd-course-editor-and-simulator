@@ -1,13 +1,15 @@
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import type { Layout } from '../course/course';
 import { timedLane } from '../course/lap-marks';
 import type { OutReason, Run } from '../physics/run';
+import { arRunRate, rateLabel } from './ar-pose';
 import { $, toast } from './dom';
 import { RunCamera, type CameraMode, type CameraView } from './run-camera';
 
 // Running the machine in the 3D view (#27, spec simulator.md 6): a mode of
 // its own, apart from editing. The physics is loaded only when it is first
-// used.
+// used. In AR (#99) the same run goes on over the course on the floor, with
+// its own controls in the AR overlay.
 
 export interface RunModeHost {
   /** The course as it is now, and the way it runs. */
@@ -20,6 +22,10 @@ export interface RunModeHost {
   setMachine(object: THREE.Object3D | null): void;
   /** Point the 3D view's camera (course mm), or give it back to the user. */
   aim(view: CameraView | null): void;
+  /** Call `tick` before each frame the 3D view draws (in AR too), or stop. */
+  onFrame(tick: (() => void) | null): void;
+  /** The size the course is shown at in AR, or null outside AR. */
+  arScale(): number | null;
 }
 
 const OUT_TEXT: Record<OutReason, string> = {
@@ -32,6 +38,17 @@ const OUT_TEXT: Record<OutReason, string> = {
 
 /** Longest real time one animation frame may run the physics for, s: a background tab comes back without a jump. */
 const MAX_FRAME = 0.05;
+/**
+ * Longest the physics may take in one frame, ms: a phone that cannot run
+ * 1 ms steps that fast shows the run slower instead of drawing less often
+ * (#99, owner 2026-10-26; provisional).
+ */
+const FRAME_BUDGET = 12;
+/** Physics time run between looks at the clock, s. */
+const CHUNK = 0.005;
+
+/** The same control in the run bar and in the AR overlay (#99). */
+const both = (id: string) => [$(id), $(`ar-${id}`)];
 
 type Physics = typeof import('../physics/run') & typeof import('../physics/machine-mesh');
 
@@ -39,18 +56,32 @@ export class RunMode {
   private physics: Physics | null = null;
   private run: Run | null = null;
   private mesh: THREE.Group | null = null;
+  private shadow: THREE.Mesh | null = null;
   private playing = false;
-  private frame = 0;
   private last = 0;
   private on = false;
   private camera = new RunCamera();
+  /** In AR, run at real time instead of slowed to the size shown (#99). */
+  private realTime = false;
+  /** The physics could not keep up in the last frame. */
+  private behind = false;
 
   constructor(private host: RunModeHost) {
     $('run').addEventListener('click', () => void (this.on ? this.exit() : this.enter()));
     $('run-exit').addEventListener('click', () => this.exit());
-    $('run-play').addEventListener('click', () => this.setPlaying(!this.playing));
-    $('run-reset').addEventListener('click', () => void this.reset());
-    $<HTMLSelectElement>('run-lane').addEventListener('change', () => void this.reset());
+    $('ar-run-toggle').addEventListener('click', () => void (this.on ? this.exit() : this.enter()));
+    for (const b of both('run-play')) b.addEventListener('click', () => this.setPlaying(!this.playing));
+    for (const b of both('run-reset')) b.addEventListener('click', () => void this.reset());
+    const lane = $<HTMLSelectElement>('run-lane');
+    lane.addEventListener('change', () => void this.reset());
+    $('ar-run-lane').addEventListener('click', () => {
+      lane.selectedIndex = (lane.selectedIndex + 1) % lane.options.length;
+      void this.reset();
+    });
+    $('ar-run-speed').addEventListener('click', () => {
+      this.realTime = !this.realTime;
+      this.draw(0);
+    });
     const camera = $<HTMLSelectElement>('run-camera');
     camera.addEventListener('change', () => {
       this.camera.mode = camera.value as CameraMode;
@@ -70,6 +101,9 @@ export class RunMode {
     $('run').setAttribute('aria-pressed', 'true');
     document.body.classList.add('running');
     $('run-bar').hidden = false;
+    $('ar-run').hidden = false;
+    $('ar-run-toggle').textContent = '走行をやめる';
+    this.host.onFrame(() => this.tick());
     // Set off first in the lane under the lap timer, so it times the machine.
     const timed = timedLane(this.host.layout, this.host.dir);
     if (timed !== null) $<HTMLSelectElement>('run-lane').value = String(timed);
@@ -86,6 +120,9 @@ export class RunMode {
     $('run').setAttribute('aria-pressed', 'false');
     document.body.classList.remove('running');
     $('run-bar').hidden = true;
+    $('ar-run').hidden = true;
+    $('ar-run-toggle').textContent = '走らせる';
+    this.host.onFrame(null);
     this.host.aim(null);
     this.host.leave();
   }
@@ -106,7 +143,10 @@ export class RunMode {
     }
     this.run = run;
     this.mesh = physics.buildMachineMesh(run.spec);
-    this.host.setMachine(this.mesh);
+    this.shadow = physics.buildShadow(run.spec);
+    const group = new THREE.Group();
+    group.add(this.mesh, this.shadow);
+    this.host.setMachine(group);
     this.setPlaying(false);
     this.camera.snap();
     this.draw(0);
@@ -116,48 +156,76 @@ export class RunMode {
     this.run?.free();
     this.run = null;
     if (this.mesh) this.host.setMachine(null);
-    this.mesh = null;
+    this.mesh = this.shadow = null;
   }
 
   private setPlaying(playing: boolean): void {
     const out = this.run?.state().out;
     this.playing = playing && !!this.run && !out;
-    $('run-play').textContent = this.playing ? '一時停止' : 'スタート';
-    $('run-play').toggleAttribute('disabled', !this.run || !!out);
-    cancelAnimationFrame(this.frame);
-    if (!this.playing) return;
+    this.behind = false;
+    for (const b of both('run-play')) {
+      b.textContent = this.playing ? '一時停止' : 'スタート';
+      b.toggleAttribute('disabled', !this.run || !!out);
+    }
     this.last = performance.now();
-    const tick = (now: number) => {
-      if (!this.playing || !this.run) return;
-      const dt = Math.min(MAX_FRAME, (now - this.last) / 1000);
-      this.run.advance(dt);
-      this.last = now;
-      this.draw(dt);
-      if (this.run.state().out) return this.setPlaying(false);
-      this.frame = requestAnimationFrame(tick);
-    };
-    this.frame = requestAnimationFrame(tick);
+  }
+
+  /** How fast the run's time goes against real time: slowed in AR to the size shown, unless real time is asked for. */
+  private get rate(): number {
+    const scale = this.host.arScale();
+    return scale === null ? 1 : arRunRate(scale, this.realTime);
+  }
+
+  /**
+   * Run on by the time since the last frame, in 1 ms steps for no longer
+   * than the frame's budget, the rest left out (slower, #99); then draw.
+   * Ticked by the 3D view, whose frames go on in AR, where the page's own
+   * animation frames stop.
+   */
+  private tick(): void {
+    const now = performance.now();
+    const real = Math.min(MAX_FRAME, (now - this.last) / 1000);
+    this.last = now;
+    const run = this.run;
+    if (!this.playing || !run) return this.draw(0);
+    let left = real * this.rate;
+    while (left > 1e-9 && performance.now() - now < FRAME_BUDGET && !run.state().out) {
+      const t = Math.min(left, CHUNK);
+      run.advance(t);
+      left -= t;
+    }
+    this.behind = left > 1e-9 && !run.state().out;
+    this.draw(real);
+    if (run.state().out) this.setPlaying(false);
   }
 
   /** Put the machine where it is, the camera after it `dt` seconds on, and show how the run is going. */
   private draw(dt: number): void {
-    const { run, mesh, physics } = this;
-    if (!run || !mesh || !physics) return;
+    const { run, mesh, shadow, physics } = this;
+    const scale = this.host.arScale();
+    const speed = $('ar-run-speed');
+    speed.textContent = `時間：${rateLabel(scale === null ? 1 : arRunRate(scale, this.realTime))}`;
+    // At real size there is nothing to slow.
+    speed.toggleAttribute('disabled', scale === null || scale >= 1);
+    $('ar-run-lane').textContent = `レーン：${$<HTMLSelectElement>('run-lane').selectedOptions[0]?.text ?? ''}`;
+    if (!run || !mesh || !shadow || !physics) return;
     const s = run.state();
     mesh.position.copy(s.position);
     mesh.quaternion.copy(s.quaternion);
     physics.spinTyres(mesh, run.spec, s.distance);
+    physics.placeShadow(shadow, run.spec, s.position, s.quaternion, run.ground());
     this.host.aim(this.camera.next(s.position, s.quaternion, dt));
     const kmh = Math.max(0, s.speed) * 3.6;
     const laps = s.lapTimes;
     const times = laps.length ? ` ・ ラップ ${laps[laps.length - 1].toFixed(2)} 秒（ベスト ${Math.min(...laps).toFixed(2)}）` : '';
     this.show(
       `${s.time.toFixed(2)} 秒 ・ ${kmh.toFixed(1)} km/h ・ ${(s.distance / 1000).toFixed(2)} m ・ ${s.laps} 周${times}` +
+        (this.behind ? ' ・ 計算が追いつかずゆっくり' : '') +
         (s.out ? ` ・ ${OUT_TEXT[s.out]}` : ''),
     );
   }
 
   private show(text: string): void {
-    $('run-status').textContent = text;
+    for (const e of both('run-status')) e.textContent = text;
   }
 }

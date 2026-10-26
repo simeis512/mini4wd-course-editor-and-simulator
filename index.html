@@ -180,6 +180,11 @@
       #ar-exit { position: absolute; top: 16px; right: 16px; }
       #ar-controls { position: absolute; left: 12px; right: 12px; bottom: 56px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
       #ar-status { position: absolute; left: 12px; right: 12px; bottom: 16px; padding: 6px 10px; border-radius: 8px; background: #000a; font-size: 13px; }
+      /* Running the machine in AR (#99): its controls at the top, clear of the exit button. */
+      #ar-run { position: absolute; top: 16px; left: 12px; right: 110px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      #ar-run-status { flex-basis: 100%; padding: 6px 10px; border-radius: 8px; background: #000a; font-size: 13px; font-variant-numeric: tabular-nums; }
+      #ar-overlay button:disabled { opacity: 0.5; }
+      #ar-arrow { position: absolute; width: 44px; height: 44px; border-radius: 50%; background: #000a; color: #ff8a1f; font-size: 26px; line-height: 44px; text-align: center; }
       @media (max-width: 720px) {
         body { grid-template-columns: 1fr; grid-template-rows: auto 1fr minmax(0, 38vh); grid-template-areas: 'bar' 'stage' 'panel'; }
         #panel { border-left: 0; border-top: 1px solid var(--line); }
@@ -600,8 +605,17 @@
         <button id="ar-replace">置き直す</button>
         <button id="ar-depth" hidden>奥行き：表示</button>
         <button id="ar-occlusion" hidden aria-label="実物の後ろにコースを隠す">隠れ：オン</button>
+        <button id="ar-run-toggle" title="床に置いたコースでマシンを走らせる">走らせる</button>
       </div>
       <div id="ar-status"></div>
+      <div id="ar-run" hidden>
+        <div id="ar-run-status"></div>
+        <button id="ar-run-play">スタート</button>
+        <button id="ar-run-reset">リセット</button>
+        <button id="ar-run-lane">レーン：左</button>
+        <button id="ar-run-speed" title="縮めたコースでは、縮尺に合わせてゆっくり走らせます">時間：実時間</button>
+      </div>
+      <div id="ar-arrow" hidden aria-hidden="true">➤</div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

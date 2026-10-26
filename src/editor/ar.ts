@@ -4,7 +4,7 @@ import { MM } from '../course/mesh';
 import { ArGestures } from './ar-gesture';
 import { ArDepth, DEPTH_SENSING } from './ar-depth';
 import { ArScan } from './ar-scan';
-import { AR_SCALES, AR_TURN_STEP, arPose, floorPivot, headingOf, nextScale, scaleLabel, turnAbout } from './ar-pose';
+import { AR_SCALES, AR_TURN_STEP, arPose, edgeArrow, floorPivot, headingOf, nextScale, scaleLabel, turnAbout } from './ar-pose';
 
 // Three uses a WebXR Layers projection layer whenever the browser offers one.
 // On Android Chrome that path left the AR camera feed black, so hide it and
@@ -18,6 +18,8 @@ if (typeof XRWebGLBinding !== 'undefined' && 'createProjectionLayer' in XRWebGLB
 export interface ArHooks {
   onStart(): void;
   onEnd(): void;
+  /** The running machine on the course, if any (#99). */
+  machine(): THREE.Object3D | null;
 }
 
 /** Where the course goes when the floor cannot be found: this far in front of the phone and below it, m. */
@@ -25,15 +27,16 @@ const FALLBACK_AHEAD = 1.5;
 const FALLBACK_BELOW = 1.2;
 
 /**
- * AR (WebXR) for viewing the course only (spec 8, #19): the button, our
- * overlay, and where the course stands. The course follows the floor point
- * the phone aims at until a tap puts it down; it can then be turned, shown
- * at real size or smaller, or put down again.
+ * AR (WebXR) for the course (spec 8, #19): the button, our overlay, and
+ * where the course stands. The course follows the floor point the phone
+ * aims at until a tap puts it down; it can then be turned, shown at real
+ * size or smaller, or put down again. The machine can run on it (#99, run
+ * by RunMode), with an arrow at the screen's edge while it is out of sight.
  */
 export class ArMode {
   readonly status: HTMLElement;
   /** The size shown, kept from one session to the next. */
-  private scale: number = AR_SCALES[0];
+  scale: number = AR_SCALES[0];
   private yaw = 0;
   /** Course point (mm) that stands on the floor point. */
   private pivot = new THREE.Vector3();
@@ -56,18 +59,21 @@ export class ArMode {
   /** Whether this session shares the phone's depth view. */
   private hasDepth = false;
   private gestures: ArGestures;
+  /** Points to the machine while it is off the screen. */
+  private arrow: HTMLElement;
 
   constructor(
     private renderer: THREE.WebGLRenderer,
     container: HTMLElement,
     private root: THREE.Object3D,
     scene: THREE.Scene,
-    hooks: ArHooks,
+    private hooks: ArHooks,
   ) {
     // Our own DOM overlay for AR: an exit button, the controls and a status
     // line, so problems on the phone are visible instead of a silent black screen.
     const overlay = document.getElementById('ar-overlay')!;
     this.status = document.getElementById('ar-status')!;
+    this.arrow = document.getElementById('ar-arrow')!;
     const arButton = ARButton.createButton(renderer, {
       optionalFeatures: ['dom-overlay', 'hit-test', 'depth-sensing'],
       domOverlay: { root: overlay },
@@ -107,7 +113,7 @@ export class ArMode {
       onTwist: (turn, centre) => this.twist(-turn, centre),
     });
     // A tap on our controls must not also count as a tap on the floor.
-    document.getElementById('ar-controls')!.addEventListener('beforexrselect', (e) => e.preventDefault());
+    for (const id of ['ar-controls', 'ar-run']) document.getElementById(id)!.addEventListener('beforexrselect', (e) => e.preventDefault());
 
     renderer.xr.addEventListener('sessionstart', () => {
       document.documentElement.classList.add('xr-presenting');
@@ -136,6 +142,7 @@ export class ArMode {
       this.scan.clear();
       this.depth.hide();
       this.gestures.clear();
+      this.arrow.hidden = true;
       this.root.visible = true;
       this.root.matrixAutoUpdate = true;
       this.root.position.set(0, 0, 0);
@@ -157,6 +164,7 @@ export class ArMode {
       this.faceViewer = false;
     }
     if (this.hasDepth) this.depth.update(frame, viewer?.views[0], this.aiming);
+    this.pointAtMachine(viewer?.views[0]);
     if (!this.aiming) return;
     if (this.hitPending) return;
     if (this.hitSource) {
@@ -175,6 +183,26 @@ export class ArMode {
       this.aiming = false;
     }
     this.update();
+  }
+
+  /** Show the arrow at the screen's edge towards the machine while it is off the screen (#99). */
+  private pointAtMachine(view: XRView | undefined): void {
+    const machine = this.hooks.machine();
+    let at: ReturnType<typeof edgeArrow> = null;
+    if (machine && view && this.root.visible) {
+      machine.updateWorldMatrix(true, false);
+      const p = new THREE.Vector3().setFromMatrixPosition(machine.matrixWorld);
+      p.applyMatrix4(new THREE.Matrix4().fromArray(view.transform.inverse.matrix));
+      const behind = p.z > 0;
+      p.applyMatrix4(new THREE.Matrix4().fromArray(view.projectionMatrix));
+      if (Number.isFinite(p.x) && Number.isFinite(p.y)) at = edgeArrow(p.x, p.y, behind);
+    }
+    this.arrow.hidden = !at;
+    if (!at) return;
+    this.arrow.style.left = `${((at.x + 1) / 2) * window.innerWidth}px`;
+    this.arrow.style.top = `${((1 - at.y) / 2) * window.innerHeight}px`;
+    // Screen y points down.
+    this.arrow.style.transform = `translate(-50%, -50%) rotate(${-at.angle}rad)`;
   }
 
   /** Follow the aimed floor point again, facing the way the phone looks. */

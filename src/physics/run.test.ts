@@ -158,4 +158,14 @@ describe('Run (#27, spec simulator.md)', () => {
     expect(run.advance(3).out).toBe('stopper');
     run.free();
   });
+
+  it('finds the road under the machine for its shadow (#99)', async () => {
+    const run = (await Run.create(straights(4)))!;
+    const g = run.ground()!;
+    const s = run.state();
+    expect(g.point.x).toBeCloseTo(s.position.x, 2);
+    expect(Math.abs(g.point.y)).toBeLessThan(1);
+    expect(g.normal.y).toBeCloseTo(1, 3);
+    run.free();
+  });
 });
