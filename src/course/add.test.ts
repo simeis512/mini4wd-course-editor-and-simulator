@@ -39,8 +39,14 @@ describe('joinPart', () => {
     expect(joined?.port).toBe(1);
   });
 
+  it('joins a bank approach to another only end to end (#116)', () => {
+    const rec = (j: ReturnType<typeof joinPart>) => j && j.course.pieces[j.course.pieces.length - 1];
+    // To the high end by its low end; to the low end by its high end, coming down.
+    expect(rec(joinPart(chain(['bank-approach-20']), 'bank-approach-20', { piece: 0, port: 1 }))).toMatchObject({ port: 0 });
+    expect(rec(joinPart(chain(['bank-approach-20']), 'bank-approach-20', { piece: 0, port: 0 }))).toMatchObject({ port: 1 });
+  });
+
   it('refuses parts that cannot join', () => {
-    expect(joinPart(chain(['bank-approach-20']), 'bank-approach-20', { piece: 0, port: 1 })).toBeNull();
     expect(joinPart(chain(['straight']), 'lane-change-center', { piece: 0, port: 1 })).toBeNull();
   });
 });

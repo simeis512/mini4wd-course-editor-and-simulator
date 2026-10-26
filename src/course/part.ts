@@ -124,6 +124,12 @@ export interface PartDef {
   /** Parts this part cannot be joined to directly (e.g. two ramps in a row). */
   cannotJoin?: string[];
   /**
+   * The part joined to itself end to end: port `from` of one meets port
+   * `to` of the next, no other way. The `forced`-th in a row and on is a
+   * forced join (clips cut off), and past `max` they do not join (#116).
+   */
+  chain?: { from: number; to: number; forced: number; max: number };
+  /**
    * Stands that are part of the part. A part that has them gets automatic
    * supports only under its main road, and only when it is raised (#11).
    */

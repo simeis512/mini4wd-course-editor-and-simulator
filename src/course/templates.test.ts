@@ -62,8 +62,9 @@ describe('templates', () => {
   });
 
   it('does not join where its first part cannot', () => {
-    const c = chain(['straight', 'bank-approach-20']);
-    expect(joinTemplate(c, 'bank-left', { piece: 1, port: 1 })).toBeNull();
+    // A bank approach's low end does not meet another's low end (#116).
+    const c = chain(['bank-approach-20']);
+    expect(joinTemplate(c, 'bank-left', { piece: 0, port: 0 })).toBeNull();
   });
 
   it('adds on its own centred on a point, a loop still climbing over itself', () => {

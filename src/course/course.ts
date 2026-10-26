@@ -196,7 +196,7 @@ export interface Joint {
  * joint bent or a piece twisted further than real parts give (spec 16.4).
  */
 export interface Problem {
-  kind: 'not-level' | 'cannot-join' | 'bend-limit' | 'twist-limit';
+  kind: 'not-level' | 'cannot-join' | 'forced-join' | 'bend-limit' | 'twist-limit';
   piece: number;
   port: number;
 }
@@ -312,6 +312,8 @@ export function compatible(a: PartDef, ap: number, b: PartDef, bp: number, shift
   const pa = a.ports[ap];
   const pb = b.ports[bp];
   if (a.cannotJoin?.includes(b.id) || b.cannotJoin?.includes(a.id)) return false;
+  // A part joined to itself only end to end (#116).
+  if (a.id === b.id && a.chain && !((ap === a.chain.from && bp === a.chain.to) || (ap === a.chain.to && bp === a.chain.from))) return false;
   if ((pa.partners && !pa.partners.includes(b.id)) || (pb.partners && !pb.partners.includes(a.id))) return false;
   const [ka, kb] = [pa.kind ?? 'std', pb.kind ?? 'std'];
   // A port kept to its partners (the lane change centre's) meets only their ports of its own kind.
@@ -367,6 +369,8 @@ export function layoutCourse(course: Course, previous?: Layout): Layout {
   const links: Joint[] = [];
   const cut = new Set((course.cuts ?? []).map(([piece, port]) => portKey({ piece, port })));
   const problems: Problem[] = [];
+  /** Floor ports, checked for lying level once it is known which are chained instead (#116). */
+  const floorPorts: PortRef[] = [];
   course.pieces.forEach((rec, i) => {
     const part = partOf(rec);
     const geo = pieceGeometry(part, rec.twist);
@@ -396,7 +400,7 @@ export function layoutCourse(course: Course, previous?: Layout): Layout {
     }
     const ports = reuse ? old!.ports : geo.ports.map((p) => matrix.clone().multiply(p));
     part.ports.forEach((def, p) => {
-      if (def.floor && !isLevel(ports[p])) problems.push({ kind: 'not-level', piece: i, port: p });
+      if (def.floor && !isLevel(ports[p])) floorPorts.push({ piece: i, port: p });
     });
     pieces.push({ rec, part, matrix, geometry: geo, ports });
   });
@@ -439,6 +443,7 @@ export function layoutCourse(course: Course, previous?: Layout): Layout {
   }
   const open = loose.filter((r) => !closed.has(portKey(r)));
   const joints: Joint[] = [...links, ...closures.map((c): Joint => ({ a: c.a, b: c.b, kind: 'closure', shift: c.shift }))];
+  problems.push(...chainProblems(pieces, joints, floorPorts));
 
   // Group joined pieces (union-find).
   const parent = pieces.map((_, i) => i);
@@ -463,6 +468,39 @@ export function layoutCourse(course: Course, previous?: Layout): Layout {
   const attachments = course.attachments ?? [];
   const [start, timer, stoppers] = [course.start ?? null, course.timer ?? null, course.stoppers ?? []];
   return { pieces, problems, connected, closures, open, joints, group, split, intended, deadEnds, attachments, start, timer, stoppers };
+}
+
+/**
+ * Floor ports that do not lie level, and parts joined to themselves in a
+ * row (#116): a floor port chained onto the part before lies on it, not on
+ * the floor; the `forced`-th in a row is a forced join, past `max` none.
+ */
+function chainProblems(pieces: readonly PlacedPiece[], joints: readonly Joint[], floorPorts: readonly PortRef[]): Problem[] {
+  /** The piece chained on after each, and the port it is chained by. */
+  const next = new Map<number, PortRef>();
+  const chained = new Set<string>();
+  for (const j of joints) {
+    const [pa, pb] = [pieces[j.a.piece].part, pieces[j.b.piece].part];
+    const chain = pa.id === pb.id ? pa.chain : undefined;
+    if (!chain) continue;
+    const [before, after] = j.a.port === chain.from ? [j.a, j.b] : [j.b, j.a];
+    next.set(before.piece, after);
+    chained.add(portKey(after));
+  }
+  const problems: Problem[] = floorPorts.filter((r) => !chained.has(portKey(r))).map((r) => ({ kind: 'not-level', ...r }));
+  const later = new Set([...next.values()].map((r) => r.piece));
+  for (const first of next.keys()) {
+    if (later.has(first)) continue;
+    const chain = pieces[first].part.chain!;
+    let count = 1;
+    // Round a closed ring of them at most once.
+    for (let at = next.get(first); at && count < pieces.length; at = next.get(at.piece)) {
+      count++;
+      if (count > chain.max) problems.push({ kind: 'cannot-join', ...at });
+      else if (count >= chain.forced) problems.push({ kind: 'forced-join', ...at });
+    }
+  }
+  return problems;
 }
 
 /** The frame a piece's anchoring port faces, in world space. */
