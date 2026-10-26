@@ -106,7 +106,7 @@ describe('simCourse (spec 9, #26)', () => {
     expect(bounds(sim.road).max.y).toBeGreaterThan(90);
   });
 
-  it('puts washboards on the road and the timer and stoppers in the props, but not the start stickers', () => {
+  it('puts washboards on the road and the timer and stoppers in the props, but not the start stickers or the tape (#110)', () => {
     let c = chain(['straight']);
     const plain = simCourse(layoutCourse(c));
     c = addAttachment(c, 'washboard-5', 0, 1);
@@ -114,8 +114,10 @@ describe('simCourse (spec 9, #26)', () => {
     c = placeStart(c, 0, 100);
     const timed = layoutCourse(c);
     const props = triangles(simCourse(timed).props);
-    // The timer's blocks, 12 triangles each, and nothing for the stickers.
-    expect(props).toBe(12 * buildPropMeshes(timed).find((g) => g.name === 'timer')!.children.length);
+    // The timer's blocks but its tape, 12 triangles each, and nothing for the stickers.
+    const blocks = buildPropMeshes(timed).find((g) => g.name === 'timer')!.children;
+    expect(blocks.some((m) => m.name === 'tape')).toBe(true);
+    expect(props).toBe(12 * (blocks.length - 1));
     c = addStopper(c, newStopper('hose', -600, 270));
     const hosed = simCourse(layoutCourse(c));
     expect(triangles(hosed.props)).toBeGreaterThan(props);
