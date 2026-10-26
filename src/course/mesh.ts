@@ -155,17 +155,27 @@ function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y
 }
 
 /**
- * Road and fence meshes swept along a part's (or twisted piece's) geometry,
- * in part-local millimetres; open-ended without `caps`.
+ * How far the road's top rises when it is made at least `min` mm thick
+ * (for printing, #89): it grows upwards from its underside, so the supports
+ * and the floor still meet it, and the fences and washboards rise with it.
  */
-export function buildPartGeometry(geo: PartGeometry, caps = true): { roads: THREE.BufferGeometry[]; fences: THREE.BufferGeometry[] } {
+export const roadLift = (min: number) => Math.max(0, min - roadThickness);
+
+/**
+ * Road and fence meshes swept along a part's (or twisted piece's) geometry,
+ * in part-local millimetres; open-ended without `caps`. With `min`, no road
+ * or fence is thinner than `min` mm (#89).
+ */
+export function buildPartGeometry(geo: PartGeometry, caps = true, min = 0): { roads: THREE.BufferGeometry[]; fences: THREE.BufferGeometry[] } {
   const roads: THREE.BufferGeometry[] = [];
   const fences: THREE.BufferGeometry[] = [];
+  const lift = roadLift(min);
+  const fenceHalf = Math.max(fenceThickness, min) / 2;
   for (const { samples, lanes } of geo.tracks) {
     const section = crossSection(lanes);
-    roads.push(sweepBox(samples, section.left, section.right, -roadThickness, 0, caps));
+    roads.push(sweepBox(samples, section.left, section.right, -roadThickness, lift, caps));
     for (const x of section.fences) {
-      fences.push(sweepBox(samples, x - fenceThickness / 2, x + fenceThickness / 2, 0, fenceHeight, caps));
+      fences.push(sweepBox(samples, x - fenceHalf, x + fenceHalf, 0, fenceHeight + lift, caps));
     }
   }
   return { roads, fences };
@@ -258,10 +268,10 @@ export const ATTACHMENT_COLOR = '#e5483f';
 /** How far a washboard is drawn sunk into the road, mm, so its underside never shows through (cosmetic). */
 const ATTACHMENT_SINK = 0.5;
 
-/** A washboard on its piece, part-local: a plate on the road, sloping down to thin tabs at its ends. */
-export function attachmentGeometry(pc: PlacedPiece, a: Attachment): THREE.BufferGeometry {
+/** A washboard on its piece, part-local: a plate on the road, sloping down to thin tabs at its ends; `lift` mm higher on a thickened road (#89). */
+export function attachmentGeometry(pc: PlacedPiece, a: Attachment, lift = 0): THREE.BufferGeometry {
   const { frames, tops, half } = attachmentShape(pc, a);
-  return sweepBox(frames, -half, half, -ATTACHMENT_SINK, tops);
+  return sweepBox(frames, -half, half, lift - ATTACHMENT_SINK, lift ? tops.map((t) => t + lift) : tops);
 }
 
 function attachmentMesh(pc: PlacedPiece, a: Attachment): THREE.Mesh {
@@ -271,38 +281,46 @@ function attachmentMesh(pc: PlacedPiece, a: Attachment): THREE.Mesh {
 }
 
 /** Automatic supports are wood-coloured (#11). */
-const SUPPORT_COLOR = '#b89a6e';
+export const SUPPORT_COLOR = '#b89a6e';
 
 /** Push a slab: the four-cornered face `face`, pushed `half` both ways along `along`. */
 function pushSlab(positions: number[], face: THREE.Vector3[], along: THREE.Vector3, half: number): void {
   const d = along.clone().multiplyScalar(half);
   const back = face.map((v) => v.clone().sub(d));
   const front = face.map((v) => v.clone().add(d));
-  const quad = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, e: THREE.Vector3) => {
-    for (const v of [a, b, c, a, c, e]) positions.push(v.x, v.y, v.z);
-  };
+  const tris: THREE.Vector3[] = [];
+  const quad = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, e: THREE.Vector3) => tris.push(a, b, c, a, c, e);
   quad(back[0], back[3], back[2], back[1]);
   quad(front[0], front[1], front[2], front[3]);
   for (let i = 0; i < 4; i++) {
     const j = (i + 1) % 4;
     quad(back[i], back[j], front[j], front[i]);
   }
+  // Wind every face outwards (for printing, #89), whichever way the face and `along` go.
+  let volume = 0;
+  for (let t = 0; t < tris.length; t += 3) volume += tris[t].dot(tris[t + 1].clone().cross(tris[t + 2]));
+  for (let t = 0; t < tris.length; t += 3) {
+    const [a, b, c] = volume < 0 ? [tris[t], tris[t + 2], tris[t + 1]] : [tris[t], tris[t + 1], tris[t + 2]];
+    positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+  }
 }
 
 /**
  * Each support as a frame: a leg from the floor under either edge of the
  * road and a crossbar under the road between them, standing on y = 0.
- * All in one geometry, in the stands' own coordinates.
+ * All in one geometry, in the stands' own coordinates. With `min`, no slab
+ * is thinner than `min` mm (#89).
  */
-export function buildSupportMesh(list: readonly Stand[], mat = material(SUPPORT_COLOR, 1, true)): THREE.Mesh {
+export function buildSupportMesh(list: readonly Stand[], mat = material(SUPPORT_COLOR, 1, true), min = 0): THREE.Mesh {
   const positions: number[] = [];
   const up = new THREE.Vector3(0, 1, 0);
-  for (const { left, right, along, depth = STAND_DEPTH } of list) {
+  for (const { left, right, along, depth: d = STAND_DEPTH } of list) {
+    const depth = Math.max(d, min);
     // Across the road, level, from the left edge to the right.
     const across = right.clone().sub(left).setY(0).normalize();
     const floor = (v: THREE.Vector3) => new THREE.Vector3(v.x, 0, v.z);
-    const leg = across.clone().multiplyScalar(STAND_LEG);
-    const beam = up.clone().multiplyScalar(STAND_BEAM);
+    const leg = across.clone().multiplyScalar(Math.max(STAND_LEG, min));
+    const beam = up.clone().multiplyScalar(Math.max(STAND_BEAM, min));
     const l2 = left.clone().add(leg);
     const r2 = right.clone().sub(leg);
     pushSlab(positions, [floor(left), floor(l2), l2, left], along, depth / 2);
