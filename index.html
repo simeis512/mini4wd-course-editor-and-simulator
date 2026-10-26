@@ -32,7 +32,8 @@
       #view3d canvas { display: block; touch-action: none; }
       #handles { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
       body.dragging-part #handles { display: none; }
-      #view3d .ar-button { position: absolute !important; bottom: 12px !important; }
+      /* Top left, clear of the course info, 全体を表示 and the panel tab at any width (#117). */
+      #view3d .ar-button { position: absolute !important; top: 10px !important; bottom: auto !important; left: 10px !important; }
       #stage.framing { background: #0d0e11; }
       #stage.framing #view2d, #stage.framing #view3d { outline: 2px solid var(--accent); }
       .share-field { display: flex; flex-direction: column; gap: 2px; margin: 8px 0 6px; }
@@ -190,8 +191,6 @@
         #panel-fold .arrow { transform: rotate(90deg); }
         /* Clear of the tab along the bottom of the editor. */
         #course-info, #fit { bottom: 34px; }
-        /* The AR button goes top left, clear of the tab, the course info and 全体を表示 (#117). */
-        #view3d .ar-button { top: 10px !important; bottom: auto !important; left: 10px !important; }
         body.panel-folded #panel-fold .arrow { transform: rotate(-90deg); }
         #toolbar h1 { display: none; }
       }
