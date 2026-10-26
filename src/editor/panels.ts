@@ -7,6 +7,7 @@ import { asLink, bendable, joinableNear } from '../course/joining';
 import { previewRun } from '../course/raise';
 import { propOutline, propPoint } from '../course/props';
 import { getTemplate, TEMPLATES } from '../course/templates';
+import { loopEnds } from '../course/close-loop';
 import { renderAttachments } from './attach';
 import { $ } from './dom';
 import { cornerSpot, rectAround, type Rect } from './float';
@@ -121,6 +122,10 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
       group.size > 1
         ? `点線のピースとつながっています。ドラッグするとつながった ${group.size} 個が一緒に動きます`
         : 'ほかのピースとつながっていません';
+    // Closing the loop by force (#86): offered while the group has two open ends.
+    const ends = loopEnds(layout, s.index);
+    $('close-loop-row').hidden = !ends;
+    if (ends) $('close-loop-info').textContent = `口のずれ ${ends.distance.toFixed(1)}mm・${ends.angle.toFixed(1)}°`;
     const { base, pose } = placementOf(pc.rec);
     const from = base ? `${pieceLabel(layout, base.piece)} の口から` : 'ワールド原点から';
     $('placement-base').textContent = 'free' in pc.rec ? `自由配置（${from}）` : base ? `連結（${from}）` : '先頭（原点）';

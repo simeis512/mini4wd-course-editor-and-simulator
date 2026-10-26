@@ -233,7 +233,11 @@ function withFarSide(course: Course, next: Course, index: number): Course {
 }
 
 /** Round an angle to the 0.1° kept in URLs. */
-const tenth = (deg: number) => Math.round(deg * 10) / 10;
+/** Steps per degree that bends and twists are stored in (spec 16.5). */
+const STEPS_PER_DEG = 10;
+/** The step bends and twists are stored in, deg. */
+export const ANGLE_STEP = 1 / STEPS_PER_DEG;
+const tenth = (deg: number) => Math.round(deg * STEPS_PER_DEG) / STEPS_PER_DEG;
 
 /**
  * Set a piece's twist (spec 16.2), deg, + lowers the right side. Pieces

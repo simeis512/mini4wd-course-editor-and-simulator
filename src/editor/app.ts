@@ -358,7 +358,8 @@ export class EditorApp {
     const next = editSelection({
       course: this.course, layout: this.layout, selection: this.selection, moveAlone: this.moveAlone,
     }, action);
-    if (next) this.commit(next.course, next.selection);
+    if (next?.message) toast(next.message);
+    if (next && next.course !== this.course) this.commit(next.course, next.selection);
   }
 
   private get snapOn(): boolean {
