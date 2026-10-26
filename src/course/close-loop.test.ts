@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
 import { layoutCourse, type Course } from './course';
 import { chain } from './presets';
-import { CLOSE_LOOP_ANGLE, CLOSE_LOOP_DISTANCE, CLOSE_LOOP_LIMIT, closeLoop, loopEnds } from './close-loop';
+import { CLOSE_LOOP_ANGLE, CLOSE_LOOP_DISTANCE, CLOSE_LOOP_LIMIT, closeLoop, closeLoopOffer, loopEnds } from './close-loop';
 
 /** A long oval: `n` straights each side and four 45° curves at each end, opened by bending the joint into piece `at` by `yaw` deg. */
 function opened(n: number, yaw: number, at = 1): Course {
@@ -30,6 +30,15 @@ describe('loopEnds (#86)', () => {
     const ends = loopEnds(layoutCourse(opened(26, 3.1)), 5)!;
     expect([ends.a.piece, ends.b.piece].sort((p, q) => p - q)).toEqual([0, 59]);
     expect(ends.angle).toBeCloseTo(3.1, 3);
+  });
+
+  it('offers closing only within 1mm per piece of the group (owner 2026-10-26)', () => {
+    // 60 pieces, ends 29mm apart.
+    expect(closeLoopOffer(layoutCourse(opened(26, 3.1)), 5)).not.toBeNull();
+    // 24 pieces, the same bend near the start leaves them about as far apart.
+    const small = layoutCourse(opened(8, 3.1));
+    expect(loopEnds(small, 5)!.distance).toBeGreaterThan(24);
+    expect(closeLoopOffer(small, 5)).toBeNull();
   });
 
   it('has none for a loop that already closes', () => {

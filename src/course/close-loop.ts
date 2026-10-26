@@ -14,6 +14,8 @@ export const CLOSE_LOOP_LIMIT = 0.15;
 /** How near the ends must come, mm and deg (#86 決定事項, provisional). */
 export const CLOSE_LOOP_DISTANCE = 0.5;
 export const CLOSE_LOOP_ANGLE = 0.1;
+/** How far apart the ends may be for closing to be offered, mm per piece of the group (#86, owner 2026-10-26, provisional). */
+export const CLOSE_LOOP_REACH_PER_PIECE = 1;
 /** Shifts tried when the group already has shifted joints (#86 決定事項 8), as for closures (spec 5.3, #60). */
 const SHIFTS = [0, -1, 1, -2, 2];
 /** A piece is on the floor when all its ports are this near the floor, mm. */
@@ -55,6 +57,12 @@ export function loopEnds(layout: Layout, piece: number): LoopEnds | null {
     if (err && (!best || weighted(err) < weighted(best))) best = { a, b, shift, ...err };
   }
   return best;
+}
+
+/** The open ends of `piece`'s group when they are near enough for closing to be offered (#86): within `CLOSE_LOOP_REACH_PER_PIECE` mm per piece. */
+export function closeLoopOffer(layout: Layout, piece: number): LoopEnds | null {
+  const ends = loopEnds(layout, piece);
+  return ends && ends.distance <= movingGroup(layout, piece).size * CLOSE_LOOP_REACH_PER_PIECE ? ends : null;
 }
 
 const weighted = (e: { distance: number; angle: number }) => e.distance + ANGLE_WEIGHT * e.angle;
