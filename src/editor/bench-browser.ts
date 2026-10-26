@@ -4,6 +4,7 @@ import type { Selection } from './selection';
 import type { EditorApp } from './app';
 import type { EditorView } from './view';
 import type { PaletteDrag } from './drag';
+import { perfSpan } from './perf';
 
 /** Dev-only adapter exercising the real edit/refresh and pointermove paths (#87). */
 interface BenchApp {
@@ -36,9 +37,12 @@ export function installBench(editor: EditorApp): void {
   const output = document.createElement('pre');
   output.id = 'bench-results';
   box.append(button, output);
+  const trace = traceControls(app, output, button);
+  box.insertBefore(trace.box, output);
   document.body.append(box);
   button.onclick = async () => {
     button.disabled = true;
+    trace.reset(true);
     try {
       const results = [];
       for (const size of ['S', 'M', 'L'] as BenchSize[]) {
@@ -79,7 +83,68 @@ export function installBench(editor: EditorApp): void {
       output.textContent += `\nERROR: ${String(error)}`;
     } finally {
       button.disabled = false;
+      trace.reset(false);
     }
+  };
+}
+
+/** Prepare outside the recording, then capture exactly one real addition (#104). */
+function traceControls(app: BenchApp, output: HTMLElement, bench: HTMLButtonElement) {
+  const box = document.createElement('div');
+  const add = document.createElement('button');
+  add.textContent = '1ピース追加を記録 (#104)';
+  add.disabled = true;
+  let prepared: { next: Course; mode: '2d' | '3d' } | null = null;
+  const prepare = (['2d', '3d'] as const).map((mode) => {
+    const button = document.createElement('button');
+    button.textContent = `L / ${mode.toUpperCase()}を準備 (#104)`;
+    button.onclick = async () => {
+      bench.disabled = true;
+      add.disabled = true;
+      for (const b of prepare) b.disabled = true;
+      prepared = null;
+      output.textContent = '計測用のコースを準備中…';
+      try {
+        const { course, next } = benchAddition('L');
+        // Match the regular benchmark's warmup; exclude setup from the trace.
+        for (let i = 0; i < WARMUP; i++) {
+          await loadFixture(app, course, mode);
+          app.commit(structuredClone(next), null);
+          await frame();
+        }
+        await loadFixture(app, course, mode);
+        prepared = { next, mode };
+        add.disabled = false;
+        output.textContent = 'DevTools の Performance で記録を開始し、「1ピース追加を記録」を押してから記録を停止してください。';
+      } catch (error) {
+        output.textContent = `ERROR: ${String(error)}`;
+      } finally {
+        bench.disabled = false;
+        for (const b of prepare) b.disabled = false;
+      }
+    };
+    return button;
+  });
+  add.onclick = () => {
+    if (!prepared) return;
+    const { next, mode } = prepared;
+    prepared = null;
+    add.disabled = true;
+    performance.clearMeasures();
+    // Distinguish the addition from fixture setup in the Performance timeline.
+    // The next rAF mark is a scheduling boundary, not GPU/presentation time.
+    perfSpan(`profile:add:${mode}`, () => app.commit(structuredClone(next), null));
+    requestAnimationFrame(() => performance.mark('mini4wd:profile:next-frame'));
+    // Keep the report DOM unchanged so its own layout/paint does not enter the trace.
+  };
+  box.append(...prepare, add);
+  return {
+    box,
+    reset(busy: boolean) {
+      prepared = null;
+      add.disabled = true;
+      for (const button of prepare) button.disabled = busy;
+    },
   };
 }
 
