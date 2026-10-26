@@ -129,8 +129,13 @@ export interface LaneSpot {
   segment: number;
 }
 
-/** The nearest spot on a lane's centre to a point (lap timing, running the wrong way, camera; spec 9). */
-export function laneSpot(lane: Pick<SimLane, 'points' | 'distances'>, p: THREE.Vector3): LaneSpot {
+/**
+ * The nearest spot on a lane's centre to a point (lap timing, running the
+ * wrong way, camera; spec 9). With `within`, only from `from` to `to` mm
+ * along the lane, so a point near where the lane passes over itself keeps
+ * to the stretch it is on (#112).
+ */
+export function laneSpot(lane: Pick<SimLane, 'points' | 'distances'>, p: THREE.Vector3, within?: { from: number; to: number }): LaneSpot {
   const { points, distances } = lane;
   if (points.length === 1) return { along: 0, off: p.distanceTo(points[0]), segment: 0 };
   let best: LaneSpot = { along: 0, off: Infinity, segment: 0 };
@@ -138,6 +143,7 @@ export function laneSpot(lane: Pick<SimLane, 'points' | 'distances'>, p: THREE.V
   const ap = new THREE.Vector3();
   const q = new THREE.Vector3();
   for (let i = 0; i < points.length - 1; i++) {
+    if (within && (distances[i + 1] < within.from || distances[i] > within.to)) continue;
     ab.subVectors(points[i + 1], points[i]);
     const len2 = ab.lengthSq();
     const t = len2 > 0 ? THREE.MathUtils.clamp(ap.subVectors(p, points[i]).dot(ab) / len2, 0, 1) : 0;
@@ -145,6 +151,7 @@ export function laneSpot(lane: Pick<SimLane, 'points' | 'distances'>, p: THREE.V
     const off = q.distanceTo(p);
     if (off < best.off) best = { along: distances[i] + t * (distances[i + 1] - distances[i]), off, segment: i };
   }
+  if (within) best.along = THREE.MathUtils.clamp(best.along, within.from, within.to);
   return best;
 }
 

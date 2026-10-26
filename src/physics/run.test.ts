@@ -6,6 +6,7 @@ import { rideHeight } from './machine';
 import { freeSpeed, STANDARD_MACHINE } from './machine-spec';
 import { placeStart, placeTimer, removeTimer } from '../course/timing';
 import { REVERSE_DISTANCE, Run, STALL_TIME } from './run';
+import { decodeCourse } from '../course/codec';
 
 const straights = (n: number) => layoutCourse(chain(Array(n).fill('straight')));
 
@@ -158,4 +159,22 @@ describe('Run (#27, spec simulator.md)', () => {
     expect(run.advance(3).out).toBe('stopper');
     run.free();
   });
+
+  it('keeps to its stretch of lane where the lane passes under itself (#112)', async () => {
+    // The owner's course: down a slope onto a wave, beside where the lane runs over itself.
+    const course = await decodeCourse(
+      '6.JY0xSgNhEIW_b_ZfF6IsRgyrkMIyx_EIdl4iQTsDkZAyZUoVGwtbvUFASCUWiuQSVmFi8zHz3rw3Xl3Uwe-YlwlwIGiwHTPfSC6EhvePwdtDTNuULIkaw8-NrD6qu3-9oUglwfOty_73zWKYHfREDrN4fb3sb39iNgCD1xHvf5HhIi0lfMrcYv865DjDjcqJxTyS08Qgsa8-yuksT9rEubVhhQzT7dLt0V3SfekO',
+    );
+    const run = (await Run.create(layoutCourse(course), 1, 2))!;
+    let s = run.advance(0);
+    let most = 0;
+    while (!s.out && s.time < 4) {
+      s = run.advance(0.001);
+      // Never more than a step's run ahead of where it was.
+      expect(s.distance - most).toBeLessThan(20);
+      most = Math.max(most, s.distance);
+    }
+    expect(s.out).not.toBe('reverse');
+    run.free();
+  }, 30000);
 });
