@@ -61,6 +61,23 @@ describe('templates', () => {
     expect(forward(course, out.piece, out.port).dot(forward(course, 0, 1))).toBeCloseTo(1, 2);
   });
 
+  it('stacks loops each level at the far end, right over the one below (#111)', () => {
+    let course = chain(['straight']);
+    let end = { piece: 0, port: 1 };
+    for (let k = 1; k <= 3; k++) {
+      const joined = joinTemplate(course, 'loop-right', end)!;
+      course = joined.course;
+      end = way(course, joined.port);
+      const f = forward(course, end.piece, end.port);
+      // Level: under a fifth of a degree up or down, and still heading along +Z.
+      expect(Math.abs(f.y)).toBeLessThan(Math.sin((0.2 * Math.PI) / 180));
+      expect(Math.abs(f.x)).toBeLessThan(Math.sin((0.2 * k * Math.PI) / 180));
+      const p = at(course, end.piece, end.port);
+      expect(p.y).toBeCloseTo(k * LEVEL_HEIGHT, -1);
+      expect(Math.abs(p.x)).toBeLessThan(1);
+    }
+  });
+
   it('does not join where its first part cannot', () => {
     const c = chain(['straight', 'bank-approach-20']);
     expect(joinTemplate(c, 'bank-left', { piece: 1, port: 1 })).toBeNull();
