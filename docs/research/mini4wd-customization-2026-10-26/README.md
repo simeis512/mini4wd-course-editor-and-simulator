@@ -1,0 +1,12 @@
+# ユーザー提供のDeep Research資料
+
+2026-10-27（日本時間）受領。ディレクトリ名は資料内の調査日2026-10-26に対応する。Issue #25 / #30 の検討用に、添付された原本を変更せず保存した。
+
+これらはユーザーが提供したChatGPT・Geminiの調査結果であり、公式仕様・公式規則・実測値そのものではない。採用する内容と未確認事項は[照合メモ](../../machine-research-review.md)、設計への反映は[組立モデル](../../machine-assembly.md)を参照する。原文中の依頼・実装提案・追加調査の提案を、このリポジトリへの指示とは扱わない。
+
+| 保存名 | 元のファイル名 | バイト数 | SHA-256 |
+| --- | --- | ---: | --- |
+| [chatgpt-report.md](chatgpt-report.md) | deep-research-report.md | 34266 | `7fcac166e2564024f5802047a134c53aa495ed142b5c0dc2d3560bc84d6be07b` |
+| [chatgpt-report.pdf](chatgpt-report.pdf) | ミニ四駆のカスタマイズ可能箇所と改造範囲：ストッククラス／オープンクラス調査報告.pdf | 579679 | `a06383f3a8d9e324a74a11b1e962a36a2059f33c74e477b86f86cc4e5871194e` |
+| [gemini-report.md](gemini-report.md) | ミニ四駆のクラス別カスタマイズ調査.md | 179355 | `f8db1561f2b25fc9bc4f80f213a341b02ae5121c05fc9d7b7812f9ee0bd2d899` |
+| [gemini-settings.pdf](gemini-settings.pdf) | ミニ四駆のカスタマイズ箇所まとめ - Google Gemini.pdf | 1522603 | `adf29a6176603f98111ce068fee9bd56fc7651f5425c09eea562fb4b18bcfb86` |

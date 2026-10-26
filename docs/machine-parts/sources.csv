@@ -1,0 +1,7 @@
+id,title,listed_edition,source_url,read_status,scope,checked_on
+downloads-index,ミニ四駆パンフレットダウンロード,,https://www.tamiya.com/japan/customer/downloads/mini4wd/index.html,index_read,source_discovery,2026-10-25
+lineup-2025-10,ミニ四駆ラインアップカタログ,2025-10,https://d7z22c0gz59ng.cloudfront.net/cms/img/usr/inst/pdf/mini4wd/adv/lineup2510_v1.pdf,partial_text_only,no_component_values_adopted,2026-10-25
+parts-latest-linked,グレードアップパーツカタログ,2025-10,https://d7z22c0gz59ng.cloudfront.net/cms/img/usr/inst/pdf/mini4wd/parts/parts2512_v1.pdf,table_content_unreadable,no_component_values_adopted; index_label_2025-10_differs_from_filename_2512,2026-10-25
+matching-2025-12,グレードアップパーツマッチングリスト,2025-12,https://d7z22c0gz59ng.cloudfront.net/cms/japan/mini4wd/mini4_regulation/parts_matching_2512_v01.pdf,table_content_unreadable,no_fitment_cells_adopted,2026-10-25
+parts-2025-06,グレードアップパーツカタログ,2025-06,https://d7z22c0gz59ng.cloudfront.net/cms/img/usr/inst/pdf/mini4wd/parts/parts2506_v3.pdf,text_extracted,product_discovery; layout_associations_require_product_page_confirmation,2026-10-25
+matching-2025-06,グレードアップパーツマッチングリスト,2025-06,https://d7z22c0gz59ng.cloudfront.net/cms/japan/mini4wd/mini4_regulation/parts_matching_2506_v2.pdf,names_and_footnotes_extracted,product_discovery_and_footnote_definitions; matrix_cells_unverified,2026-10-25

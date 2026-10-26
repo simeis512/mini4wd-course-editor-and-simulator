@@ -1,0 +1,18 @@
+item_no,name,motor_turns_per_wheel_turn,motor_shaft,listed_chassis,tyre_condition,mass_g,efficiency,evidence_status,source_url,checked_on,id,counter_gear_colour,spur_gear_colour,discovery_source_id
+15349,MSシャーシ用超速ギヤ,3.5,dual,MS|MA|ME,small_diameter,,,manufacturer_spec,https://www.tamiya.com/japan/products/15349/index.html,2026-10-25,15349,,,
+15429,MSシャーシ用ハイスピードEXギヤ,3.7,dual,MS|MA|ME,small_diameter,,,manufacturer_spec,https://www.tamiya.com/japan/products/15429/index.html,2026-10-25,15429,,,
+15432,スーパーXX・スーパーII用超速ギヤ,3.5,single,SUPER-II|SUPER-TZ|SUPER-X|SUPER-XX|SUPER-TZ-X|VS|AR|FM-A|VZ,small_diameter,,,manufacturer_spec,https://www.tamiya.com/japan/products/15432/index.html,2026-10-25,15432,,,
+15434,ハイスピードEXカウンターギヤ,3.7,single,SUPER-II|SUPER-TZ|SUPER-X|SUPER-XX|SUPER-TZ-X|VS|AR|FM-A|VZ,small_diameter,,,manufacturer_spec,https://www.tamiya.com/japan/products/15434/index.html,2026-10-25,15434,,,
+15355,MSシャーシ用ハイスピードギヤ,4,dual,MS|MA|ME,small_diameter_recommended_for_acceleration,,,manufacturer_spec,https://www.tamiya.com/japan/products/15355/index.html,2026-10-25,15355,,,matching-2025-06
+15236,ハイスピードカウンターギヤ,4,single,TYPE-4|TYPE-5|ZERO|FM|SUPER-I|SUPER-II|SUPER-FM|SUPER-TZ|SUPER-X|SUPER-XX|SUPER-TZ-X|VS|AR|FM-A|VZ,large_diameter_recommended,,,manufacturer_spec,https://www.tamiya.com/japan/products/15236/index.html,2026-10-25,15236-4,,,matching-2025-06
+15236,ハイスピードカウンターギヤ,4.2,single,TYPE-4|TYPE-5|ZERO|FM|SUPER-I|SUPER-II|SUPER-FM|SUPER-TZ|SUPER-X|SUPER-XX|SUPER-TZ-X|VS|AR|FM-A|VZ,large_diameter_recommended,,,manufacturer_spec,https://www.tamiya.com/japan/products/15236/index.html,2026-10-25,15236-4.2,,,matching-2025-06
+15456,ARシャーシ セッティングギヤ,3.5,single,SUPER-II|VS|AR|VZ,see_instructions_for_selected_ratio,,,manufacturer_spec,https://www.tamiya.com/japan/products/15456/index.html,2026-10-25,15456-3.5,,,matching-2025-06
+15456,ARシャーシ セッティングギヤ,3.7,single,SUPER-II|VS|AR|VZ,see_instructions_for_selected_ratio,,,manufacturer_spec,https://www.tamiya.com/japan/products/15456/index.html,2026-10-25,15456-3.7,,,matching-2025-06
+15456,ARシャーシ セッティングギヤ,4,single,SUPER-II|VS|AR|VZ,see_instructions_for_selected_ratio,,,manufacturer_spec,https://www.tamiya.com/japan/products/15456/index.html,2026-10-25,15456-4,,,matching-2025-06
+15456,ARシャーシ セッティングギヤ,4.2,single,SUPER-II|VS|AR|VZ,see_instructions_for_selected_ratio,,,manufacturer_spec,https://www.tamiya.com/japan/products/15456/index.html,2026-10-25,15456-4.2,,,matching-2025-06
+15456,ARシャーシ セッティングギヤ,5,single,SUPER-II|VS|AR|VZ,see_instructions_for_selected_ratio,,,manufacturer_spec,https://www.tamiya.com/japan/products/15456/index.html,2026-10-25,15456-5,,,matching-2025-06
+15516,FM-Aシャーシ セッティングギヤ,3.5,single,FM-A|SUPER-X|SUPER-XX,see_instructions_for_selected_ratio,,,manufacturer_spec,https://www.tamiya.com/japan/products/15516/index.html,2026-10-25,15516-3.5,light_blue,yellow,matching-2025-06
+15516,FM-Aシャーシ セッティングギヤ,3.7,single,FM-A|SUPER-X|SUPER-XX,see_instructions_for_selected_ratio,,,manufacturer_spec,https://www.tamiya.com/japan/products/15516/index.html,2026-10-25,15516-3.7,green,yellow,matching-2025-06
+15516,FM-Aシャーシ セッティングギヤ,4,single,FM-A|SUPER-X|SUPER-XX,see_instructions_for_selected_ratio,,,manufacturer_spec,https://www.tamiya.com/japan/products/15516/index.html,2026-10-25,15516-4,black,light_brown,matching-2025-06
+15516,FM-Aシャーシ セッティングギヤ,4.2,single,FM-A|SUPER-X|SUPER-XX,see_instructions_for_selected_ratio,,,manufacturer_spec,https://www.tamiya.com/japan/products/15516/index.html,2026-10-25,15516-4.2,red,light_brown,matching-2025-06
+15516,FM-Aシャーシ セッティングギヤ,5,single,FM-A|SUPER-X|SUPER-XX,see_instructions_for_selected_ratio,,,manufacturer_spec,https://www.tamiya.com/japan/products/15516/index.html,2026-10-25,15516-5,blue,yellow_green,matching-2025-06

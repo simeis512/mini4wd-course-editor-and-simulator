@@ -1,0 +1,8 @@
+item_no,name,material,plate_length_mm,plate_width_mm,plate_thickness_mm,supported_roller_diameters_mm,mass_g,hole_pitch_mm,evidence_status,source_url,checked_on,discovery_source_id
+15193,FRPマルチ補強プレート,FRP,91,7,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15193/index.html,2026-10-25,matching-2025-06
+15430,FRPマルチワイドリヤステー,FRP,,,,9|13|19,,,manufacturer_spec,https://www.tamiya.com/japan/products/15430/index.html,2026-10-25,matching-2025-06
+15451,AR FRPフロントワイドステー,FRP,,,,9|11|13|19,,,manufacturer_spec,https://www.tamiya.com/japan/products/15451/index.html,2026-10-25,matching-2025-06
+15452,AR FRPリヤワイドステー,FRP,,,,9|11|13|17|19,,,manufacturer_spec,https://www.tamiya.com/japan/products/15452/index.html,2026-10-25,matching-2025-06
+15524,VZ FRPフロントワイドステー,FRP,,,1.5,9|11|13|17|19,,,manufacturer_spec,https://www.tamiya.com/japan/products/15524/index.html,2026-10-25,matching-2025-06
+15498,HGカーボンフロントワイドステー,carbon,,,1.5,9|11|13|19,,,manufacturer_spec,https://www.tamiya.com/japan/products/15498/index.html,2026-10-25,matching-2025-06
+15499,HGカーボンリヤワイドステー,carbon,,,1.5,9|11|13|17|19,,,manufacturer_spec,https://www.tamiya.com/japan/products/15499/index.html,2026-10-25,matching-2025-06

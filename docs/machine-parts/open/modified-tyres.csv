@@ -1,0 +1,2 @@
+id,base_item_no,modification,diameter_min_mm,diameter_max_mm,author_reported_approx_diameter_mm,tyre_width_mm,wheel_outer_diameter_mm,assembly_mass_g,grip_coefficient,restitution,sample_count,measurement_method,measurement_date,source_published_on,evidence_status,usage,source_url,checked_on
+miniyonfan-20240604-thin-tyres,,削りによるペラタイヤ,23.88,23.93,23.9,,,,,,4,author_reported_calliper,,2024-06-04,external_measurement,reference_only,https://miniyonfan.com/peratire-create/,2026-10-25

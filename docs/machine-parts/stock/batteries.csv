@@ -1,0 +1,3 @@
+item_no,name,chemistry,cell_format,cells_per_vehicle,cell_mass_g,cell_mass_approximate,min_capacity_mAh,nominal_cell_voltage_v,internal_resistance_ohm,loaded_pack_voltage_v,evidence_status,source_url,checked_on
+15420,ネオチャンプ,NiMH,AA,2,19,true,950,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15420/index.html,2026-10-25
+55119,パワーチャンプRX,alkaline,AA,2,,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/55119/index.html,2026-10-25

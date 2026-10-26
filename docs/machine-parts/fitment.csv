@@ -1,0 +1,8 @@
+id,item_no,target,status,condition,evidence_status,source_url,checked_on
+15543-fma,15543,FM-A,incompatible,official_correction_of_packaging,manufacturer_spec,https://www.tamiya.com/japan/customer/info/2025/0609/index.html,2026-10-25
+15545-fma-sx-sxx,15545,FM-A|SUPER-X|SUPER-XX,conditional,small_diameter; some chassis or bodies require modification,manufacturer_spec,https://www.tamiya.com/japan/products/15545/index.html,2026-10-25
+15111-pro-counter,15111,PRO_counter_gear,incompatible,not_for_PRO_counter_gear; wheel_axle_use_is_a_separate_application,manufacturer_spec,https://www.tamiya.com/japan/products/15111/index.html,2026-10-25
+15523-pro-counter,15523,PRO_counter_gear,compatible,520_variant_5mm_outer_2mm_bore,manufacturer_spec,https://www.tamiya.com/japan/products/15523/index.html,2026-10-25
+15478-ma-ar,15478,MA|AR,compatible,unmodified_installation_explicitly_stated; installation_must_follow_instructions,manufacturer_spec,https://www.tamiya.com/japan/products/15478/index.html,2026-10-25
+15478-rear-stay,15478,SUPER-II|SUPER-X|SUPER-XX|VS|SUPER-TZ-X|MS|FM-A|VZ|ME,conditional,use_with_15430; some_bodies_require_modification,manufacturer_spec,https://www.tamiya.com/japan/products/15478/index.html,2026-10-25
+15427-rear-stay,15427,SUPER-II|SUPER-X|SUPER-XX|VS|SUPER-TZ-X|MS|FM-A|VZ|ME,conditional,use_with_15430; some_bodies_require_modification,manufacturer_spec,https://www.tamiya.com/japan/products/15427/index.html,2026-10-25

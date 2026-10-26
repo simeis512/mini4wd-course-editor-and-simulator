@@ -1,0 +1,4 @@
+id,item_no,name,type,material,outer_diameter_mm,bore_diameter_mm,thickness_mm,mass_g,fit_condition,evidence_status,source_url,checked_on,discovery_source_id
+15111,15111,丸穴ボールベアリング,ball_bearing,,6,2,,,wheel_axle_or_specified_single_shaft_counter_gears; not_PRO_counter_gear,manufacturer_spec,https://www.tamiya.com/japan/products/15111/index.html,2026-10-25,matching-2025-06
+15523-620,15523,低摩擦プラベアリング 620,plain_bearing,POM,6,2,,,wheel_axle_bearing,manufacturer_spec,https://www.tamiya.com/japan/products/15523/index.html,2026-10-25,matching-2025-06
+15523-520,15523,低摩擦プラベアリング 520,plain_bearing,POM,5,2,,,PRO_counter_gear,manufacturer_spec,https://www.tamiya.com/japan/products/15523/index.html,2026-10-25,matching-2025-06

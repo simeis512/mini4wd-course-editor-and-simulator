@@ -1,0 +1,13 @@
+id,item_no,name,weight_mass_g,length_mm,width_mm,height_mm,stroke_mm,mount_x_mm,mount_y_mm,mount_z_mm,evidence_status,source_url,checked_on,diameter_mm,weight_mass_approximate,discovery_source_id
+15392,15392,マスダンパー,4.7,,,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15392/index.html,2026-10-25,,,
+15401,15401,マスダンパー ヘビー,8.8,,,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15401/index.html,2026-10-25,,,
+15428,15428,マスダンパー スクエア,14.9,32,8,8,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15428/index.html,2026-10-25,,,
+15459-bowl,15459,ARサイド ボウル型,3.4,,,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15459/index.html,2026-10-25,,,
+15459-cylinder,15459,ARサイド シリンダー型,4.2,,,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15459/index.html,2026-10-25,,,
+15427,15427,マスダンパー スクエア 6mm,8.3,32,6,6,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15427/index.html,2026-10-25,,,matching-2025-06
+15515,15515,マスダンパー スクエアショート 6mm,3.6,14,6,6,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15515/index.html,2026-10-25,,true,matching-2025-06
+15517,15517,マスダンパー スクエアショート 8mm,6.6,14,8,8,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15517/index.html,2026-10-25,,,matching-2025-06
+15501-short,15501,スリムマスダンパー ショート,1.5,,,5.5,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15501/index.html,2026-10-25,7,,matching-2025-06
+15501-long,15501,スリムマスダンパー ロング,3,,,11.5,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15501/index.html,2026-10-25,7,,matching-2025-06
+15490,15490,MAサイドマスダンパー ウエイト,8.3,32,6,6,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15490/index.html,2026-10-25,,,matching-2025-06
+15478,15478,ボールリンクマスダンパー ウエイト,8.3,32,6,6,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15478/index.html,2026-10-25,,,matching-2025-06

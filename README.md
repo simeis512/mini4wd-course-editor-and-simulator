@@ -77,6 +77,8 @@ AR は Android の Chrome（ARCore 対応端末）で動く。iPhone の Safari 
 
 ## 構成
 
+- [マシンパーツの実データ調査](docs/machine-parts.md)（#30）：公式製品のストック向け基礎データと、ペラタイヤなどオープン向けの加工後データを分けた出典付きCSV。未確認の物理パラメーターと測定課題も記載
+- [マシン部品の抽象化と取付けモデル](docs/machine-assembly.md)（#25 設計案）：性能タイプによる分類、ステーの穴による接続、ねじ・スペーサーで制約した配置、マスダンの可動域、スタビの両向き取付け
 - `src/course/catalog.ts` パーツカタログ（中心線の区間・接続口・色バリエーション、付属物、URL 用のパーツ番号表）。寸法は mm、多くは推定値。パーツ定義の型は `part.ts`
 - `src/course/attachments.ts` ウォッシュボードなど路面に貼る付属物の位置と形、編集
 - `src/course/timing.ts` スタートとラップタイマーの位置と形、`stoppers.ts` 床のホースと段ボール箱、`props.ts` それらの選び方（どれがどこにあるか）、`props-mesh.ts` それらの 3D メッシュ、`blocks.ts` 箱形の部品の共通の形

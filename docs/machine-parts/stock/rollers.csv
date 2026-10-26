@@ -1,0 +1,14 @@
+item_no,name,lower_diameter_mm,upper_diameter_mm,mass_g,mass_basis,mass_approximate,material,bearing_type,centre_x_mm,centre_y_mm,centre_z_mm,friction_coefficient,restitution,evidence_status,source_url,checked_on,bore_diameter_mm,thickness_mm,ring_material,discovery_source_id
+15437,13mmオールアルミベアリングローラー,13,,1.7,pair,true,aluminium,520,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15437/index.html,2026-10-25,,,,
+15464,HG 19mmオールアルミベアリングローラー,19,,,,,aluminium,520,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15464/index.html,2026-10-25,,,,
+15398,2段アルミローラー (13-12mm),13,12,,,,aluminium,520,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15398/index.html,2026-10-25,,,,
+15344,ローラー用9mmボールベアリング,9,,,,,,self_ball_bearing,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15344/index.html,2026-10-25,,3,,matching-2025-06
+15345,ローラー用11mmボールベアリング,11,,,,,,self_ball_bearing,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15345/index.html,2026-10-25,,4,,matching-2025-06
+15475,ローラー用13mmボールベアリングII,13,,,,,,self_ball_bearing,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15475/index.html,2026-10-25,5,3,,matching-2025-06
+15522,HG 17mmオールアルミベアリングローラー,17,,,,,aluminium,520,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15522/index.html,2026-10-25,,,,matching-2025-06
+15403,2段アルミローラー 9-8mm,9,8,,,,aluminium,,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15403/index.html,2026-10-25,,,,matching-2025-06
+15457,2段低摩擦プラローラー 13-12mm,13,12,,,,low_friction_plastic,,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15457/index.html,2026-10-25,,,,matching-2025-06
+15525,ゴムリング付2段低摩擦プラローラー,13,12,,,,low_friction_plastic,,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15525/index.html,2026-10-25,,,rubber_on_upper_roller,matching-2025-06
+15532,2段低摩擦プラローラー 19-19mm,19,19,,,,POM,optional_520_not_included,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15532/index.html,2026-10-25,,,,matching-2025-06
+15449,17mmプラリング付アルミベアリングローラー,17,,,,,aluminium,ball_bearing,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15449/index.html,2026-10-25,,,plastic,matching-2025-06
+15251,19mmプラリング付アルミベアリングローラー,19,,,,,aluminium,ball_bearing,,,,,,manufacturer_spec,https://www.tamiya.com/japan/products/15251/index.html,2026-10-25,,,plastic,matching-2025-06
