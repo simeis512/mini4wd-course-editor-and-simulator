@@ -6,6 +6,7 @@ import { addPiece, deletePiece, flipPiece, moveGroup, setPose, setTwist, setVari
 import { supports } from './height';
 import { worldTracks } from './mesh';
 import { stopperContacts } from './stopper-contact';
+import { findClashes } from './clash';
 
 /** Compare to a fresh full calculation, including coordinate/order equality (#92). */
 function check(course: Course, previous: Layout): Layout {
@@ -13,11 +14,13 @@ function check(course: Course, previous: Layout): Layout {
   const tracks = worldTracks(next, previous);
   const actual = supports(next, tracks, previous);
   const contacts = stopperContacts(next, previous);
+  const clashes = findClashes(next, previous);
   const full = layoutCourse(course);
   expect(next).toEqual(full);
   expect(tracks).toEqual(worldTracks(full));
   expect(actual).toEqual(supports(full));
   expect(contacts).toEqual(stopperContacts(full));
+  expect(clashes).toEqual(findClashes(full));
   return next;
 }
 
@@ -28,6 +31,7 @@ for (const size of ['S', 'M', 'L'] as BenchSize[]) {
     let previous = original;
     supports(previous);
     stopperContacts(previous);
+    findClashes(previous);
     const snapshot = JSON.stringify(previous);
     const oldSupports = JSON.stringify(supports(previous));
     previous = check(next, previous);

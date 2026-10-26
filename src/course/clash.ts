@@ -52,13 +52,41 @@ interface Solid {
   clearance: Box3;
 }
 
+// World tracks are immutable and shared across unchanged pieces by changedPieces
+// in worldTracks (#92). Weak keys release geometry and pair tests with them (#101).
+const solidCache = new WeakMap<WorldTrack, Solid>();
+type Gap = { gap: number; at: Vector3 };
+interface PairTests {
+  // Undefined means not tested yet; null is a cached negative result. Joined
+  // pieces and prior hits can skip a test, so fill each result only on demand.
+  interference?: Vector3 | null;
+  gaps?: [Gap | null, Gap | null];
+}
+const pairCache = new WeakMap<Solid, WeakMap<Solid, PairTests>>();
+
+function pairTests(a: Solid, b: Solid): PairTests {
+  let pairs = pairCache.get(a);
+  if (!pairs) {
+    pairs = new WeakMap();
+    pairCache.set(a, pairs);
+  }
+  let tests = pairs.get(b);
+  if (!tests) {
+    tests = {};
+    pairs.set(b, tests);
+  }
+  return tests;
+}
+
 function solid(track: WorldTrack): Solid {
+  const cached = solidCache.get(track);
+  if (cached) return cached;
   const pos = track.samples.map((f) => new Vector3().setFromMatrixPosition(f));
   const reach = Math.max(-track.section.left, track.section.right) + fenceHeight + MACHINE_CLEARANCE;
   const points = solidPoints(track);
   const lanePoints = track.samples.flatMap((f) => lanes(track).map((x) => pointOnFrame(f, x, 0)));
   const steps = pos.slice(1).map((p, i) => p.distanceTo(pos[i]));
-  return {
+  const out: Solid = {
     track,
     pos,
     inverse: track.samples.map((f) => f.clone().invert()),
@@ -71,6 +99,8 @@ function solid(track: WorldTrack): Solid {
     volume: testBounds(track, steps, -roadThickness, fenceHeight),
     clearance: testBounds(track, steps, -roadThickness - MACHINE_CLEARANCE, -roadThickness),
   };
+  solidCache.set(track, out);
+  return out;
 }
 
 /** Conservative world bounds of all local cells accepted by localTo, at these heights (#87). */
@@ -144,9 +174,9 @@ function inSolid(s: Solid, p: Vector3): boolean {
  * Room under `upper` over each lane centre of `lower`, mm: the smallest
  * and where it is; null when `upper` does not cross over a lane of it.
  */
-function lowestGap(lower: Solid, upper: Solid): { gap: number; at: Vector3 } | null {
+function lowestGap(lower: Solid, upper: Solid): Gap | null {
   if (!lower.laneBox.intersectsBox(upper.clearance)) return null;
-  let out: { gap: number; at: Vector3 } | null = null;
+  let out: Gap | null = null;
   for (const p of lower.lanePoints) {
     const at = localTo(upper, p);
     if (!at || at.right < upper.track.section.left || at.right > upper.track.section.right || at.up > -roadThickness) continue;
@@ -162,9 +192,11 @@ function lowestGap(lower: Solid, upper: Solid): { gap: number; at: Vector3 } | n
  * reported once per kind. A piece's own tracks (the lane change bridge
  * over its lower lanes) are made that way; pieces joined to each other
  * only touch at the joint, so they are not tested for overlapping.
+ * Reuse unchanged tracks' solids and pair tests, but replay the original
+ * traversal to preserve first hits, minimum gaps and their order (#101).
  */
-export function findClashes(layout: Layout): Clash[] {
-  const tracks = worldTracks(layout);
+export function findClashes(layout: Layout, previous?: Layout): Clash[] {
+  const tracks = worldTracks(layout, previous);
   const solids = tracks.map(solid);
   const joined = new Set(layout.joints.map((j) => pairKey(j.a.piece, j.b.piece)));
   const clashes: Clash[] = [];
@@ -174,24 +206,30 @@ export function findClashes(layout: Layout): Clash[] {
       const [pa, pb] = [tracks[a].piece, tracks[b].piece];
       if (pa === pb || !solids[a].box.intersectsBox(solids[b].box)) continue;
       const key = pairKey(pa, pb);
+      const tests = pairTests(solids[a], solids[b]);
       if (!joined.has(key) && !found.has(`i${key}`)) {
-        const hit = (solids[a].pointBox.intersectsBox(solids[b].volume) ? solids[a].points.find((p) => inSolid(solids[b], p)) : undefined) ??
-          (solids[b].pointBox.intersectsBox(solids[a].volume) ? solids[b].points.find((p) => inSolid(solids[a], p)) : undefined);
+        if (tests.interference === undefined) {
+          tests.interference =
+            (solids[a].pointBox.intersectsBox(solids[b].volume) ? solids[a].points.find((p) => inSolid(solids[b], p)) : undefined) ??
+            (solids[b].pointBox.intersectsBox(solids[a].volume) ? solids[b].points.find((p) => inSolid(solids[a], p)) : undefined) ?? null;
+        }
+        const hit = tests.interference;
         if (hit) {
           found.add(`i${key}`);
-          clashes.push({ kind: 'interference', pieces: [Math.min(pa, pb), Math.max(pa, pb)], at: hit });
+          clashes.push({ kind: 'interference', pieces: [Math.min(pa, pb), Math.max(pa, pb)], at: hit.clone() });
         }
       }
       if (found.has(`i${key}`)) continue;
-      for (const [lower, upper] of [
+      const gaps = tests.gaps ??= [lowestGap(solids[a], solids[b]), lowestGap(solids[b], solids[a])];
+      for (const [direction, [lower, upper]] of [
         [a, b],
         [b, a],
-      ]) {
-        const low = lowestGap(solids[lower], solids[upper]);
+      ].entries()) {
+        const low = gaps[direction];
         if (!low || low.gap >= MACHINE_CLEARANCE) continue;
         const ckey = `c${tracks[lower].piece}>${tracks[upper].piece}`;
         const prev = clashes.findIndex((c) => c.kind === 'clearance' && `c${c.lower}>${c.upper}` === ckey);
-        const clash: Clash = { kind: 'clearance', lower: tracks[lower].piece, upper: tracks[upper].piece, at: low.at, gap: low.gap };
+        const clash: Clash = { kind: 'clearance', lower: tracks[lower].piece, upper: tracks[upper].piece, at: low.at.clone(), gap: low.gap };
         if (prev < 0) clashes.push(clash);
         else if (low.gap < (clashes[prev] as { gap: number }).gap) clashes[prev] = clash;
         found.add(ckey);
