@@ -6,7 +6,7 @@ import { isZeroBend } from './flex';
  * Course ⇄ URL hash (spec 6): `#c=<format>.<payload>`, where the payload is
  * a compact binary course, deflate-raw compressed and base64url encoded.
  *
- * Format 6, all integers as LEB128 varints (signed ones zigzag encoded):
+ * Format 7, all integers as LEB128 varints (signed ones zigzag encoded):
  *   catalog version
  *   flags: bit0 dir = -1, bit1 has name, bit2 has split marks,
  *          bit3 has ports left open on purpose, bit4 has attachments,
@@ -21,10 +21,10 @@ import { isZeroBend } from './flex';
  *     [variant]
  *     [port]                         unless origin
  *     [piece, port]                  to / free from port
- *     [pitch, yaw (0.1°)]            bend of a `to` joint (spec 16.5)
+ *     [pitch, yaw (0.01°)]           bend of a `to` joint (spec 16.5, #86)
  *     [shift (lanes)]                sideways shift of a `to` joint (#60)
  *     [x, y, z (0.1 mm), yaw, pitch, roll (0.1°)]  free
- *     [twist (0.1°)]                 (spec 16.5)
+ *     [twist (0.01°)]                (spec 16.5, #86)
  *     [length (mm)]                  of a home-made straight (#69)
  *   [split mark count, then piece, port for each]  when flagged
  *   [open-on-purpose mark count, then piece, port for each]  when flagged (#13)
@@ -37,14 +37,16 @@ import { isZeroBend } from './flex';
  *     hose: colour, flags (bit0 closed), point count, then x, z (mm, signed) for each
  *     box: size, flags (bit0 upright), x, z (mm, signed), yaw (0.1°)]
  *
- * Format 5 is the same without the start, timer and stoppers,
+ * Format 6 is the same with bends and twists in 0.1° steps, format 5 also without the start, timer and stoppers,
  * format 4 also without lengths and attachments, format 3 also without shifts,
  * format 2 also without the open-on-purpose marks, and format 1 without
  * bends and twists too, so all still read.
  */
-export const FORMAT_VERSION = 6;
+export const FORMAT_VERSION = 7;
 /** Older formats that still read. */
-const READABLE_VERSIONS = [1, 2, 3, 4, 5, FORMAT_VERSION];
+const READABLE_VERSIONS = [1, 2, 3, 4, 5, 6, FORMAT_VERSION];
+/** The first format with bends and twists in 0.01° steps (#86). */
+const FINE_ANGLES = 7;
 export const HASH_KEY = 'c';
 
 class Writer {
@@ -62,6 +64,9 @@ class Writer {
   }
   tenths(x: number): void {
     this.int(Math.round(x * 10));
+  }
+  hundredths(x: number): void {
+    this.int(Math.round(x * 100));
   }
 }
 
@@ -86,6 +91,9 @@ class Reader {
   }
   tenths(): number {
     return this.int() / 10;
+  }
+  hundredths(): number {
+    return this.int() / 100;
   }
   take(n: number): Uint8Array {
     if (this.pos + n > this.bytes.length) throw new Error('truncated course data');
@@ -133,8 +141,8 @@ export function courseToBytes(course: Course): Uint8Array {
       w.uint(rec.to[0]);
       w.uint(rec.to[1]);
       if (bend) {
-        w.tenths(bend.pitch ?? 0);
-        w.tenths(bend.yaw ?? 0);
+        w.hundredths(bend.pitch ?? 0);
+        w.hundredths(bend.yaw ?? 0);
       }
       if (shift) w.int(shift);
     } else if ('free' in rec) {
@@ -145,7 +153,7 @@ export function courseToBytes(course: Course): Uint8Array {
       for (const x of rec.pose.pos) w.tenths(x);
       for (const x of rec.pose.rot) w.tenths(x);
     }
-    if (rec.twist) w.tenths(rec.twist);
+    if (rec.twist) w.hundredths(rec.twist);
     if (rec.length !== undefined) w.uint(rec.length);
   }
   for (const marks of [cuts, intended]) {
@@ -194,8 +202,10 @@ export function courseToBytes(course: Course): Uint8Array {
   return new Uint8Array(w.bytes);
 }
 
-export function courseFromBytes(bytes: Uint8Array): Course {
+export function courseFromBytes(bytes: Uint8Array, version = FORMAT_VERSION): Course {
   const r = new Reader(bytes);
+  /** A bend or twist, in the steps of `version`. */
+  const angle = () => (version >= FINE_ANGLES ? r.hundredths() : r.tenths());
   const catalog = r.uint();
   if (catalog > CATALOG_VERSION) throw new Error('このコースは新しい版のアプリで作られています');
   const flags = r.uint();
@@ -217,7 +227,7 @@ export function courseFromBytes(bytes: Uint8Array): Course {
       if (anchor === 1) {
         rec = { part, port, to: [r.uint(), r.uint()] };
         if (head & 8) {
-          const [pitch, yaw] = [r.tenths(), r.tenths()];
+          const [pitch, yaw] = [angle(), angle()];
           rec.bend = {};
           if (pitch) rec.bend.pitch = pitch;
           if (yaw) rec.bend.yaw = yaw;
@@ -231,7 +241,7 @@ export function courseFromBytes(bytes: Uint8Array): Course {
       }
     }
     if (variant !== undefined) rec.variant = variant;
-    if (head & 16) rec.twist = r.tenths();
+    if (head & 16) rec.twist = angle();
     if (head & 64) rec.length = r.uint();
     course.pieces.push(rec);
   }
@@ -309,7 +319,7 @@ export async function decodeCourse(value: string): Promise<Course> {
   if (dot < 0 || !Number.isInteger(version)) throw new Error('コースURLの形式が正しくありません');
   if (!READABLE_VERSIONS.includes(version)) throw new Error(`未対応のコース形式です（版 ${version}）`);
   const bytes = await pipe(fromBase64Url(value.slice(dot + 1)), new DecompressionStream('deflate-raw'));
-  return courseFromBytes(bytes);
+  return courseFromBytes(bytes, version);
 }
 
 /** `#c=...` for a course, or an empty string for an empty course. */
