@@ -1,0 +1,16 @@
+# Rapier の実験（#125）
+
+Rapier で再現できる物理現象を確かめる小さな実験。アプリには入れず、マージもしない。結果と判定は #125 にまとめてある。
+
+```
+npx vitest run research/rapier --silent=false
+```
+
+| ファイル | 項目 |
+| --- | --- |
+| `thrust.test.ts` | 1. スラスト角（回るローラー、コースでの走行、力で足す回避策） |
+| `mass-damper.test.ts` | 2. マスダンパー、3. ボールリンクマスダンパー |
+| `slide-damper.test.ts` | 4. スライドダンパー |
+| `gears.test.ts` | 5. ギヤ、ジャイロ効果、回転の速さの上限 |
+| `motor-position.test.ts` | 6. モーター位置 |
+| `roller-forces.test.ts` | 7. ローラーにかかる力 |
