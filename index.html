@@ -73,7 +73,7 @@
       #panel-fold .arrow { display: inline-block; transition: transform 0.25s ease; }
       body.panel-folded #panel-fold .arrow { transform: rotate(180deg); }
       @media (prefers-reduced-motion: reduce) { body, body.panel-folded #panel, #panel-fold .arrow { transition: none; } }
-      #palette button, #templates button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; font-size: 12px; line-height: 1.3; text-align: center; touch-action: none; user-select: none; -webkit-user-select: none; }
+      #palette button, #templates button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; font-size: 12px; line-height: 1.3; text-align: center; touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
       #palette button.dim, #templates button.dim { opacity: 0.55; }
       #palette .part-icon, #templates .part-icon { width: 100%; max-width: 64px; aspect-ratio: 1; pointer-events: none; }
       body.dragging-part, body.dragging-part * { cursor: grabbing !important; }
@@ -190,6 +190,8 @@
         #panel-fold .arrow { transform: rotate(90deg); }
         /* Clear of the tab along the bottom of the editor. */
         #course-info, #fit { bottom: 34px; }
+        /* The AR button goes top left, clear of the tab, the course info and 全体を表示 (#117). */
+        #view3d .ar-button { top: 10px !important; bottom: auto !important; left: 10px !important; }
         body.panel-folded #panel-fold .arrow { transform: rotate(-90deg); }
         #toolbar h1 { display: none; }
       }

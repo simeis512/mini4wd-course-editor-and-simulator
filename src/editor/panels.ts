@@ -28,6 +28,8 @@ export interface PaletteHandlers {
   down(e: PointerEvent, item: PaletteItem): void;
   move(e: PointerEvent): void;
   up(e: PointerEvent, cancelled: boolean): void;
+  /** Whether a finger is dragging a part out, so the list must not scroll (#114). */
+  holding(): boolean;
 }
 
 /** A button that adds `item` by a click, or by dragging it onto the course (#40, #41). */
@@ -44,6 +46,9 @@ function paletteButton(handlers: PaletteHandlers, item: PaletteItem, icon: SVGSV
   b.addEventListener('pointermove', (e) => handlers.move(e));
   b.addEventListener('pointerup', (e) => handlers.up(e, false));
   b.addEventListener('pointercancel', (e) => handlers.up(e, true));
+  // The list scrolls under a finger (touch-action: pan-y) until it holds a part (#114).
+  b.addEventListener('touchmove', (e) => handlers.holding() && e.preventDefault(), { passive: false });
+  b.addEventListener('contextmenu', (e) => e.preventDefault());
   return b;
 }
 
