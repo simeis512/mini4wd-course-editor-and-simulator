@@ -16,8 +16,16 @@ interface BenchApp {
 }
 
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+const WARMUP = 5;
+const SAMPLES = 20;
 // A timer also progresses when an automated browser window is occluded.
 const frame = () => new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+async function loadFixture(app: BenchApp, course: Course, mode: '2d' | '3d'): Promise<void> {
+  app.load(structuredClone(course), false);
+  app.setMode(mode);
+  await frame();
+}
 
 export function installBench(editor: EditorApp): void {
   const app = editor as unknown as BenchApp;
@@ -39,35 +47,31 @@ export function installBench(editor: EditorApp): void {
           const samples: Record<string, number>[] = [];
           const drags: Record<string, number>[] = [];
           const warmDrags: Record<string, number>[] = [];
-          for (let i = 0; i < 25; i++) {
-            app.load(structuredClone(course), false);
-            app.setMode(mode);
-            await frame();
+          for (let i = 0; i < WARMUP + SAMPLES; i++) {
+            await loadFixture(app, course, mode);
             performance.clearMeasures();
             app.commit(structuredClone(next), null);
             const sample = entries();
             // Wait for asynchronous URL encoding and a rendered frame outside refresh timing.
             await frame();
-            if (i >= 5) samples.push(sample);
-            app.load(structuredClone(course), false);
-            app.setMode(mode);
-            await frame();
+            if (i >= WARMUP) samples.push(sample);
+            await loadFixture(app, course, mode);
             const point = app.view.clientOf(x, 0, z)!;
             const drag = app.paletteDrag as unknown as { paletteDrag: unknown };
             drag.paletteDrag = { item: { part: 'straight' }, pointerId: 1, from: { x: 0, y: 0 }, active: true, preview: null };
             performance.clearMeasures();
             app.paletteDrag.move({ pointerId: 1, clientX: point[0], clientY: point[1], shiftKey: false } as PointerEvent);
-            if (i >= 5) drags.push(entries());
+            if (i >= WARMUP) drags.push(entries());
             performance.clearMeasures();
             app.paletteDrag.move({ pointerId: 1, clientX: point[0] + 0.5, clientY: point[1], shiftKey: false } as PointerEvent);
-            if (i >= 5) warmDrags.push(entries());
+            if (i >= WARMUP) warmDrags.push(entries());
             drag.paletteDrag = null;
           }
           const summarize = (data: Record<string, number>[]) => Object.fromEntries(
             [...new Set(data.flatMap(Object.keys))].map((key) => [key, Number(median(data.map((s) => s[key] ?? 0)).toFixed(3))]),
           );
           results.push({ size, mode, refresh: summarize(samples), drag: summarize(drags), warmDrag: summarize(warmDrags) });
-          output.textContent = JSON.stringify({ browser: navigator.userAgent, samples: 20, results }, null, 2);
+          output.textContent = JSON.stringify({ browser: navigator.userAgent, samples: SAMPLES, results }, null, 2);
           await frame();
         }
       }
