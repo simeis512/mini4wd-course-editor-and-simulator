@@ -14,3 +14,10 @@ npx vitest run research/rapier --silent=false
 | `gears.test.ts` | 5. ギヤ、ジャイロ効果、回転の速さの上限 |
 | `motor-position.test.ts` | 6. モーター位置 |
 | `roller-forces.test.ts` | 7. ローラーにかかる力 |
+| `tunnelling.test.ts` | A. 速いときにフェンスをすり抜けないか |
+| `tyre-grip.test.ts` | B. タイヤ（レイキャスト）のグリップの出方 |
+| `determinism.test.ts`, `determinism.html` | C. 同じ設定で同じ結果になるか（Node とブラウザ）。`npm run dev` で開いた `/research/rapier/determinism.html` を別の端末で見比べる |
+| `cost.test.ts` | D. 部品や台数を増やしたときの計算時間 |
+| `ray-tyres.test.ts` | E. タイヤが線であることの限界 |
+| `sensitivity.test.ts` | F. 仮の値がラップタイムにどれだけ効くか |
+| `soft-chassis.test.ts` | G. 空気抵抗、やわらかい物体でシャーシのたわみ |

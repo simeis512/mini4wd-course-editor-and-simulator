@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width" />
+<title>Rapier determinism</title>
+<p>Compare the line below with the one in issue #125 (Node and Chromium on x86 gave the same). The time is how long 3 simulated seconds took here.</p>
+<pre id="out" style="white-space: pre-wrap">running…</pre>
+<script type="module">
+  import { fingerprint } from './determinism-run.ts';
+  const t0 = performance.now();
+  fingerprint().then((f) => {
+    const ms = performance.now() - t0;
+    document.getElementById('out').textContent = `${f}\n\n${ms.toFixed(0)} ms for 3 simulated seconds (${(ms / 3000).toFixed(3)} ms a step)`;
+  });
+</script>
