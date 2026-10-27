@@ -180,7 +180,7 @@ export class EditorApp {
         get laps() { return app.checks.laps; },
         name: () => this.courseTitle(),
         url: () => this.hashSync.url(),
-        get fileName() { return fileName(app.course); },
+        get fileName() { return fileName(app.course.name); },
       },
       setHeightView: (view) => this.setHeightView(view),
       renderCourseInfo: () => renderCourseInfo(this.course, this.layout, this.checks),
@@ -194,7 +194,7 @@ export class EditorApp {
         if (await this.library.confirmReplace('新しく作る')) this.load(emptyCourse(), true);
       },
       copyUrl: () => this.hashSync.copyUrl(),
-      exportJson: () => exportJson(this.course),
+      exportJson: async () => exportJson(this.course, await this.courseTitle()),
       importJson: (file) => this.importJson(file),
       fit: () => this.view.fit(),
       edit: (action) => this.edit(action),

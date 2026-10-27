@@ -8,6 +8,7 @@ import { bindLevelTools, type HeightView } from './levels';
 import { POSE_FIELDS } from './panels';
 import { bindAbout } from './notice';
 import { bindShopping } from './shopping';
+import { bindModelExport } from './model-export';
 import { bindQr } from './qr';
 import { ShareImage, type ShareHost } from './share-image';
 import { bindSidePanel } from './side-panel';
@@ -31,7 +32,7 @@ export interface AppUiHost {
   redo(): void;
   newCourse(): Promise<void>;
   copyUrl(): Promise<void>;
-  exportJson(): void;
+  exportJson(): Promise<void>;
   importJson(file: File): Promise<void>;
   fit(): void;
   edit(action: SelectedAction): void;
@@ -66,8 +67,9 @@ export function bindAppUi(host: AppUiHost): ShareImage {
   $('new').addEventListener('click', () => void host.newCourse());
   $('copy-url').addEventListener('click', () => void host.copyUrl());
   bindQr(host.sharing);
+  bindModelExport(host.sharing);
   const share = new ShareImage(host.sharing);
-  $('export').addEventListener('click', () => host.exportJson());
+  $('export').addEventListener('click', () => void host.exportJson());
   const file = $<HTMLInputElement>('import-file');
   $('import').addEventListener('click', () => file.click());
   file.addEventListener('change', () => {
