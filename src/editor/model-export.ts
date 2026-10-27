@@ -17,7 +17,7 @@ import {
 } from '../course/model-export';
 import { threeMf } from '../course/threemf';
 import { $, toast } from './dom';
-import { download } from './share';
+import { download, fileName } from './share';
 
 // Saving the course as a 3D model (#89): GLB at full size for VRChat and
 // other 3D tools, STL / 3MF shrunk for printing. The button sits in the
@@ -25,8 +25,8 @@ import { download } from './share';
 
 export interface ModelHost {
   readonly layout: Layout;
-  /** Names the saved file. */
-  readonly fileName: string;
+  /** The course's name (its own, or the save it is or matches), which names the saved file. */
+  name(): Promise<string>;
 }
 
 type Format = 'glb' | 'stl' | '3mf';
@@ -162,7 +162,7 @@ export function bindModelExport(host: ModelHost): void {
     const save = $<HTMLButtonElement>('model-save');
     save.disabled = true;
     try {
-      const name = host.fileName;
+      const name = fileName(await host.name());
       if (s.format === 'glb') {
         download(new Blob([await glb(modelSolids(host.layout, s.includes))], { type: 'model/gltf-binary' }), `${name}.glb`);
       } else {

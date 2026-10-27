@@ -32,7 +32,7 @@ export interface AppUiHost {
   redo(): void;
   newCourse(): Promise<void>;
   copyUrl(): Promise<void>;
-  exportJson(): void;
+  exportJson(): Promise<void>;
   importJson(file: File): Promise<void>;
   fit(): void;
   edit(action: SelectedAction): void;
@@ -69,7 +69,7 @@ export function bindAppUi(host: AppUiHost): ShareImage {
   bindQr(host.sharing);
   bindModelExport(host.sharing);
   const share = new ShareImage(host.sharing);
-  $('export').addEventListener('click', () => host.exportJson());
+  $('export').addEventListener('click', () => void host.exportJson());
   const file = $<HTMLInputElement>('import-file');
   $('import').addEventListener('click', () => file.click());
   file.addEventListener('change', () => {
