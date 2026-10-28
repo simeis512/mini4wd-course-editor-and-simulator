@@ -7,6 +7,7 @@ import { SNAP_STEP } from './drag';
 import { bindLevelTools, type HeightView } from './levels';
 import { POSE_FIELDS } from './panels';
 import { bindAbout } from './notice';
+import { bindFullscreen } from './fullscreen';
 import { bindShopping } from './shopping';
 import { bindModelExport } from './model-export';
 import { bindQr } from './qr';
@@ -50,6 +51,7 @@ export function readRaiseFields() {
 
 export function bindAppUi(host: AppUiHost): ShareImage {
   bindAbout();
+  bindFullscreen();
   bindSidePanel();
   bindLevelTools((view) => host.setHeightView(view));
   bindTurnTools(host.top);
