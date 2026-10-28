@@ -1,7 +1,7 @@
 import { Matrix4, Quaternion, Vector3 } from 'three';
-import { isLevel, layoutCourse, movingGroup, shiftedFrame, type Course, type Layout, type PortRef } from './course';
-import { moveGroup, setBend, setTwist } from './edit';
-import { facingError, FACE } from './geometry';
+import { anchorFrame, anchorRef, isLevel, placementOf, layoutCourse, movingGroup, shiftedFrame, type Course, type Layout, type PortRef } from './course';
+import { freeRec, moveGroup, setBend, setTwist } from './edit';
+import { exactPose, facingError, FACE } from './geometry';
 
 // Closing a loop by force (#86): the two open ends of a group are brought
 // together by bending many joints and twisting many pieces a very little,
@@ -122,6 +122,58 @@ function inLoop(layout: Layout, joint: Layout['joints'][number]): boolean {
     }
   }
   return false;
+}
+
+type Path = NonNullable<ReturnType<typeof pathBetween>>;
+
+/** The pieces `i` is placed from, nearest first, itself included. */
+function anchorChain(course: Course, i: number): number[] {
+  const chain = [i];
+  for (let ref = anchorRef(course.pieces[i]); ref; ref = anchorRef(course.pieces[ref[0]])) chain.push(ref[0]);
+  return chain;
+}
+
+/**
+ * The free piece to move so `cur` follows `prev` across the joint between
+ * them, when `cur` is not placed from `prev`: the furthest piece `cur` is
+ * placed from that `prev` is not. Null when one is placed from the other
+ * through that joint, or the two meet round a loop of stored links.
+ */
+function follower(course: Course, prev: number, cur: number): number | null {
+  const behind = new Set(anchorChain(course, prev));
+  if (behind.has(cur)) return null;
+  const chain = anchorChain(course, cur);
+  const k = chain.findIndex((i) => behind.has(i));
+  const top = chain[(k < 0 ? chain.length : k) - 1];
+  return 'free' in course.pieces[top] ? top : null;
+}
+
+/**
+ * `course` with its free pieces on the path moved so every joint on it
+ * keeps the meeting it had in `base`: a course built in parts and put
+ * together (a piece placed in the world, or a closure where two parts
+ * meet) then bends as one chain (#86).
+ */
+function follow(course: Course, base: Layout, path: Path): Course {
+  let next = course;
+  let layout = layoutCourse(next, base);
+  path.joints.forEach((j, k) => {
+    const [prev, cur] = [path.pieces[k], path.pieces[k + 1]];
+    const mover = follower(next, prev, cur);
+    if (mover === null) return;
+    const [pp, pc] = j.a.piece === prev ? [j.a, j.b] : [j.b, j.a];
+    const want = layout.pieces[prev].ports[pp.port].clone().multiply(base.pieces[prev].ports[pp.port].clone().invert()).multiply(base.pieces[cur].ports[pc.port]);
+    const delta = want.multiply(layout.pieces[cur].ports[pc.port].clone().invert());
+    if (delta.equals(new Matrix4())) return;
+    // Unrounded, unlike a pose the user sets: the course stores it to 0.1mm / 0.1° only when written out.
+    const { base: from } = placementOf(next.pieces[mover]);
+    const frame = from ? layout.pieces[from.piece].ports[from.port] : new Matrix4();
+    const pose = exactPose(frame.clone().invert().multiply(delta).multiply(anchorFrame(layout, mover)));
+    next = { ...next, pieces: next.pieces.slice() };
+    next.pieces[mover] = freeRec(next.pieces[mover], from, pose);
+    layout = layoutCourse(next, layout);
+  });
+  return next;
 }
 
 /** A piece lying on the floor: every port level and at floor height. */
@@ -316,7 +368,9 @@ const FALLOFF = 3;
 /** Step for the finite differences, deg. */
 const PROBE = 0.01;
 /** Rounds of re-linearising. */
-const ROUNDS = 6;
+const ROUNDS = 12;
+/** Most times a step is halved when it makes things worse. */
+const HALVINGS = 5;
 
 /**
  * Bring the open ends of `piece`'s group together (#86): every joint on the
@@ -360,8 +414,9 @@ export function closeLoop(course: Course, piece: number, step: number): CloseRes
   if (!knobs.length) return fail(ends);
 
   let x = new Array<number>(knobs.length).fill(0);
-  const at = (v: readonly number[]) => residual(layoutCourse(turned(course, knobs, v), base), ends, floor, base);
+  const at = (v: readonly number[]) => residual(layoutCourse(follow(turned(course, knobs, v), base, path), base), ends, floor, base);
   let model: Model | null = null;
+  const cost = (v: readonly number[], r: readonly number[]) => r.reduce((s, e) => s + e * e, 0) + v.reduce((s, y, k) => s + weights[k] * y * y, 0);
   for (let pass = 0; pass < ROUNDS; pass++) {
     const r = at(x);
     // Columns of the Jacobian by finite differences.
@@ -371,7 +426,14 @@ export function closeLoop(course: Course, piece: number, step: number): CloseRes
       return at(probe).map((v, m) => (v - r[m]) / PROBE);
     });
     model = new Model(r.map((_, m) => cols.map((col) => col[m])), r, x, weights);
-    const next = model.solve(CLOSE_LOOP_LIMIT);
+    const best = model.solve(CLOSE_LOOP_LIMIT);
+    // The straight-line model can overshoot where the course bends a lot (a spiral): go part way while that is better.
+    const now = cost(x, r);
+    let next = best;
+    for (let t = 1, half = 0; half < HALVINGS; half++, t /= 2) {
+      next = x.map((v, k) => v + t * (best[k] - v));
+      if (cost(next, at(next)) < now) break;
+    }
     const step = Math.max(...next.map((v, k) => Math.abs(v - x[k])));
     x = next;
     if (step < 1e-4) break;
@@ -392,7 +454,7 @@ export function closeLoop(course: Course, piece: number, step: number): CloseRes
       next = setBend(next, { piece: p, port: q }, { piece: k.piece, port: rec.port! }, { ...rec.bend, [k.what]: (rec.bend?.[k.what] ?? 0) + x[n] });
     }
   });
-  next = keepMiddle(next, base, path.pieces[Math.floor(path.pieces.length / 2)], piece);
+  next = keepMiddle(follow(next, base, path), base, path.pieces[Math.floor(path.pieces.length / 2)], piece);
   const done = layoutCourse(next);
   const err = endError(done, ends.a, ends.b, ends.shift) ?? ends;
   if (err.distance > CLOSE_LOOP_DISTANCE || err.angle > CLOSE_LOOP_ANGLE) return fail(err);
@@ -410,5 +472,5 @@ function keepMiddle(course: Course, base: Layout, middle: number, piece: number)
   const p = new Vector3().setFromMatrixPosition(now.pieces[middle].matrix).applyMatrix4(level);
   const goal = new Vector3().setFromMatrixPosition(base.pieces[middle].matrix);
   level.setPosition(goal.x - p.x, 0, goal.z - p.z);
-  return moveGroup(course, movingGroup(now, piece), level);
+  return moveGroup(course, movingGroup(now, piece), level, exactPose);
 }

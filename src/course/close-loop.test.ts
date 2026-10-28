@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
-import { decodeCourse } from './codec';
+import { decodeCourse, encodeCourse } from './codec';
 import { layoutCourse, type Course } from './course';
 import { chain } from './presets';
 import { CLOSE_LOOP_ANGLE, CLOSE_LOOP_DISTANCE, CLOSE_LOOP_LIMIT, CLOSE_LOOP_REACH_PER_PIECE, closeLoop, closeLoopReach, loopEnds } from './close-loop';
@@ -134,5 +134,18 @@ describe('closeLoop on a course with a lane change (owner 2026-10-28)', () => {
     (course.pieces[36] as { length?: number }).length = 260;
     expect(loopEnds(layoutCourse(course), 0)!.distance).toBeCloseTo(110.6, 1);
     expect(closeLoop(course, 0, 0.01).ok).toBe(true);
+  });
+});
+
+describe('closeLoop on a course built in parts (owner 2026-10-28)', () => {
+  // A spiral up, a raised run and a slope down; the far part is placed in the world and meets the rest at closures, 88mm off.
+  const url = '7.JY25DoFhFETPfPZ9X37Lj8IWhYhH8AqeS6cW0ak8AK030Wn1MjQnJ5mZe8UKFAk9Ay8pkthxDIoU2HKyJNhwsSTZcrak2PwlzfofZX4RObJ8AoicEHmjIImiJJVsZSRVbFUkara60XC5aWvZ2kbHs64R-WjPi76DgRR4P8I1HO86DMgoQSy47YGkiP1l6OHY9YnXsW-PjKmDmW3u3sK25As';
+
+  it('bends the parts as one and stays closed once written to a URL and read back', async () => {
+    const result = closeLoop(await decodeCourse(url), 0, 0.01);
+    if (!result.ok) throw new Error(`did not close: ${JSON.stringify(result)}`);
+    const back = layoutCourse(await decodeCourse(await encodeCourse(result.course)));
+    expect(back.open).toEqual([]);
+    expect(back.closures).toHaveLength(3);
   });
 });
