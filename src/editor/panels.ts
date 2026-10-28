@@ -7,7 +7,7 @@ import { asLink, bendable, joinableNear } from '../course/joining';
 import { previewRun } from '../course/raise';
 import { propOutline, propPoint } from '../course/props';
 import { getTemplate, TEMPLATES } from '../course/templates';
-import { closeLoopReach, loopEnds } from '../course/close-loop';
+import { CLOSE_LOOP_CAREFUL_PER_PIECE, CLOSE_LOOP_LIMIT, closeLoopReach, loopEnds } from '../course/close-loop';
 import { renderAttachments } from './attach';
 import { $ } from './dom';
 import { cornerSpot, rectAround, type Rect } from './float';
@@ -127,6 +127,8 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
     const reach = closeLoopReach(layout, s.index);
     const near = !!ends && ends.distance <= reach;
     $<HTMLButtonElement>('close-loop').disabled = !near;
+    $('close-loop-warn').hidden = !near || ends.distance <= closeLoopReach(layout, s.index, CLOSE_LOOP_CAREFUL_PER_PIECE);
+    $('close-loop-warn').textContent = `ずれが大きいので、ジョイントを大きめ（1 か所 ${CLOSE_LOOP_LIMIT}° まで）に曲げます。閉じたあと形を確かめてください`;
     $('close-loop-info').textContent = !ends
       ? layout.open.some((r) => group.has(r.piece))
         ? '開いた口がちょうど 2 つのときに使えます'

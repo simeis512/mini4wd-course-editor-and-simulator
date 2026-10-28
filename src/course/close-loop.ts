@@ -9,13 +9,15 @@ import { facingError, FACE } from './geometry';
 // close is pushed together. Once they face each other they meet as an
 // ordinary closure (spec 5.3).
 
-/** Most a closing may add to one joint's pitch or yaw, or one piece's twist, deg (#86 決定事項, provisional). */
-export const CLOSE_LOOP_LIMIT = 0.15;
+/** Most a closing may add to one joint's pitch or yaw, or one piece's twist, deg (#86 決定事項, raised by the owner 2026-10-28, provisional). */
+export const CLOSE_LOOP_LIMIT = 0.3;
 /** How near the ends must come, mm and deg (#86 決定事項, provisional). */
 export const CLOSE_LOOP_DISTANCE = 0.5;
 export const CLOSE_LOOP_ANGLE = 0.1;
-/** How far apart the ends may be for closing to be offered, mm per piece of the group (#86, owner 2026-10-26, provisional). */
-export const CLOSE_LOOP_REACH_PER_PIECE = 1;
+/** How far apart the ends may be for closing to be offered, mm per piece of the group (#86, owner 2026-10-28, provisional). */
+export const CLOSE_LOOP_REACH_PER_PIECE = 3;
+/** Beyond this many mm per piece, closing bends noticeably and the menu says so (#86, owner 2026-10-28, provisional). */
+export const CLOSE_LOOP_CAREFUL_PER_PIECE = 2;
 /** Shifts tried when the group already has shifted joints (#86 決定事項 8), as for closures (spec 5.3, #60). */
 const SHIFTS = [0, -1, 1, -2, 2];
 /** A piece is on the floor when all its ports are this near the floor, mm. */
@@ -59,9 +61,9 @@ export function loopEnds(layout: Layout, piece: number): LoopEnds | null {
   return best;
 }
 
-/** How far apart the ends of `piece`'s group may be for closing to be offered, mm (#86): `CLOSE_LOOP_REACH_PER_PIECE` per piece. */
-export function closeLoopReach(layout: Layout, piece: number): number {
-  return movingGroup(layout, piece).size * CLOSE_LOOP_REACH_PER_PIECE;
+/** How far apart the ends of `piece`'s group may be for closing to be offered, mm (#86): `perPiece` mm per piece. */
+export function closeLoopReach(layout: Layout, piece: number, perPiece = CLOSE_LOOP_REACH_PER_PIECE): number {
+  return movingGroup(layout, piece).size * perPiece;
 }
 
 const weighted = (e: { distance: number; angle: number }) => e.distance + ANGLE_WEIGHT * e.angle;

@@ -3,7 +3,7 @@ import { Vector3 } from 'three';
 import { decodeCourse } from './codec';
 import { layoutCourse, type Course } from './course';
 import { chain } from './presets';
-import { CLOSE_LOOP_ANGLE, CLOSE_LOOP_DISTANCE, CLOSE_LOOP_LIMIT, closeLoop, closeLoopReach, loopEnds } from './close-loop';
+import { CLOSE_LOOP_ANGLE, CLOSE_LOOP_DISTANCE, CLOSE_LOOP_LIMIT, CLOSE_LOOP_REACH_PER_PIECE, closeLoop, closeLoopReach, loopEnds } from './close-loop';
 
 /** A long oval: `n` straights each side and four 45° curves at each end, opened by bending the joint into piece `at` by `yaw` deg. */
 function opened(n: number, yaw: number, at = 1): Course {
@@ -33,14 +33,15 @@ describe('loopEnds (#86)', () => {
     expect(ends.angle).toBeCloseTo(3.1, 3);
   });
 
-  it('offers closing only within 1mm per piece of the group (owner 2026-10-26)', () => {
+  it('offers closing only within a few mm per piece of the group (owner 2026-10-26, 2026-10-28)', () => {
     // 60 pieces, ends 29mm apart.
     const big = layoutCourse(opened(26, 3.1));
-    expect(closeLoopReach(big, 5)).toBe(60);
+    expect(closeLoopReach(big, 5, 1)).toBe(60);
     expect(loopEnds(big, 5)!.distance).toBeLessThan(60);
     // 24 pieces, the same bend near the start leaves them about as far apart.
     const small = layoutCourse(opened(8, 3.1));
-    expect(closeLoopReach(small, 5)).toBe(24);
+    expect(closeLoopReach(small, 5, 1)).toBe(24);
+    expect(closeLoopReach(small, 5)).toBe(24 * CLOSE_LOOP_REACH_PER_PIECE);
     expect(loopEnds(small, 5)!.distance).toBeGreaterThan(24);
   });
 
@@ -99,7 +100,7 @@ describe('closeLoop (#86)', () => {
   });
 
   it('changes nothing and says how far is left when the ends are too far apart', () => {
-    const far = closeLoop(opened(8, 6), 0, 0.01);
+    const far = closeLoop(opened(8, 12), 0, 0.01);
     expect(far.ok).toBe(false);
     if (far.ok) return;
     expect(far.reason).toBe('too-far');
@@ -126,5 +127,12 @@ describe('closeLoop on a course with a lane change (owner 2026-10-28)', () => {
     expect(after.closures).toHaveLength(3);
     const start = (c: Course) => new Vector3().setFromMatrixPosition(layoutCourse(c).pieces[0].matrix);
     expect(start(result.course).distanceTo(start(course))).toBeLessThan(2);
+  });
+
+  it('closes it with the free straight 85mm shorter, 3mm per piece (owner 2026-10-28)', async () => {
+    const course = await decodeCourse(url);
+    (course.pieces[36] as { length?: number }).length = 260;
+    expect(loopEnds(layoutCourse(course), 0)!.distance).toBeCloseTo(110.6, 1);
+    expect(closeLoop(course, 0, 0.01).ok).toBe(true);
   });
 });
