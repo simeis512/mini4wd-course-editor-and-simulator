@@ -211,7 +211,7 @@ function turnBetween(p: Quaternion, q: Quaternion): Vector3 {
  * (mm, and its turn ×`ANGLE_WEIGHT`), then each floor piece's ports off the
  * floor and leaning (#86 決定事項 5: floor pieces stay on the floor).
  */
-function residual(layout: Layout, ends: LoopEnds, floor: readonly number[], base: Layout): number[] {
+function residual(layout: Layout, ends: LoopEnds, floor: readonly number[]): number[] {
   const { a, b, shift } = ends;
   const [pa, pb] = [layout.pieces[a.piece], layout.pieces[b.piece]];
   const want = shiftedFrame(pa.ports[a.port], pa.part.ports[a.port], pb.part.ports[b.port], shift).multiply(FACE);
@@ -221,12 +221,11 @@ function residual(layout: Layout, ends: LoopEnds, floor: readonly number[], base
   out.push(...turn.multiplyScalar(ANGLE_WEIGHT).toArray());
   const up = new Vector3();
   for (const i of floor) {
-    layout.pieces[i].ports.forEach((p, n) => {
-      const was = base.pieces[i].ports[n];
+    // On the floor and level, not just as they were: a piece a hair off it is put back on it (#131).
+    for (const p of layout.pieces[i].ports) {
       up.set(0, 1, 0).transformDirection(p);
-      const upWas = new Vector3(0, 1, 0).transformDirection(was);
-      out.push(p.elements[13] - was.elements[13], (up.x - upWas.x) / DEG * ANGLE_WEIGHT, (up.z - upWas.z) / DEG * ANGLE_WEIGHT);
-    });
+      out.push(p.elements[13], (up.x / DEG) * ANGLE_WEIGHT, (up.z / DEG) * ANGLE_WEIGHT);
+    }
   }
   return out;
 }
@@ -414,7 +413,7 @@ export function closeLoop(course: Course, piece: number, step: number): CloseRes
   if (!knobs.length) return fail(ends);
 
   let x = new Array<number>(knobs.length).fill(0);
-  const at = (v: readonly number[]) => residual(layoutCourse(follow(turned(course, knobs, v), base, path), base), ends, floor, base);
+  const at = (v: readonly number[]) => residual(layoutCourse(follow(turned(course, knobs, v), base, path), base), ends, floor);
   let model: Model | null = null;
   const cost = (v: readonly number[], r: readonly number[]) => r.reduce((s, e) => s + e * e, 0) + v.reduce((s, y, k) => s + weights[k] * y * y, 0);
   for (let pass = 0; pass < ROUNDS; pass++) {
