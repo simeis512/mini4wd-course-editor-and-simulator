@@ -21,3 +21,4 @@ npx vitest run research/rapier --silent=false
 | `ray-tyres.test.ts` | E. タイヤが線であることの限界 |
 | `sensitivity.test.ts` | F. 仮の値がラップタイムにどれだけ効くか |
 | `soft-chassis.test.ts` | G. 空気抵抗、やわらかい物体でシャーシのたわみ |
+| `flexible-fence.test.ts` | H. コースのフェンスのしなり |
