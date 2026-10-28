@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
+import { decodeCourse } from './codec';
 import { layoutCourse, type Course } from './course';
 import { chain } from './presets';
-import { CLOSE_LOOP_ANGLE, CLOSE_LOOP_DISTANCE, CLOSE_LOOP_LIMIT, closeLoop, closeLoopOffer, loopEnds } from './close-loop';
+import { CLOSE_LOOP_ANGLE, CLOSE_LOOP_DISTANCE, CLOSE_LOOP_LIMIT, closeLoop, closeLoopReach, loopEnds } from './close-loop';
 
 /** A long oval: `n` straights each side and four 45° curves at each end, opened by bending the joint into piece `at` by `yaw` deg. */
 function opened(n: number, yaw: number, at = 1): Course {
@@ -34,11 +35,13 @@ describe('loopEnds (#86)', () => {
 
   it('offers closing only within 1mm per piece of the group (owner 2026-10-26)', () => {
     // 60 pieces, ends 29mm apart.
-    expect(closeLoopOffer(layoutCourse(opened(26, 3.1)), 5)).not.toBeNull();
+    const big = layoutCourse(opened(26, 3.1));
+    expect(closeLoopReach(big, 5)).toBe(60);
+    expect(loopEnds(big, 5)!.distance).toBeLessThan(60);
     // 24 pieces, the same bend near the start leaves them about as far apart.
     const small = layoutCourse(opened(8, 3.1));
+    expect(closeLoopReach(small, 5)).toBe(24);
     expect(loopEnds(small, 5)!.distance).toBeGreaterThan(24);
-    expect(closeLoopOffer(small, 5)).toBeNull();
   });
 
   it('has none for a loop that already closes', () => {
@@ -71,6 +74,14 @@ describe('closeLoop (#86)', () => {
     expect(all.filter((v) => Math.abs(v) > 1e-9).length).toBeGreaterThan(20);
   });
 
+  it('bends most near the open ends and least far round from them (owner 2026-10-28)', () => {
+    if (!result.ok) throw new Error('did not close');
+    const all = added(course, result.course);
+    // Three values per piece; the ends are pieces 0 and 59, the far side is around 30.
+    const sum = (from: number, to: number) => all.slice(from * 3, to * 3).reduce((t, v) => t + Math.abs(v), 0);
+    expect(sum(0, 10) + sum(50, 60)).toBeGreaterThan(2 * sum(25, 35));
+  });
+
   it('keeps the floor pieces on the floor and level, and the middle where it was', () => {
     if (!result.ok) throw new Error('did not close');
     const [before, after] = [layoutCourse(course), layoutCourse(result.course)];
@@ -98,5 +109,22 @@ describe('closeLoop (#86)', () => {
   it('says when there are not exactly two open ends', () => {
     const r = closeLoop(opened(4, 0), 0, 0.01);
     expect(r).toMatchObject({ ok: false, reason: 'no-ends' });
+  });
+});
+
+describe('closeLoop on a course with a lane change (owner 2026-10-28)', () => {
+  // A free straight at the end leaves a 25.6mm gap; pieces 1–3 are a lane change, closed inside by its crossing.
+  const url = '7.FcznDcJAEAXhNzZnTDAGk4NJEoXQfwV0g-bP6Dvt7ZJPUkhoCBSogNSBTFQxDcBUtQFmaq4Waqk6tXKt9_Pa58bBoLZqR0gSclBHczJnczFXc_PAaO6uPczTy3v1pv3mlV_1Bw';
+
+  it('leaves the joints inside the lane change alone and keeps the start nearly still', async () => {
+    const course = await decodeCourse(url);
+    const result = closeLoop(course, 0, 0.01);
+    if (!result.ok) throw new Error('did not close');
+    const all = added(course, result.course);
+    expect(all.slice(2 * 3, 4 * 3).every((v) => v === 0)).toBe(true);
+    const after = layoutCourse(result.course);
+    expect(after.closures).toHaveLength(3);
+    const start = (c: Course) => new Vector3().setFromMatrixPosition(layoutCourse(c).pieces[0].matrix);
+    expect(start(result.course).distanceTo(start(course))).toBeLessThan(2);
   });
 });

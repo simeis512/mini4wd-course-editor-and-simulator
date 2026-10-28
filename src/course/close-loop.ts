@@ -59,10 +59,9 @@ export function loopEnds(layout: Layout, piece: number): LoopEnds | null {
   return best;
 }
 
-/** The open ends of `piece`'s group when they are near enough for closing to be offered (#86): within `CLOSE_LOOP_REACH_PER_PIECE` mm per piece. */
-export function closeLoopOffer(layout: Layout, piece: number): LoopEnds | null {
-  const ends = loopEnds(layout, piece);
-  return ends && ends.distance <= movingGroup(layout, piece).size * CLOSE_LOOP_REACH_PER_PIECE ? ends : null;
+/** How far apart the ends of `piece`'s group may be for closing to be offered, mm (#86): `CLOSE_LOOP_REACH_PER_PIECE` per piece. */
+export function closeLoopReach(layout: Layout, piece: number): number {
+  return movingGroup(layout, piece).size * CLOSE_LOOP_REACH_PER_PIECE;
 }
 
 const weighted = (e: { distance: number; angle: number }) => e.distance + ANGLE_WEIGHT * e.angle;
@@ -105,13 +104,31 @@ function pathBetween(layout: Layout, from: number, to: number): { pieces: number
   return { pieces, joints };
 }
 
+/** Whether the joint's two pieces are still joined some other way without it. */
+function inLoop(layout: Layout, joint: Layout['joints'][number]): boolean {
+  const seen = new Set([joint.a.piece]);
+  const queue = [joint.a.piece];
+  while (queue.length) {
+    const i = queue.shift()!;
+    for (const j of layout.joints) {
+      if (j === joint) continue;
+      const other = j.a.piece === i ? j.b.piece : j.b.piece === i ? j.a.piece : null;
+      if (other === null || seen.has(other)) continue;
+      if (other === joint.b.piece) return true;
+      seen.add(other);
+      queue.push(other);
+    }
+  }
+  return false;
+}
+
 /** A piece lying on the floor: every port level and at floor height. */
 function onFloor(layout: Layout, i: number): boolean {
   return layout.pieces[i].ports.every((p) => Math.abs(p.elements[13]) < FLOOR_HEIGHT && isLevel(p));
 }
 
 /** One thing a closing may change: a joint's pitch or yaw (on the piece that holds the link), or a piece's twist. */
-type Knob = { piece: number; what: 'pitch' | 'yaw' | 'twist' };
+type Knob = { piece: number; what: 'pitch' | 'yaw' | 'twist'; /** Pieces along the way from the nearer open end. */ far: number };
 
 /** The course with `x[k]` deg added to each knob, unrounded: a working course, never stored. */
 function turned(course: Course, knobs: readonly Knob[], x: readonly number[]): Course {
@@ -162,15 +179,16 @@ function residual(layout: Layout, ends: LoopEnds, floor: readonly number[], base
 
 /**
  * The straight-line model of the residual near `x`: `r + J (y − x)`, kept as
- * its Gram form for speed. Minimising `|r + J (y − x)|² + SMALL |y|²` with
- * every `y` within ±`limit` is convex, so coordinate descent finds it.
+ * its Gram form for speed. Minimising `|r + J (y − x)|² + Σ w_k y_k²` with
+ * every `y` within ±`limit` is convex; `w` makes each knob dearer the
+ * further it is from the open ends.
  */
 class Model {
   private readonly G: number[][];
   private readonly q: number[];
   private readonly c2: number;
 
-  constructor(J: readonly number[][], r: readonly number[], x: readonly number[]) {
+  constructor(J: readonly number[][], r: readonly number[], x: readonly number[], private readonly w: readonly number[]) {
     const n = x.length;
     // c = r − J x, so the residual is c + J y.
     const c = r.map((v, m) => v - J[m].reduce((s, j, k) => s + j * x[k], 0));
@@ -216,7 +234,7 @@ class Model {
       let pull = 1e-12;
       for (let k = 0; k < n; k++) {
         if (!at[k]) continue;
-        const grad = G[k].reduce((s, g, i) => s + g * y[i], 0) + q[k] + SMALL * y[k];
+        const grad = G[k].reduce((s, g, i) => s + g * y[i], 0) + q[k] + this.w[k] * y[k];
         if (grad * at[k] > pull) [release, pull] = [k, grad * at[k]];
       }
       if (release < 0) break;
@@ -230,7 +248,7 @@ class Model {
     const { G, q } = this;
     const m = free.length;
     const A = free.map((i) => {
-      const row = free.map((k) => G[i][k] + (i === k ? SMALL : 0));
+      const row = free.map((k) => G[i][k] + (i === k ? this.w[i] : 0));
       const rhs = -q[i] - at.reduce((s, sgn, k) => s + (sgn ? G[i][k] * sgn * limit : 0), 0);
       return [...row, rhs];
     });
@@ -266,8 +284,8 @@ class Model {
         for (const d of [step, -step]) {
           const next = out[k] + d;
           if (Math.abs(next) > limit + 1e-9) continue;
-          // Change in |c + J y|² + SMALL |y|² from moving y[k] by d.
-          const change = 2 * d * (Gy[k] + q[k]) + d * d * G[k][k] + SMALL * (next * next - out[k] * out[k]);
+          // Change in |c + J y|² + Σ w y² from moving y[k] by d.
+          const change = 2 * d * (Gy[k] + q[k]) + d * d * G[k][k] + this.w[k] * (next * next - out[k] * out[k]);
           if (change >= -1e-12) continue;
           for (let i = 0; i < out.length; i++) Gy[i] += G[i][k] * d;
           out[k] = next;
@@ -285,6 +303,13 @@ class Model {
 const POLISH_PASSES = 200;
 /** How much small angles are preferred over a closer fit (mm² per deg²), so the change spreads over many knobs (#86 決定事項 4). */
 const SMALL = 1e-2;
+/**
+ * How fast a knob gets dearer away from the open ends: by (1 + pieces
+ * away)^FALLOFF. The ends take the change first and it fades out along
+ * the course, rather than reaching far round to the start (owner
+ * 2026-10-28, provisional).
+ */
+const FALLOFF = 3;
 
 /** Step for the finite differences, deg. */
 const PROBE = 0.01;
@@ -295,7 +320,8 @@ const ROUNDS = 6;
  * Bring the open ends of `piece`'s group together (#86): every joint on the
  * way between them may bend by up to `CLOSE_LOOP_LIMIT` more (pitch only
  * off the floor, yaw anywhere) and every two-ended piece off the floor may
- * twist as much more, spread as evenly as can be. The group then moves back
+ * twist as much more, most near the open ends and less the further from
+ * them. The group then moves back
  * so its middle stays where it was and both ends come half way. Nothing is
  * changed when they cannot meet within `CLOSE_LOOP_DISTANCE` / `CLOSE_LOOP_ANGLE`.
  * `step` is the step the course stores angles in, deg.
@@ -311,16 +337,24 @@ export function closeLoop(course: Course, piece: number, step: number): CloseRes
   const floor = [...movingGroup(base, piece)].filter((i) => onFloor(base, i));
   const flat = new Set(floor);
   const knobs: Knob[] = [];
-  for (const j of path.joints) {
-    if (j.kind !== 'link') continue;
+  const n = path.pieces.length;
+  path.joints.forEach((j, k) => {
+    // A joint inside another loop (such as a lane change's crossing) stays as it is, or that loop would open.
+    if (j.kind !== 'link' || inLoop(base, j)) return;
     const holder = j.b.piece;
     const off = !flat.has(j.a.piece) || !flat.has(j.b.piece);
-    knobs.push({ piece: holder, what: 'yaw' });
-    if (off) knobs.push({ piece: holder, what: 'pitch' });
-  }
-  for (const i of path.pieces) {
-    if (!flat.has(i) && base.pieces[i].part.ports.length === 2) knobs.push({ piece: i, what: 'twist' });
-  }
+    // Joint k is between path pieces k and k + 1.
+    const far = Math.min(k, n - 2 - k);
+    knobs.push({ piece: holder, what: 'yaw', far });
+    if (off) knobs.push({ piece: holder, what: 'pitch', far });
+  });
+  path.pieces.forEach((i, k) => {
+    if (!flat.has(i) && base.pieces[i].part.ports.length === 2) knobs.push({ piece: i, what: 'twist', far: Math.min(k, n - 1 - k) });
+  });
+  // Scaled so the knobs are on average as dear as SMALL: only how the change is shared out moves.
+  const rise = knobs.map((k) => (1 + k.far) ** FALLOFF);
+  const mean = rise.reduce((s, v) => s + v, 0) / (rise.length || 1);
+  const weights = rise.map((v) => (SMALL * v) / mean);
   if (!knobs.length) return fail(ends);
 
   let x = new Array<number>(knobs.length).fill(0);
@@ -334,7 +368,7 @@ export function closeLoop(course: Course, piece: number, step: number): CloseRes
       probe[k] += PROBE;
       return at(probe).map((v, m) => (v - r[m]) / PROBE);
     });
-    model = new Model(r.map((_, m) => cols.map((col) => col[m])), r, x);
+    model = new Model(r.map((_, m) => cols.map((col) => col[m])), r, x, weights);
     const next = model.solve(CLOSE_LOOP_LIMIT);
     const step = Math.max(...next.map((v, k) => Math.abs(v - x[k])));
     x = next;
