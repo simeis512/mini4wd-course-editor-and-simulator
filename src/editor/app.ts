@@ -163,6 +163,7 @@ export class EditorApp {
       down: (e, item) => this.paletteDrag.down(e, item),
       move: (e) => this.paletteDrag.move(e),
       up: (e, cancelled) => this.paletteDrag.up(e, cancelled),
+      holding: () => this.paletteDrag.holding,
     });
     this.share = bindAppUi({
       get selection() { return app.selection; },

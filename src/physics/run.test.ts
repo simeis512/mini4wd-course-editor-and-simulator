@@ -116,7 +116,8 @@ describe('Run (#27, spec simulator.md)', () => {
     const course = placeTimer(placeStart(basicOval(), 0, 270), { everyLane: true });
     const run = (await Run.create(layoutCourse(course)))!;
     let s = run.advance(0);
-    while (s.laps < 3 && !s.out && s.time < 20) s = run.advance(0.05);
+    // In short steps: the timer is only a few hundredths of a second past the start line.
+    while (s.laps < 3 && !s.out && s.time < 20) s = run.advance(0.005);
     // Timed from the first pass, just past the start: one fewer than the laps.
     expect(s.lapTimes).toHaveLength(2);
     run.free();
@@ -157,5 +158,15 @@ describe('Run (#27, spec simulator.md)', () => {
     const run = (await Run.create(layoutCourse(c)))!;
     expect(run.advance(3).out).toBe('stopper');
     run.free();
+  });
+
+  it('runs past a timer on the foot of a bank approach (#110)', async () => {
+    // The chassis nose dips to the road where the slope starts; the timer's tape there stops nothing.
+    const layout = layoutCourse(placeStart(chain(['straight', 'bank-approach-20', 'straight', 'straight']), 1, 80));
+    for (const lane of [0, 1, 2]) {
+      const run = (await Run.create(layout, 1, lane))!;
+      expect(run.advance(0.5).out).toBeNull();
+      run.free();
+    }
   });
 });
