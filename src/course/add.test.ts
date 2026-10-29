@@ -32,6 +32,16 @@ describe('joinPart', () => {
     expect(layoutCourse(climbing!.course).problems).toEqual([]);
   });
 
+  it('turns bank approaches coming down off a banked turn so each one lies on the next and the last on the floor (#116)', () => {
+    let c = chain(['straight', 'bank-approach-20', 'bank-approach-20', 'curve45', 'curve45', 'curve45', 'curve45']);
+    for (const part of ['bank-approach-20', 'bank-approach-20', 'straight']) {
+      const last = c.pieces.length - 1;
+      const open = layoutCourse(c).open.find((r) => r.piece === last)!;
+      c = joinPart(c, part, open)!.course;
+    }
+    expect(layoutCourse(c).problems).toEqual([]);
+  });
+
   it('joins a bridge approach after the lane change centre by its lower end, carrying on the lane change', () => {
     const c = chain(['bridge-approach']);
     c.pieces.push({ part: 'lane-change-center', port: 0, to: [0, 1] });
