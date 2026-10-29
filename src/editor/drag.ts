@@ -81,7 +81,6 @@ export class PaletteDrag {
       if (Math.hypot(e.clientX - d.from.x, e.clientY - d.from.y) <= TAP_SLOP) return;
       d.active = true;
       document.body.classList.add('dragging-part');
-      $('context').hidden = true;
     }
     const at = this.host.view.floorAt(e.clientX, e.clientY);
     const preview = at && this.dropCourse(d.item, at[0], at[1], e.shiftKey);
@@ -170,7 +169,6 @@ export class PieceDrag {
     const d = this.drag;
     if (!d) return;
     if (this.host.snapOn && !noSnap) [dx, dz] = [snap(dx), snap(dz)];
-    $('context').hidden = true;
     let next = moveGroup(d.start, d.group, new Matrix4().makeTranslation(dx, 0, dz));
     const magnet = findMagnet(next, d.group, Math.max(MAGNET_DISTANCE, this.host.screenMm(MAGNET_PX)));
     if (magnet) next = applyMagnet(next, d.group, magnet);
@@ -212,7 +210,6 @@ export class PropDrag {
     const d = this.drag;
     if (!d) return;
     const snapOn = this.host.snapOn && !noSnap;
-    $('context').hidden = true;
     const t = d.target;
     let next: Course;
     if (t.kind === 'stopper') {

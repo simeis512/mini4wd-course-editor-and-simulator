@@ -275,7 +275,6 @@ export class HandleTool {
     d.previewLayout = d.preview && layoutCourse(d.preview);
     const hose = d.previewLayout?.stoppers[d.shown.target.index];
     d.label = !amount ? '' : edit.kind === 'scale' && hose?.kind === 'hose' ? `${name}${labelOf(edit)}（長さ ${Math.round(hoseLength(hose))}mm）` : labelOf(edit);
-    $('context').hidden = true;
     this.host.view.setData(d.previewLayout ?? d.layout, this.host.selection);
     this.draw();
   }
