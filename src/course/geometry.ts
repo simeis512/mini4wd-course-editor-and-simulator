@@ -170,14 +170,17 @@ function round1(x: number): number {
 }
 
 export function matrixToPose(m: Matrix4): Pose {
+  const { pos, rot } = exactPose(m);
+  return { pos: pos.map(round1) as Pose['pos'], rot: rot.map(round1) as Pose['rot'] };
+}
+
+/** The pose of `m` unrounded, for a working course that is rounded only when written out. */
+export function exactPose(m: Matrix4): Pose {
   const pos = new Vector3();
   const q = new Quaternion();
   m.decompose(pos, q, new Vector3());
   const e = new Euler().setFromQuaternion(q, 'YXZ');
-  return {
-    pos: [round1(pos.x), round1(pos.y), round1(pos.z)],
-    rot: [round1(e.y / DEG), round1(-e.x / DEG), round1(e.z / DEG)],
-  };
+  return { pos: [pos.x, pos.y, pos.z], rot: [e.y / DEG, -e.x / DEG, e.z / DEG] };
 }
 
 /**

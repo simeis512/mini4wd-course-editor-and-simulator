@@ -124,6 +124,7 @@ export function bindAppUi(host: AppUiHost): ShareImage {
   });
   $('raise-count').addEventListener('input', () => host.renderPanel());
   $('split').addEventListener('click', () => host.edit({ kind: 'split' }));
+  $('close-loop').addEventListener('click', () => host.edit({ kind: 'close-loop' }));
   $('join').addEventListener('click', () => host.edit({ kind: 'join' }));
 
   window.addEventListener('keydown', (e) => {

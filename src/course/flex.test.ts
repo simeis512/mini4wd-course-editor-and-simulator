@@ -39,10 +39,10 @@ describe('joint bend (spec 16.1)', () => {
     expect(layout.open).toHaveLength(2);
   });
 
-  it('reads and clears a bend, rounded to 0.1°', () => {
+  it('reads and clears a bend, rounded to 0.01° (#86)', () => {
     let c = setBend(chain(['straight', 'straight']), ...joint01, { pitch: 1.234 });
-    expect(jointBend(c, ...joint01)).toEqual({ pitch: 1.2 });
-    expect(jointBend(c, joint01[1], joint01[0])).toEqual({ pitch: 1.2 });
+    expect(jointBend(c, ...joint01)).toEqual({ pitch: 1.23 });
+    expect(jointBend(c, joint01[1], joint01[0])).toEqual({ pitch: 1.23 });
     c = setBend(c, ...joint01, { pitch: 0 });
     expect('bend' in c.pieces[1]).toBe(false);
   });
