@@ -39,7 +39,8 @@ describe('joinPart', () => {
       const open = layoutCourse(c).open.find((r) => r.piece === last)!;
       c = joinPart(c, part, open)!.course;
     }
-    expect(layoutCourse(c).problems).toEqual([]);
+    // Only the clips to break off, between the two going up and the two coming down.
+    expect(layoutCourse(c).problems.map((p) => p.kind)).toEqual(['forced-join', 'forced-join']);
   });
 
   it('joins a bridge approach after the lane change centre by its lower end, carrying on the lane change', () => {

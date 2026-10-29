@@ -68,8 +68,12 @@ const CURVE_RADIUS = 540;
 const CURVE_ANGLE = 45;
 /** Short ramp; roughly a third of a straight judging by product photos (inferred). */
 const BANK_APPROACH_LENGTH = 180;
-/** Bank approaches joined in a row: the fourth is a forced join, and no more than four (owner, #116). */
-export const BANK_CHAIN_FORCED = 4;
+/**
+ * Bank approaches joined in a row: their clips are made to clash, so even
+ * the second needs them broken off (owner, 2026-10-29), and no more than
+ * four (owner, #116).
+ */
+export const BANK_CHAIN_FORCED = 2;
 export const BANK_CHAIN_MAX = 4;
 /** Height the slope climbs (official). */
 const SLOPE_DROP = 110;
@@ -154,7 +158,7 @@ export const PARTS: readonly PartDef[] = [
       { id: 'a', anchor: 'start', lanes: ALL_LANES, floor: true },
       { id: 'b', anchor: 'end', lanes: ALL_LANES },
     ],
-    // The clips are made so two do not join, but cut off they are joined
+    // The clips are made so two do not join, but broken off they are joined
     // high end to low end, up to four in a row (owner, #116).
     chain: { from: 1, to: 0, forced: BANK_CHAIN_FORCED, max: BANK_CHAIN_MAX },
     lanes: ALL_LANES,

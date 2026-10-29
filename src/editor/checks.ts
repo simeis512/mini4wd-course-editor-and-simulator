@@ -1,7 +1,6 @@
 import { MACHINE_CLEARANCE, type Clash } from '../course/clash';
 import type { ContactTarget } from '../course/stopper-contact';
 import { groupCount, portKey, type Course, type Layout, type PortRef, type Problem } from '../course/course';
-import { BANK_CHAIN_FORCED } from '../course/catalog';
 import { BEND_LIMIT, TWIST_LIMIT } from '../course/flex';
 import type { LapCheck } from '../course/laps';
 import { floorExtent } from '../course/share-image';
@@ -29,7 +28,7 @@ export interface CheckHandlers {
 const PROBLEM_TEXT: Record<Problem['kind'], string> = {
   'not-level': '床側の端が水平ではありません（向きが逆かもしれません）',
   'cannot-join': 'このパーツ同士はつなげません',
-  'forced-join': `無理な連結：バンクアプローチを ${BANK_CHAIN_FORCED} 個続けるには連結の爪を切る必要があります`,
+  'forced-join': '無理な連結：バンクアプローチ同士をつなぐには、ぶつかり合う連結の爪を折る必要があります',
   'bend-limit': `つなぎ目の折れ角が上限の目安 ${BEND_LIMIT}° を超えています`,
   'twist-limit': `ねじれが上限の目安 ${TWIST_LIMIT}° を超えています`,
 };
