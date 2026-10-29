@@ -177,4 +177,16 @@ describe('Run (#27, spec simulator.md)', () => {
     expect(s.out).not.toBe('reverse');
     run.free();
   }, 30000);
+  it('laps a course with no lane change round its own lane, not calling it a wrong way run (owner, 2026-10-29)', async () => {
+    const half = ['straight', 'straight', 'curve45', 'curve45', 'curve45', 'curve45'];
+    const layout = layoutCourse(chain([...half, ...half]));
+    for (const lane of [0, 1, 2]) {
+      const run = (await Run.create(layout, 1, lane))!;
+      let s = run.advance(0);
+      while (s.time < 20 && s.laps < 2 && !s.out) s = run.advance(0.01);
+      expect(s.out, `lane ${lane}`).toBeNull();
+      expect(s.laps).toBe(2);
+      run.free();
+    }
+  }, 60000);
 });
