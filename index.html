@@ -211,6 +211,7 @@
       <button id="copy-url">URLをコピー</button>
       <button id="share" title="SNSで共有する画像（16:9／9:16）を作る" aria-pressed="false">画像で共有</button>
       <button id="qr" title="コースのQRコードを表示・保存／QRコードからコースを開く">QRコード</button>
+      <button id="model" title="コースを3Dモデルとして保存（VRChat などの GLB／3D プリント用の STL・3MF）">3Dモデル</button>
       <button id="export">書き出し</button>
       <button id="import">読み込み</button>
       <input id="import-file" type="file" accept=".json,application/json" hidden />
@@ -297,6 +298,11 @@
             <label title="つながっているピースを置いて、このピースだけ動かす"><input id="move-alone" type="checkbox" /> このピースだけ動かす</label>
           </div>
           <div id="group-info" class="hint"></div>
+          <div id="close-loop-row" class="row">
+            <button id="close-loop" title="開いた 2 つの口を、たくさんのジョイントとピースに小さな折れ・ねじれ（それぞれ 0.3° まで）を配ってつなぎます">ループを閉じる</button>
+            <span id="close-loop-info" class="muted"></span>
+          </div>
+          <div id="close-loop-warn" class="hint warn" hidden></div>
           <details>
             <summary>詳しく（配置の数値など）</summary>
             <div id="selection-note" class="hint"></div>
@@ -575,6 +581,46 @@
         </div>
         <input id="qr-image-file" type="file" accept="image/*" hidden />
         <p class="hint">スマホの標準のカメラで読んでも、URLとしてそのまま開けます。</p>
+      </div>
+    </dialog>
+    <dialog id="model-dialog" aria-labelledby="model-title">
+      <form method="dialog"><button class="close" aria-label="閉じる">×</button></form>
+      <h2 id="model-title">3Dモデルとして保存</h2>
+      <div class="row">
+        <label>形式
+          <select id="model-format">
+            <option value="glb">GLB（VRChat・3D ツール向け、実寸）</option>
+            <option value="stl">STL（3D プリント）</option>
+            <option value="3mf">3MF（3D プリント、色ごとに分ける）</option>
+          </select>
+        </label>
+      </div>
+      <h3>含めるもの</h3>
+      <div class="row">
+        <label><input type="checkbox" checked disabled /> 道とフェンス</label>
+        <label><input id="model-supports" type="checkbox" checked /> 支柱</label>
+        <label><input id="model-props" type="checkbox" checked /> 置き物</label>
+        <label><input id="model-floor" type="checkbox" /> 床の板</label>
+      </div>
+      <div id="model-print" hidden>
+        <h3>3D プリント</h3>
+        <div class="row">
+          <label>縮尺 <select id="model-scale"></select></label>
+          <label class="angle">最小の厚み <input id="model-min" type="number" min="0.1" max="5" step="0.1" /> mm</label>
+        </div>
+        <div class="row angle">
+          <span>造形範囲</span>
+          <input id="model-vol-w" type="number" min="10" step="10" aria-label="幅" /> ×
+          <input id="model-vol-d" type="number" min="10" step="10" aria-label="奥行き" /> ×
+          <input id="model-vol-h" type="number" min="10" step="10" aria-label="高さ" /> mm
+        </div>
+        <p class="hint">印刷すると薄すぎる道・フェンス・支柱などは、最小の厚みまで太らせます。スタートのシールは平らなので入りません。</p>
+      </div>
+      <p id="model-size" class="hint"></p>
+      <p id="model-warn" class="hint warn" hidden></p>
+      <div class="actions">
+        <button id="model-fit" hidden></button>
+        <button id="model-save" class="primary">保存</button>
       </div>
     </dialog>
     <dialog id="qr-sheet" class="sheet" aria-label="QRコードを読む">

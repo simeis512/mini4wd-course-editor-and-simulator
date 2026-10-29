@@ -233,7 +233,11 @@ function withFarSide(course: Course, next: Course, index: number): Course {
 }
 
 /** Round an angle to the 0.1° kept in URLs. */
-const tenth = (deg: number) => Math.round(deg * 10) / 10;
+/** Steps per degree that bends and twists are stored in (spec 16.5; 0.01° for closing loops, #86). */
+const STEPS_PER_DEG = 100;
+/** The step bends and twists are stored in, deg. */
+export const ANGLE_STEP = 1 / STEPS_PER_DEG;
+const tenth = (deg: number) => Math.round(deg * STEPS_PER_DEG) / STEPS_PER_DEG;
 
 /**
  * Set a piece's twist (spec 16.2), deg, + lowers the right side. Pieces
@@ -290,8 +294,9 @@ function baseFrame(layout: Layout, base: PortRef | null): Matrix4 {
  * Move the pieces in `group` by the world transform `delta`. Pieces outside
  * it stay where they are: any that hung off a moving piece keep their pose
  * from the same port, recomputed so they do not move (spec 5.2).
+ * Poses are rounded as stored unless `toPose` says otherwise.
  */
-export function moveGroup(course: Course, group: Set<number>, delta: Matrix4): Course {
+export function moveGroup(course: Course, group: Set<number>, delta: Matrix4, toPose = matrixToPose): Course {
   const layout = layoutCourse(course);
   const next = clone(course);
   course.pieces.forEach((rec, i) => {
@@ -302,7 +307,7 @@ export function moveGroup(course: Course, group: Set<number>, delta: Matrix4): C
     const anchor = anchorFrame(layout, i);
     const target = group.has(i) ? delta.clone().multiply(anchor) : anchor;
     const from = base && group.has(base.piece) ? delta.clone().multiply(baseFrame(layout, base)) : baseFrame(layout, base);
-    next.pieces[i] = freeRec(rec, base, matrixToPose(from.clone().invert().multiply(target)));
+    next.pieces[i] = freeRec(rec, base, toPose(from.clone().invert().multiply(target)));
   });
   return next;
 }

@@ -2,17 +2,18 @@ import type { Matrix4 } from 'three';
 import { addAttachment, moveAttachment, removeAttachment } from '../course/attachments';
 import { movingGroup, type Course, type Layout } from '../course/course';
 import {
-  deletePiece, flipPiece, jointBend, jointShift, moveGroup, setBend, setLength,
+  ANGLE_STEP, deletePiece, flipPiece, jointBend, jointShift, moveGroup, setBend, setLength,
   setPose, setShift, setTwist, setVariant, tidyCuts, turnAboutMiddle,
 } from '../course/edit';
 import type { Pose } from '../course/geometry';
+import { closeLoop } from '../course/close-loop';
 import { asLink, joinableNear, joinPorts, splitJoint } from '../course/joining';
 import { raiseRun } from '../course/raise';
 import type { Selection } from './selection';
 
 /** Values read from controls, with no DOM access in selection dispatch (#93). */
 export type SelectedAction =
-  | { kind: 'flip' | 'delete' | 'split' | 'join' }
+  | { kind: 'flip' | 'delete' | 'split' | 'join' | 'close-loop' }
   | { kind: 'move'; by: Matrix4 }
   | { kind: 'rotate'; deg: number }
   | { kind: 'twist' | 'bend'; deg: number | null; by?: number }
@@ -35,6 +36,8 @@ export interface SelectedContext {
 export interface SelectedEdit {
   course: Course;
   selection: Selection;
+  /** Said to the user, e.g. why nothing changed. */
+  message?: string;
 }
 
 /** The sides of a raise, with a joint that merely meets first stored as a link (spec 16.3). */
@@ -81,6 +84,12 @@ export function editSelection(context: SelectedContext, action: SelectedAction):
     case 'pose': return keep(setPose(course, s.index, action.pose));
     case 'variant': return keep(setVariant(course, s.index, action.value));
     case 'length': return keep(setLength(course, s.index, action.mm));
+    case 'close-loop': {
+      const result = closeLoop(course, s.index, ANGLE_STEP);
+      if (result.ok) return { ...keep(result.course), message: `ループを閉じました（いちばん大きい折れ・ねじれ ${result.largest.toFixed(2)}°）` };
+      if (result.reason === 'no-ends') return { ...keep(course), message: '開いた口がちょうど 2 つのときだけ閉じられます' };
+      return { ...keep(course), message: `閉じられません（あと ${result.distance.toFixed(1)}mm／${result.angle.toFixed(2)}°）` };
+    }
     case 'attachment-add': return keep(addAttachment(course, action.attachment, s.index));
     case 'attachment-move': return keep(moveAttachment(course, action.index, action.to));
     case 'attachment-remove': return keep(removeAttachment(course, action.index));

@@ -19,6 +19,16 @@ export type Selection =
   | { kind: 'stopper'; index: number; point?: number }
   | null;
 
+/** The same selection once the pieces are put in another order: `order[k]` is the old index of piece `k` (#131). */
+export function renumbered(selection: Selection, order: readonly number[]): Selection {
+  if (!selection || order.every((old, k) => old === k)) return selection;
+  const port = (r: PortRef): PortRef => ({ piece: order.indexOf(r.piece), port: r.port });
+  if (selection.kind === 'piece') return { kind: 'piece', index: order.indexOf(selection.index) };
+  if (selection.kind === 'port') return { kind: 'port', ref: port(selection.ref) };
+  if (selection.kind === 'joint') return { kind: 'joint', a: port(selection.a), b: port(selection.b) };
+  return selection;
+}
+
 /** The start line, the timer or a stopper (or one of its points) as selected. */
 export type PropSelection = Extract<Selection, { kind: 'start' | 'timer' | 'stopper' }>;
 
