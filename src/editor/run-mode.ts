@@ -28,6 +28,7 @@ const OUT_TEXT: Record<OutReason, string> = {
   stopped: 'コースアウト：止まった（2秒進まない）',
   flipped: 'コースアウト：ひっくり返って止まった',
   reverse: 'コースアウト：逆走した',
+  lane: 'コースアウト：別のレーンに入った',
 };
 
 /** Longest real time one animation frame may run the physics for, s: a background tab comes back without a jump. */
