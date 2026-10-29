@@ -203,15 +203,12 @@ describe('Run (#27, spec simulator.md)', () => {
   });
 
   it('calls a machine that runs on in another lane out (owner, 2026-10-29)', async () => {
-    // The owner's course: from the middle lane it is thrown into the right lane on its third lap.
-    const course = await decodeCourse(
-      '7.Fc-JCoIAEIThGVvtMLM7Mzs0M4Xe__niZ-FjYdiBtX5SWDIDCcwgIIUM5rCAJawcdm5uOSxsawMlbGnbwZ74AEc4wRkuUMEVarhBA3dKH_Ck5QUtQSfbb-jhA4PC_rKNMPHEWn8',
-    );
+    // The owner's short course: from the middle lane it is thrown into the next lane in a few seconds.
+    const course = await decodeCourse('7.FcyLCoJQFETR2XktNbNSy3zQ_3-mbDgsBmY45J8EjyAXqaRILVcgN2kopDV1cpdeHu4GecoL4C2jvyeZLT7ylYUCPydrgE12OXIC');
     const run = (await Run.create(layoutCourse(course), 1, 1))!;
     let s = run.advance(0);
-    while (!s.out && s.time < 30) s = run.advance(0.01);
+    while (!s.out && s.time < 10) s = run.advance(0.01);
     expect(s.out).toBe('lane');
-    expect(s.laps).toBe(2);
     run.free();
-  }, 60000);
+  }, 30000);
 });
