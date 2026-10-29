@@ -20,6 +20,12 @@ const DROP_JOIN_PX = 40;
 /** …and at least this close in mm, so a zoomed-in view still catches it. */
 const DROP_JOIN_MM = 150;
 
+/**
+ * A finger held this long on a part in the list picks it up; before that,
+ * only a sideways move does, so up and down scrolls the list (#114, provisional).
+ */
+export const LONG_PRESS_MS = 300;
+
 const snap = (v: number) => Math.round(v / SNAP_STEP) * SNAP_STEP;
 
 /** What the drags need from the editor. */
@@ -49,6 +55,10 @@ export class PaletteDrag {
     pointerId: number;
     from: { x: number; y: number };
     active: boolean;
+    /** A finger held still long enough to pick the part up (#114). */
+    held: boolean;
+    timer?: ReturnType<typeof setTimeout>;
+    touch: boolean;
     preview: Course | null;
     view?: EditorView;
     plan?: DropPlan;
@@ -67,7 +77,15 @@ export class PaletteDrag {
   down(e: PointerEvent, item: PaletteItem): void {
     if (!e.isPrimary || e.button !== 0) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    this.paletteDrag = { item, pointerId: e.pointerId, from: { x: e.clientX, y: e.clientY }, active: false, preview: null };
+    const d: NonNullable<typeof this.paletteDrag> = { item, pointerId: e.pointerId, from: { x: e.clientX, y: e.clientY }, active: false, held: false, touch: e.pointerType === 'touch', preview: null };
+    if (d.touch) d.timer = setTimeout(() => (d.held = true), LONG_PRESS_MS);
+    this.paletteDrag = d;
+  }
+
+  /** Whether a finger on the list is dragging a part, so the list must not scroll under it (#114). */
+  get holding(): boolean {
+    const d = this.paletteDrag;
+    return !!d && (d.held || d.active);
   }
 
   move(e: PointerEvent): void {
@@ -78,7 +96,14 @@ export class PaletteDrag {
     const d = this.paletteDrag;
     if (!d || e.pointerId !== d.pointerId) return;
     if (!d.active) {
-      if (Math.hypot(e.clientX - d.from.x, e.clientY - d.from.y) <= TAP_SLOP) return;
+      const [dx, dy] = [e.clientX - d.from.x, e.clientY - d.from.y];
+      if (Math.hypot(dx, dy) <= TAP_SLOP) return;
+      // A finger moving up or down without holding first scrolls the list (#114).
+      if (d.touch && !d.held && Math.abs(dy) >= Math.abs(dx)) {
+        clearTimeout(d.timer);
+        return;
+      }
+      clearTimeout(d.timer);
       d.active = true;
       document.body.classList.add('dragging-part');
       $('context').hidden = true;
@@ -98,6 +123,7 @@ export class PaletteDrag {
     const d = this.paletteDrag;
     if (!d || e.pointerId !== d.pointerId) return;
     this.paletteDrag = null;
+    clearTimeout(d.timer);
     if (!d.active) return;
     document.body.classList.remove('dragging-part');
     this.swallowClick = true;

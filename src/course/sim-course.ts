@@ -189,8 +189,9 @@ export function simCourse(layout: Layout, dir: 1 | -1 = 1): SimCourse {
     for (const geometry of geo.fences) fences.push({ geometry, matrix: pc.matrix });
     for (const a of layout.attachments) if (a.piece === i) road.push({ geometry: attachmentGeometry(pc, a), matrix: pc.matrix });
   });
-  // The start stickers lie flat on the road and stop nothing.
+  // The start stickers and the timer's tape lie flat on the road and stop nothing (#110).
   const props = buildPropMeshes(layout).filter((g) => g.userData.prop?.kind !== 'start');
+  for (const g of props) g.remove(...g.children.filter((m) => m.name === 'tape'));
   const zones = [
     ...layout.open.map((at) => {
       const intended = layout.intended.some((r) => r.piece === at.piece && r.port === at.port);
