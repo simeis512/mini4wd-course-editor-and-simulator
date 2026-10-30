@@ -167,7 +167,7 @@ export class RunMode {
     this.last = performance.now();
   }
 
-  /** How fast the run's time goes against real time: as it is, or slowed to 1/2, 1/3 or 1/4, in 3D and AR alike (owner, 2026-10-30). */
+  /** How fast the run's time goes against real time: as it is, or slowed down to 1/16, in 3D and AR alike (owner, 2026-10-30). */
   private get rate(): number {
     return 1 / (Number($<HTMLSelectElement>('run-speed').value) || 1);
   }
