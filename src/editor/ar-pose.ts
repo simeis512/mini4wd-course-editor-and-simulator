@@ -66,20 +66,6 @@ export function turnAbout(at: THREE.Vector3, centre: THREE.Vector3, turn: number
   return at.clone().sub(centre).applyAxisAngle(new THREE.Vector3(0, 1, 0), turn).add(centre);
 }
 
-/**
- * How fast the machine's time runs in AR against real time (#99, owner
- * 2026-10-26): by default slowed by √ of how much smaller the course is
- * shown, so falls and jumps look as they would at that size; real time
- * when asked for.
- */
-export function arRunRate(scale: number, realTime: boolean): number {
-  return realTime ? 1 : Math.sqrt(scale);
-}
-
-/** A run rate on its button: real time, or how many times slower. */
-export function rateLabel(rate: number): string {
-  return rate >= 1 ? '実時間' : `スロー ×${(1 / rate).toFixed(1)}`;
-}
 
 /** How far in from the screen's edge the arrow to an unseen machine stands, as a share of half the screen (cosmetic). */
 export const EDGE_INSET = 0.12;

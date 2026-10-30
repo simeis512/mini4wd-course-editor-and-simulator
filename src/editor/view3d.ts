@@ -196,11 +196,6 @@ export class OrbitView implements EditorView {
     this.ticker = tick;
   }
 
-  /** The size the course is shown at in AR, or null outside AR (#99). */
-  arScale(): number | null {
-    return this.renderer.xr.isPresenting ? this.ar.scale : null;
-  }
-
   /** Show a machine running on the course (#27), in course mm, or take it away. */
   setMachine(object: THREE.Object3D | null): void {
     if (this.machine) this.root.remove(this.machine);

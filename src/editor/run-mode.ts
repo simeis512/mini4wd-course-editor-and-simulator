@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import type { Layout } from '../course/course';
 import { timedLane } from '../course/lap-marks';
 import type { OutReason, Run } from '../physics/run';
-import { arRunRate, rateLabel } from './ar-pose';
 import { $, toast } from './dom';
 import { RunCamera, type CameraMode, type CameraView } from './run-camera';
 
@@ -24,8 +23,6 @@ export interface RunModeHost {
   aim(view: CameraView | null): void;
   /** Call `tick` before each frame the 3D view draws (in AR too), or stop. */
   onFrame(tick: (() => void) | null): void;
-  /** The size the course is shown at in AR, or null outside AR. */
-  arScale(): number | null;
 }
 
 const OUT_TEXT: Record<OutReason, string> = {
@@ -62,8 +59,6 @@ export class RunMode {
   private last = 0;
   private on = false;
   private camera = new RunCamera();
-  /** In AR, run at real time instead of slowed to the size shown (#99). */
-  private realTime = false;
   /** The physics could not keep up in the last frame. */
   private behind = false;
 
@@ -79,8 +74,9 @@ export class RunMode {
       lane.selectedIndex = (lane.selectedIndex + 1) % lane.options.length;
       void this.reset();
     });
+    const speed = $<HTMLSelectElement>('run-speed');
     $('ar-run-speed').addEventListener('click', () => {
-      this.realTime = !this.realTime;
+      speed.selectedIndex = (speed.selectedIndex + 1) % speed.options.length;
       this.draw(0);
     });
     const camera = $<HTMLSelectElement>('run-camera');
@@ -171,10 +167,9 @@ export class RunMode {
     this.last = performance.now();
   }
 
-  /** How fast the run's time goes against real time: slowed in AR to the size shown, unless real time is asked for. */
+  /** How fast the run's time goes against real time: as it is, or slowed to 1/2, 1/3 or 1/4, in 3D and AR alike (owner, 2026-10-30). */
   private get rate(): number {
-    const scale = this.host.arScale();
-    return scale === null ? 1 : arRunRate(scale, this.realTime);
+    return 1 / (Number($<HTMLSelectElement>('run-speed').value) || 1);
   }
 
   /**
@@ -203,11 +198,7 @@ export class RunMode {
   /** Put the machine where it is, the camera after it `dt` seconds on, and show how the run is going. */
   private draw(dt: number): void {
     const { run, mesh, shadow, physics } = this;
-    const scale = this.host.arScale();
-    const speed = $('ar-run-speed');
-    speed.textContent = `時間：${rateLabel(scale === null ? 1 : arRunRate(scale, this.realTime))}`;
-    // At real size there is nothing to slow.
-    speed.toggleAttribute('disabled', scale === null || scale >= 1);
+    $('ar-run-speed').textContent = `速さ：${$<HTMLSelectElement>('run-speed').selectedOptions[0]?.text ?? ''}`;
     $('ar-run-lane').textContent = `レーン：${$<HTMLSelectElement>('run-lane').selectedOptions[0]?.text ?? ''}`;
     if (!run || !mesh || !shadow || !physics) return;
     const s = run.state();

@@ -36,7 +36,7 @@ const FALLBACK_BELOW = 1.2;
 export class ArMode {
   readonly status: HTMLElement;
   /** The size shown, kept from one session to the next. */
-  scale: number = AR_SCALES[0];
+  private scale: number = AR_SCALES[0];
   private yaw = 0;
   /** Course point (mm) that stands on the floor point. */
   private pivot = new THREE.Vector3();

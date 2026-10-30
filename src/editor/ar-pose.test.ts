@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { MM } from '../course/mesh';
-import { angleDelta, AR_SCALES, arPose, arRunRate, dotCell, edgeArrow, EDGE_INSET, floorPivot, headingOf, nextScale, rateLabel, scaleLabel, turnAbout, twistAngle } from './ar-pose';
+import { angleDelta, AR_SCALES, arPose, dotCell, edgeArrow, EDGE_INSET, floorPivot, headingOf, nextScale, scaleLabel, turnAbout, twistAngle } from './ar-pose';
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
@@ -95,16 +95,6 @@ describe('turnAbout', () => {
   });
 });
 
-describe('arRunRate (#99)', () => {
-  it('slows a smaller course by the root of its size, unless real time is asked for', () => {
-    expect(arRunRate(1, false)).toBe(1);
-    expect(1 / arRunRate(1 / 5, false)).toBeCloseTo(2.236, 3);
-    expect(1 / arRunRate(1 / 20, false)).toBeCloseTo(4.472, 3);
-    expect(arRunRate(1 / 20, true)).toBe(1);
-    expect(rateLabel(1)).toBe('実時間');
-    expect(rateLabel(arRunRate(1 / 5, false))).toBe('スロー ×2.2');
-  });
-});
 
 describe('edgeArrow (#99)', () => {
   it('shows nothing while the machine is on the screen', () => {
