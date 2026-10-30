@@ -18,12 +18,13 @@ import { linkJoined } from '../course/linking';
 import { basicOval } from '../course/presets';
 import { renderCourseInfo, type CourseChecks } from './checks';
 import { $, toast } from './dom';
+import { showContext } from './side-panel';
 import { PaletteDrag, PieceDrag, PropDrag, type DragHost } from './drag';
 import { HandleTool } from './handles';
 import { History } from './history';
 import { Library } from './library';
 import { levelMax, renderLevelTools, type HeightView } from './levels';
-import { buildPalette, placeContext, renderPanels, runMarks } from './panels';
+import { buildPalette, renderPanels, runMarks } from './panels';
 import { PropTools } from './props';
 import { isProp, renumbered, type Selection } from './selection';
 import { showNoticeOnStart } from './notice';
@@ -45,8 +46,8 @@ export class EditorApp {
   private layout: Layout = layoutCourse(this.course);
   private checks: CourseChecks = { clashes: [], laps: null };
   private selection: Selection = null;
-  /** Pieces lit up for the selection, which its settings keep off. */
-  private lit: number[] = [];
+  /** The selection its settings were last brought into sight for, so only a new one opens the panel. */
+  private shown = '';
   private history = new History<Course>(HISTORY_LIMIT);
   private mode: '2d' | '3d' = '2d';
   private heightView: HeightView = { colors: false, level: 0 };
@@ -123,7 +124,6 @@ export class EditorApp {
     const handlers = {
       onPick: (s: Selection) => this.select(s),
       onViewChange: () => {
-        this.placeContext();
         this.handles?.draw();
         if (this.top) renderTurnTools(this.top);
         this.share?.later();
@@ -188,7 +188,6 @@ export class EditorApp {
       setHeightView: (view) => this.setHeightView(view),
       renderCourseInfo: () => renderCourseInfo(this.course, this.layout, this.checks),
       overPanel: (e) => this.pieceDrag.overPanel(e),
-      placeContext: () => this.placeContext(),
       select: (selection) => this.select(selection),
       setMode: (mode) => this.setMode(mode),
       undo: () => this.undo(),
@@ -382,7 +381,6 @@ export class EditorApp {
     const sides = $('raise-box').hidden ? null : raiseSides(this.course, this.selection, fields.intoA);
     const marks = sides ? runMarks(sides.course, sides.from, sides.into, fields.count) : null;
     for (const view of [this.top, this.orbit]) view.setRunMarks(marks);
-    this.lit = marks?.pieces ?? [];
   }
 
   private async importJson(file: File): Promise<void> {
@@ -442,12 +440,10 @@ export class EditorApp {
     $<HTMLButtonElement>('undo').disabled = !this.history.canUndo;
     $<HTMLButtonElement>('redo').disabled = !this.history.canRedo;
     renderPanels(this.course, this.layout, this.selection);
+    const shown = JSON.stringify(this.selection);
+    if (this.selection && shown !== this.shown) showContext();
+    this.shown = shown;
     renderCourseInfo(this.course, this.layout, this.checks);
     this.showRun();
-    this.placeContext();
-  }
-
-  private placeContext(): void {
-    placeContext(this.view, this.layout, this.selection, this.lit);
   }
 }

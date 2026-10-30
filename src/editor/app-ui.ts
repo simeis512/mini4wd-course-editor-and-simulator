@@ -26,7 +26,6 @@ export interface AppUiHost {
   setHeightView(view: HeightView): void;
   renderCourseInfo(): void;
   overPanel(e: PointerEvent): void;
-  placeContext(): void;
   select(selection: Selection): void;
   setMode(mode: '2d' | '3d'): void;
   undo(): void;
@@ -59,8 +58,6 @@ export function bindAppUi(host: AppUiHost): ShareImage {
   bindCourseInfo(host.checks);
   // Views capture the pointer while dragging, so its moves still bubble up here.
   window.addEventListener('pointermove', (e) => host.overPanel(e));
-  $<HTMLDetailsElement>('course-info').addEventListener('toggle', () => host.placeContext());
-  $('context').querySelector('details')!.addEventListener('toggle', () => host.placeContext());
   $('context-close').addEventListener('click', () => host.select(null));
   $('mode-2d').addEventListener('click', () => host.setMode('2d'));
   $('mode-3d').addEventListener('click', () => host.setMode('3d'));

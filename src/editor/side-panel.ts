@@ -28,6 +28,12 @@ export function foldPanel(folded: boolean, animate = true): void {
   }
 }
 
+/** Bring the selection's settings into sight: open the panel if folded and scroll them in (#134). */
+export function showContext(): void {
+  if (document.body.classList.contains('panel-folded')) foldPanel(false);
+  $('context').scrollIntoView({ block: 'nearest' });
+}
+
 /** Fold the side panel as it was left, and let its tab fold and open it. */
 export function bindSidePanel(): void {
   let folded = false;
