@@ -127,10 +127,28 @@ describe('banks', () => {
     expect(layoutCourse(c).problems).toEqual([{ kind: 'not-level', piece: 1, port: 0 }]);
   });
 
-  it('does not join two bank approaches', () => {
-    const layout = layoutCourse(chain(['straight', 'bank-approach-20', 'bank-approach-20']));
-    expect(compatible(layout.pieces[1].part, 1, layout.pieces[2].part, 0)).toBe(false);
-    expect(layout.problems).toContainEqual({ kind: 'cannot-join', piece: 2, port: 0 });
+  it('chains bank approaches high end to low end, each join forced and no fifth (#116)', () => {
+    const banks = (n: number) => layoutCourse(chain(['straight', ...Array(n).fill('bank-approach-20')]));
+    const two = banks(2);
+    expect(compatible(two.pieces[1].part, 1, two.pieces[2].part, 0)).toBe(true);
+    // Only end to end: two low ends or two high ends do not meet.
+    expect(compatible(two.pieces[1].part, 0, two.pieces[2].part, 0)).toBe(false);
+    expect(compatible(two.pieces[1].part, 1, two.pieces[2].part, 1)).toBe(false);
+    // The second's low end lies on the first, not on the floor, and climbs on to 40°; the clips must be broken off.
+    expect(two.problems).toEqual([{ kind: 'forced-join', piece: 2, port: 0 }]);
+    const top = new Vector3(0, 0, 1).transformDirection(two.pieces[2].ports[1]);
+    expect(Math.asin(Math.abs(top.y)) * (180 / Math.PI)).toBeCloseTo(40, 0);
+    const forced = (pieces: number[]) => pieces.map((piece) => ({ kind: 'forced-join', piece, port: 0 }));
+    expect(banks(4).problems).toEqual(forced([2, 3, 4]));
+    expect(banks(5).problems).toEqual([
+      ...forced([2, 3, 4]),
+      { kind: 'cannot-join', piece: 5, port: 0 },
+    ]);
+  });
+
+  it('still wants a bank approach after a straight on the floor (#116)', () => {
+    const layout = layoutCourse(chain(['straight', 'bank-approach-20', 'straight', 'bank-approach-20']));
+    expect(layout.problems).toEqual([{ kind: 'not-level', piece: 3, port: 0 }]);
   });
 
   it('comes back down level at the height it started', () => {
