@@ -61,6 +61,15 @@ export interface RunState {
   out: OutReason | null;
 }
 
+/** How far below the chassis middle `ground` looks for the road or the floor, m (cosmetic). */
+const GROUND_REACH = 1;
+
+/** Where the road or the floor is under the machine, world mm, and which way it faces there. */
+export interface Ground {
+  point: Vector3;
+  normal: Vector3;
+}
+
 /** Closer than this is touching, m; Rapier also lists contacts it only expects soon. */
 const TOUCH = 0.0005;
 
@@ -132,6 +141,10 @@ export class Run {
       run.lastTime = { time: null, distance: -Infinity };
     } else run.timeAt = run.lapAt;
     run.minLap = Math.min(...course.lanes.map((l) => l.length)) / 2;
+    // A step of no time, so that rays (the shadow's) find the course before the first real step.
+    world.timestep = 0;
+    world.step();
+    world.timestep = STEP;
     return run;
   }
 
@@ -275,6 +288,19 @@ export class Run {
 
   private distance(): number {
     return this.done + this.along - this.startAt;
+  }
+
+  /** The road, a fence or the floor straight below the chassis middle (for its shadow, #99); null over nothing. */
+  ground(): Ground | null {
+    const t = this.machine.body.translation();
+    const ray = new RAPIER.Ray(t, { x: 0, y: -1, z: 0 });
+    const hit = this.world.castRayAndGetNormal(ray, GROUND_REACH, true, undefined, undefined, undefined, this.machine.body);
+    if (!hit) return null;
+    const n = hit.normal;
+    return {
+      point: new Vector3(t.x, t.y - hit.timeOfImpact, t.z).divideScalar(MM),
+      normal: new Vector3(n.x, n.y, n.z).normalize(),
+    };
   }
 
   state(): RunState {

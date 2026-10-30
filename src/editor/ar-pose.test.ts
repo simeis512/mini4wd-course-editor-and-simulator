@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { MM } from '../course/mesh';
-import { angleDelta, AR_SCALES, arPose, dotCell, floorPivot, headingOf, nextScale, scaleLabel, turnAbout, twistAngle } from './ar-pose';
+import { angleDelta, AR_SCALES, arPose, dotCell, edgeArrow, EDGE_INSET, floorPivot, headingOf, nextScale, scaleLabel, turnAbout, twistAngle } from './ar-pose';
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
@@ -92,5 +92,26 @@ describe('turnAbout', () => {
     // ...is still there after it.
     const after = arPose(pivot, turnAbout(at, centre, turn), yaw + turn, 1 / 5);
     expectNear(under.applyMatrix4(after), centre);
+  });
+});
+
+
+describe('edgeArrow (#99)', () => {
+  it('shows nothing while the machine is on the screen', () => {
+    expect(edgeArrow(0.3, -0.9, false)).toBeNull();
+  });
+
+  it('stands on the edge towards a machine off to one side', () => {
+    const a = edgeArrow(3, 1.5, false)!;
+    expect(a.x).toBeCloseTo(1 - EDGE_INSET);
+    expect(a.y).toBeCloseTo((1 - EDGE_INSET) / 2);
+    expect(a.angle).toBeCloseTo(Math.atan2(1.5, 3));
+  });
+
+  it('points the other way to a machine behind the phone', () => {
+    const a = edgeArrow(0.2, 0.5, true)!;
+    expect(a.y).toBeCloseTo(-(1 - EDGE_INSET));
+    expect(a.angle).toBeCloseTo(Math.atan2(-0.5, -0.2));
+    expect(edgeArrow(0, 0, true)!.angle).toBeCloseTo(-Math.PI / 2);
   });
 });
