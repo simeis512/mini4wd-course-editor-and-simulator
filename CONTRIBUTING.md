@@ -44,6 +44,7 @@ DOM にもビューにも触らない処理が `editor` に 10 行以上あれ�
 | `run-mode.ts` | 3D ビューの走行モード（スタート・リセット・表示）。物理は `src/physics` を初めて使うときに読み込む |
 | `run-camera.ts` | 走行中のカメラ（追従・俯瞰・固定） |
 | `share.ts` | URL・ファイルでのコースの受け渡し |
+| `model-export.ts` | 3D モデル（GLB／STL／3MF）の書き出しの設定欄と保存（形は `src/course/model-export.ts`・`threemf.ts`） |
 | `library.ts` / `store.ts` | ブラウザ内（IndexedDB）への保存・一覧・自動保存と、その読み書き |
 | `notice.ts` | 起動時の案内と情報パネル（権利表示・ライセンス） |
 | `view.ts` | 2D/3D ビュー共通のインターフェース `EditorView` |

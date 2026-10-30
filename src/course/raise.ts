@@ -165,15 +165,19 @@ function rollOf(frame: Matrix4): number {
 /**
  * The run climbing at `grade` deg: each joint bends to bring the road to
  * that gradient, each piece twists so it leaves the piece level from side
- * to side, and the joint after the run bends back to level.
+ * to side, and the joint after the run bends back to level. With nothing
+ * joined after the run, its last piece lies level instead, so the road
+ * leaves it level for whatever is joined there later (#111).
  */
 function climb(course: Course, run: Run, grade: number): Course {
   let c = course;
+  const levelLast = run.joints.length === run.pieces.length && run.pieces.length > 1;
   run.joints.forEach(([from, to], k) => {
     const into = run.pieces[k];
     const base = layoutCourse(c).pieces[from.piece].ports[from.port];
     const bend = jointBend(c, from, to);
-    c = setBend(c, from, to, { ...bend, pitch: (into === undefined ? 0 : grade) - pitchOf(base) });
+    const level = into === undefined || (levelLast && k === run.pieces.length - 1);
+    c = setBend(c, from, to, { ...bend, pitch: (level ? 0 : grade) - pitchOf(base) });
     if (into === undefined) return;
     // The far end leans as a bent curve turns; twist the piece to undo it.
     c = setTwist(c, into, 0);
@@ -207,7 +211,7 @@ const MAX_GRADE = 20;
 export function raiseRun(course: Course, from: PortRef, into: PortRef, count: number, rise: number): Course {
   const { work, order, turned, run } = workingRun(course, from, into, count);
   if (!run) return course;
-  const raised = climbBy(work, run, rise);
+  const raised = keepHeading(climbBy(work, run, rise), work, run);
   return turned.size === 0 ? raised : restore(course, raised, order, turned);
 }
 
@@ -236,6 +240,62 @@ function restore(course: Course, raised: Course, order: number[], turned: Set<nu
     next = setTwist(next, i, done.twist ?? 0);
   });
   return next;
+}
+
+/** Which way a port frame faces seen from above, deg. */
+function headingOf(frame: Matrix4): number {
+  const f = new Vector3(0, 0, 1).transformDirection(frame);
+  return Math.atan2(f.x, f.z) * DEG;
+}
+
+/** The far end of the run's last piece in `course`. */
+function runEnd(course: Course, run: Run): Matrix4 {
+  const last = run.pieces[run.pieces.length - 1];
+  return layoutCourse(course).pieces[last].ports[1 - (course.pieces[last] as { port: number }).port];
+}
+
+/** How far the run's far end has turned and slid sideways from where it was in `flat`, deg and mm, seen from above. */
+function drift(course: Course, flat: Course, run: Run): { turn: number; side: number } {
+  const [was, now] = [runEnd(flat, run), runEnd(course, run)];
+  const turn = ((headingOf(now) - headingOf(was) + 540) % 360) - 180;
+  const left = new Vector3(1, 0, 0).transformDirection(was).setY(0).normalize();
+  const side = new Vector3().setFromMatrixPosition(now).sub(new Vector3().setFromMatrixPosition(was)).setY(0).dot(left);
+  return { turn, side };
+}
+
+/** Yaw steps tried at the run's first joint to bring its far end back over the line it was on, each way. */
+const SIDE_STEPS = 3;
+/** One yaw step, deg: what a joint stores (#111). */
+const YAW_STEP = 0.1;
+
+/**
+ * The raised run turned back so it leaves facing the way it did before
+ * (`flat`) and as little off to the side as the yaw steps allow: climbing
+ * in a tilted plane turns it a little, which stacked loops would add up
+ * (#111). The first joint swings the run back over the line, the joint
+ * into the last piece turns its end straight.
+ */
+function keepHeading(raised: Course, flat: Course, run: Run): Course {
+  if (run.pieces.length < 2) return raised;
+  const yawed = (c: Course, [from, to]: [PortRef, PortRef], by: number) => {
+    const bend = jointBend(c, from, to);
+    return setBend(c, from, to, { ...bend, yaw: (bend.yaw ?? 0) + by });
+  };
+  // Which way a yaw turns depends on which piece holds the link: try both.
+  const straighten = (c: Course) => {
+    const { turn } = drift(c, flat, run);
+    return [c, yawed(c, run.joints[run.pieces.length - 1], turn), yawed(c, run.joints[run.pieces.length - 1], -turn)];
+  };
+  const score = (c: Course) => {
+    const { turn, side } = drift(c, flat, run);
+    // A tenth of a degree weighs like half a millimetre (as the loop closure, #86).
+    return Math.abs(side) + 5 * Math.abs(turn);
+  };
+  let best = raised;
+  for (let k = -SIDE_STEPS; k <= SIDE_STEPS; k++) {
+    for (const c of straighten(k === 0 ? raised : yawed(raised, run.joints[0], k * YAW_STEP))) if (score(c) < score(best)) best = c;
+  }
+  return best;
 }
 
 function climbBy(course: Course, run: Run, rise: number): Course {

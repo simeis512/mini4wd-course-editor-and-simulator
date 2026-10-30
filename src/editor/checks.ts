@@ -28,6 +28,7 @@ export interface CheckHandlers {
 const PROBLEM_TEXT: Record<Problem['kind'], string> = {
   'not-level': '床側の端が水平ではありません（向きが逆かもしれません）',
   'cannot-join': 'このパーツ同士はつなげません',
+  'forced-join': '無理な連結：実物のバンクアプローチは連結の爪がぶつかり合うので、つなぐには爪を折る必要があります',
   'bend-limit': `つなぎ目の折れ角が上限の目安 ${BEND_LIMIT}° を超えています`,
   'twist-limit': `ねじれが上限の目安 ${TWIST_LIMIT}° を超えています`,
 };

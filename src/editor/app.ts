@@ -14,6 +14,7 @@ import { stopperContacts } from '../course/stopper-contact';
 import { supports } from '../course/height';
 import { worldTracks } from '../course/mesh';
 import { checkLaps } from '../course/laps';
+import { linkJoined } from '../course/linking';
 import { basicOval } from '../course/presets';
 import { renderCourseInfo, type CourseChecks } from './checks';
 import { $, toast } from './dom';
@@ -24,7 +25,7 @@ import { Library } from './library';
 import { levelMax, renderLevelTools, type HeightView } from './levels';
 import { buildPalette, placeContext, renderPanels, runMarks } from './panels';
 import { PropTools } from './props';
-import { isProp, type Selection } from './selection';
+import { isProp, renumbered, type Selection } from './selection';
 import { showNoticeOnStart } from './notice';
 import type { ShareImage } from './share-image';
 import { renderTurnTools } from './turn-tools';
@@ -164,6 +165,7 @@ export class EditorApp {
       down: (e, item) => this.paletteDrag.down(e, item),
       move: (e) => this.paletteDrag.move(e),
       up: (e, cancelled) => this.paletteDrag.up(e, cancelled),
+      holding: () => this.paletteDrag.holding,
     });
     this.share = bindAppUi({
       get selection() { return app.selection; },
@@ -182,7 +184,7 @@ export class EditorApp {
         get laps() { return app.checks.laps; },
         name: () => this.courseTitle(),
         url: () => this.hashSync.url(),
-        get fileName() { return fileName(app.course); },
+        get fileName() { return fileName(app.course.name); },
       },
       setHeightView: (view) => this.setHeightView(view),
       renderCourseInfo: () => renderCourseInfo(this.course, this.layout, this.checks),
@@ -196,7 +198,7 @@ export class EditorApp {
         if (await this.library.confirmReplace('新しく作る')) this.load(emptyCourse(), true);
       },
       copyUrl: () => this.hashSync.copyUrl(),
-      exportJson: () => exportJson(this.course),
+      exportJson: async () => exportJson(this.course, await this.courseTitle()),
       importJson: (file) => this.importJson(file),
       fit: () => this.view.fit(),
       edit: (action) => this.edit(action),
@@ -215,7 +217,8 @@ export class EditorApp {
 
   /** Replace the whole course (new / open), clearing history. */
   private load(course: Course, writeUrl: boolean): void {
-    this.course = course;
+    // Ports that meet are stored as links, also in courses made before that was done (#131).
+    this.course = linkJoined(course).course;
     this.history.clear();
     this.selection = null;
     this.refresh(writeUrl);
@@ -228,8 +231,10 @@ export class EditorApp {
   /** Apply an edit, recording it for undo. */
   private commit(next: Course, selection: Selection = null): void {
     this.history.record(this.course);
-    this.course = next;
-    this.selection = selection;
+    // Pieces left meeting others by the edit are joined to them (#131).
+    const linked = linkJoined(next, this.layout);
+    this.course = linked.course;
+    this.selection = renumbered(selection, linked.order);
     this.refresh(true);
   }
 
@@ -360,7 +365,8 @@ export class EditorApp {
     const next = editSelection({
       course: this.course, layout: this.layout, selection: this.selection, moveAlone: this.moveAlone,
     }, action);
-    if (next) this.commit(next.course, next.selection);
+    if (next?.message) toast(next.message);
+    if (next && next.course !== this.course) this.commit(next.course, next.selection);
   }
 
   private get snapOn(): boolean {

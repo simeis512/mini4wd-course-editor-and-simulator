@@ -36,7 +36,9 @@ function joinPartLayout(course: Course, partId: string, at: PortRef, port: numbe
   const fits = tries.findIndex((c, i) => {
     const index = c.pieces.length - 1;
     layouts[i] = layoutCourse(c, base);
-    return !layouts[i].problems.some((pr) => pr.piece === index);
+    // An open floor end off the floor is no fault yet: the next one in a chain goes on it (#116).
+    const open = new Set(layouts[i].open.filter((r) => r.piece === index).map((r) => r.port));
+    return !layouts[i].problems.some((pr) => pr.piece === index && !(pr.kind === 'not-level' && open.has(pr.port)));
   });
   const chosen = tries[Math.max(0, fits)];
   const fitted = fitLength(chosen, chosen.pieces.length - 1);

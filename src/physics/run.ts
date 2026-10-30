@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Quaternion, Vector3 } from 'three';
 import type { Layout } from '../course/course';
+import { GLOBAL_SPEC } from '../course/catalog';
 import { MM } from '../course/mesh';
 import { laneStart, lapMarks } from '../course/lap-marks';
 import { laneSpot, simCourse, type SimCourse } from '../course/sim-course';
@@ -22,9 +23,23 @@ export const STALL_TIME = 2;
 export const REVERSE_DISTANCE = 200;
 /** How near the end of one lane's line a machine must be to go on to the next lane's, mm. */
 const LANE_HANDOVER = 100;
+/**
+ * How far along its lane a machine is looked for from where it last was,
+ * mm: far more than it runs in a step, but short of where a lane passes
+ * over or under itself, so a machine off the line does not jump there (#112).
+ */
+export const TRACK_WINDOW = 150;
+/**
+ * A machine further than this from its own lane's line, nearer another
+ * lane's, has jumped into that lane (owner, 2026-10-29; provisional), mm:
+ * half the lane pitch. Lane changes and shifted joints stay on the line.
+ */
+export const WRONG_LANE_OFF = GLOBAL_SPEC.lanePitch / 2;
+/** How long a machine may run off its lane like that before it is out (owner: a few seconds; provisional), s. */
+export const WRONG_LANE_TIME = 2;
 
 /** Why a run came to an end (spec simulator.md 5). */
-export type OutReason = 'floor' | 'stopper' | 'stopped' | 'flipped' | 'reverse';
+export type OutReason = 'floor' | 'stopper' | 'stopped' | 'flipped' | 'reverse' | 'lane';
 
 export interface RunState {
   /** Time since the start, s. */
@@ -68,6 +83,10 @@ export class Run {
   private time = 0;
   private laneIndex: number;
   private along = 0;
+  /** How far the machine is from its lane's line, mm. */
+  private off = 0;
+  /** When the machine went further than `WRONG_LANE_OFF` from its line, s. */
+  private offSince: number | null = null;
   private done = 0;
   private laps = 0;
   private lapTimes: number[] = [];
@@ -181,14 +200,15 @@ export class Run {
   private track(): void {
     const p = this.position();
     const lane = this.course.lanes[this.laneIndex];
-    const spot = laneSpot(lane, p);
+    const spot = laneSpot(lane, p, { from: this.along - TRACK_WINDOW, to: this.along + TRACK_WINDOW });
     const next = lane.next === null ? null : this.course.lanes.findIndex((l) => l.lane === lane.next);
     if (next !== null && next >= 0 && spot.along > lane.length - LANE_HANDOVER) {
-      const on = laneSpot(this.course.lanes[next], p);
+      const on = laneSpot(this.course.lanes[next], p, { from: 0, to: LANE_HANDOVER });
       if (on.along < LANE_HANDOVER && on.off <= spot.off) {
         this.done += lane.length;
         this.laneIndex = next;
         this.along = on.along;
+        this.off = on.off;
         return;
       }
     }
@@ -196,15 +216,17 @@ export class Run {
     const back = this.course.lanes.findIndex((l) => l.next === lane.lane);
     if (back >= 0 && spot.along < LANE_HANDOVER) {
       const before = this.course.lanes[back];
-      const on = laneSpot(before, p);
+      const on = laneSpot(before, p, { from: before.length - LANE_HANDOVER, to: before.length });
       if (on.along > before.length - LANE_HANDOVER && on.off < spot.off) {
         this.done -= before.length;
         this.laneIndex = back;
         this.along = on.along;
+        this.off = on.off;
         return;
       }
     }
     this.along = spot.along;
+    this.off = spot.off;
   }
 
   private position(): Vector3 {
@@ -232,10 +254,30 @@ export class Run {
     if (out) return out;
     const distance = this.distance();
     if (distance < this.reach - REVERSE_DISTANCE) return 'reverse';
+    if (this.inOtherLane()) return 'lane';
     if (distance > this.best.distance + STALL_DISTANCE) this.best = { distance, time: this.time };
     if (this.time - this.best.time <= STALL_TIME) return null;
     // Stopped upside down, or stopped any other way: on a fence, caught, out of push.
     return this.up().y < 0 ? 'flipped' : 'stopped';
+  }
+
+  /**
+   * Whether the machine has run on in another lane for `WRONG_LANE_TIME`.
+   * The other lanes are only looked at once it has been off its own line
+   * that long, so a run on its line costs nothing more; off the line but
+   * near no other lane's (in the air), it starts counting again.
+   */
+  private inOtherLane(): boolean {
+    if (this.off <= WRONG_LANE_OFF) {
+      this.offSince = null;
+      return false;
+    }
+    this.offSince ??= this.time;
+    if (this.time - this.offSince < WRONG_LANE_TIME) return false;
+    const p = this.position();
+    if (this.course.lanes.some((l, i) => i !== this.laneIndex && laneSpot(l, p).off < this.off)) return true;
+    this.offSince = this.time;
+    return false;
   }
 
   /** The machine's up, as a world direction. */

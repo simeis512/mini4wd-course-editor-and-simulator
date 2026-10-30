@@ -35,6 +35,8 @@ export class TopView implements EditorView {
   private clashes: readonly Clash[] = [];
   private stoppersShown = true;
   private updating = false;
+  /** A fit asked for while the view was hidden, done once it shows (#115). */
+  private fitLater = false;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -160,6 +162,12 @@ export class TopView implements EditorView {
 
   /** Zoom and pan so the whole course fits. */
   fit(): void {
+    // Hidden (the 3D view is on show) it has no size to fit to.
+    if (this.canvas.clientWidth === 0 || this.canvas.clientHeight === 0) {
+      this.fitLater = true;
+      return;
+    }
+    this.fitLater = false;
     const floor = this.stoppersShown && this.layout ? stopperBounds(this.layout.stoppers) : null;
     const corners: [number, number][] = floor ? [[floor[0], floor[2]], [floor[1], floor[3]]] : [];
     this.camera.fit(
@@ -181,6 +189,7 @@ export class TopView implements EditorView {
 
   draw(): void {
     if (this.updating || this.canvas.hidden) return;
+    if (this.fitLater && this.canvas.clientWidth > 0) return this.fit();
     this.paint();
     this.handlers.onViewChange?.();
   }

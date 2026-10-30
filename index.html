@@ -32,7 +32,8 @@
       #view3d canvas { display: block; touch-action: none; }
       #handles { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
       body.dragging-part #handles { display: none; }
-      #view3d .ar-button { position: absolute !important; bottom: 12px !important; }
+      /* Top left, clear of the course info, 全体を表示 and the panel tab at any width (#117). */
+      #view3d .ar-button { position: absolute !important; top: 10px !important; bottom: auto !important; left: 10px !important; width: 100px !important; }
       #stage.framing { background: #0d0e11; }
       #stage.framing #view2d, #stage.framing #view3d { outline: 2px solid var(--accent); }
       .share-field { display: flex; flex-direction: column; gap: 2px; margin: 8px 0 6px; }
@@ -41,10 +42,12 @@
       #fit { position: absolute; right: 10px; bottom: 10px; }
       /* Running the machine (#27): its bar over the 3D view, and editing out of the way. */
       #run-bar { position: absolute; left: 10px; right: 10px; top: 10px; z-index: 4; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; background: rgba(36, 39, 46, 0.92); border: 1px solid var(--line); border-radius: 8px; }
+      /* The AR button sits top left in the 3D view, so the run bar starts right of it (owner 2026-10-29). */
+      #stage:has(.ar-button) #run-bar { left: 120px; }
       #run-bar label { display: flex; gap: 6px; align-items: center; }
       #run-status { flex: 1; min-width: 12em; font-variant-numeric: tabular-nums; }
       body.running { grid-template-columns: 1fr 0px; }
-      body.running #toolbar > :not(#run, h1) { pointer-events: none; opacity: 0.4; }
+      body.running #toolbar > :not(#run, #fullscreen, h1) { pointer-events: none; opacity: 0.4; }
       body.running #side, body.running #context, body.running #handles, body.running #course-info, body.running #fit { display: none; }
       #height-tools { position: absolute; left: 10px; top: 10px; z-index: 3; width: 210px; padding: 6px 10px; font-size: 13px; background: rgba(36, 39, 46, 0.92); border: 1px solid var(--line); border-radius: 8px; }
       #height-tools label { display: flex; gap: 6px; align-items: center; }
@@ -73,7 +76,7 @@
       #panel-fold .arrow { display: inline-block; transition: transform 0.25s ease; }
       body.panel-folded #panel-fold .arrow { transform: rotate(180deg); }
       @media (prefers-reduced-motion: reduce) { body, body.panel-folded #panel, #panel-fold .arrow { transition: none; } }
-      #palette button, #templates button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; font-size: 12px; line-height: 1.3; text-align: center; touch-action: none; user-select: none; -webkit-user-select: none; }
+      #palette button, #templates button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; font-size: 12px; line-height: 1.3; text-align: center; touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
       #palette button.dim, #templates button.dim { opacity: 0.55; }
       #palette .part-icon, #templates .part-icon { width: 100%; max-width: 64px; aspect-ratio: 1; pointer-events: none; }
       body.dragging-part, body.dragging-part * { cursor: grabbing !important; }
@@ -118,7 +121,9 @@
       .angle input { width: 64px; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
       #trash-zone { grid-area: panel; z-index: 7; pointer-events: none; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 15px; font-weight: 600; color: #fff; background: rgba(216, 50, 58, 0.82); border: 3px dashed #fff; }
       #trash-zone.blocked { background: rgba(60, 64, 74, 0.9); font-weight: 400; font-size: 13px; }
-      #about { margin-left: auto; width: 34px; padding: 0; border-radius: 50%; font-weight: 700; font-family: Georgia, serif; }
+      #fullscreen { margin-left: auto; }
+      #fullscreen[hidden] + #about { margin-left: auto; }
+      #about { width: 34px; padding: 0; border-radius: 50%; font-weight: 700; font-family: Georgia, serif; }
       dialog { width: min(520px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow-y: auto; padding: 14px 18px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 40px #000a; }
       dialog::backdrop { background: #0008; }
       dialog h2 { font-size: 16px; margin: 0 0 8px; padding-right: 28px; }
@@ -216,9 +221,11 @@
       <button id="copy-url">URLをコピー</button>
       <button id="share" title="SNSで共有する画像（16:9／9:16）を作る" aria-pressed="false">画像で共有</button>
       <button id="qr" title="コースのQRコードを表示・保存／QRコードからコースを開く">QRコード</button>
+      <button id="model" title="コースを3Dモデルとして保存（VRChat などの GLB／3D プリント用の STL・3MF）">3Dモデル</button>
       <button id="export">書き出し</button>
       <button id="import">読み込み</button>
       <input id="import-file" type="file" accept=".json,application/json" hidden />
+      <button id="fullscreen" title="画面いっぱいに表示する（Esc で戻る）" aria-pressed="false" hidden>全画面</button>
       <button id="about" title="このアプリについて（権利表示・ライセンス・リンク）" aria-label="このアプリについて">i</button>
     </header>
     <main id="stage">
@@ -302,6 +309,11 @@
             <label title="つながっているピースを置いて、このピースだけ動かす"><input id="move-alone" type="checkbox" /> このピースだけ動かす</label>
           </div>
           <div id="group-info" class="hint"></div>
+          <div id="close-loop-row" class="row">
+            <button id="close-loop" title="開いた 2 つの口を、たくさんのジョイントとピースに小さな折れ・ねじれ（それぞれ 0.3° まで）を配ってつなぎます">ループを閉じる</button>
+            <span id="close-loop-info" class="muted"></span>
+          </div>
+          <div id="close-loop-warn" class="hint warn" hidden></div>
           <details>
             <summary>詳しく（配置の数値など）</summary>
             <div id="selection-note" class="hint"></div>
@@ -580,6 +592,46 @@
         </div>
         <input id="qr-image-file" type="file" accept="image/*" hidden />
         <p class="hint">スマホの標準のカメラで読んでも、URLとしてそのまま開けます。</p>
+      </div>
+    </dialog>
+    <dialog id="model-dialog" aria-labelledby="model-title">
+      <form method="dialog"><button class="close" aria-label="閉じる">×</button></form>
+      <h2 id="model-title">3Dモデルとして保存</h2>
+      <div class="row">
+        <label>形式
+          <select id="model-format">
+            <option value="glb">GLB（VRChat・3D ツール向け、実寸）</option>
+            <option value="stl">STL（3D プリント）</option>
+            <option value="3mf">3MF（3D プリント、色ごとに分ける）</option>
+          </select>
+        </label>
+      </div>
+      <h3>含めるもの</h3>
+      <div class="row">
+        <label><input type="checkbox" checked disabled /> 道とフェンス</label>
+        <label><input id="model-supports" type="checkbox" checked /> 支柱</label>
+        <label><input id="model-props" type="checkbox" checked /> 置き物</label>
+        <label><input id="model-floor" type="checkbox" /> 床の板</label>
+      </div>
+      <div id="model-print" hidden>
+        <h3>3D プリント</h3>
+        <div class="row">
+          <label>縮尺 <select id="model-scale"></select></label>
+          <label class="angle">最小の厚み <input id="model-min" type="number" min="0.1" max="5" step="0.1" /> mm</label>
+        </div>
+        <div class="row angle">
+          <span>造形範囲</span>
+          <input id="model-vol-w" type="number" min="10" step="10" aria-label="幅" /> ×
+          <input id="model-vol-d" type="number" min="10" step="10" aria-label="奥行き" /> ×
+          <input id="model-vol-h" type="number" min="10" step="10" aria-label="高さ" /> mm
+        </div>
+        <p class="hint">印刷すると薄すぎる道・フェンス・支柱などは、最小の厚みまで太らせます。スタートのシールは平らなので入りません。</p>
+      </div>
+      <p id="model-size" class="hint"></p>
+      <p id="model-warn" class="hint warn" hidden></p>
+      <div class="actions">
+        <button id="model-fit" hidden></button>
+        <button id="model-save" class="primary">保存</button>
       </div>
     </dialog>
     <dialog id="qr-sheet" class="sheet" aria-label="QRコードを読む">
