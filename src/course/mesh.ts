@@ -252,7 +252,12 @@ export function buildPieceMesh(layout: Layout, i: number, visuals: ModelVisuals 
     // Procedural, also while a measured model is not loaded (spec 15.1).
     const geo = sharedPartGeometry(pc.geometry);
     for (const r of geo.roads) group.add(new THREE.Mesh(r, material(color, 1)));
-    for (const f of geo.fences) group.add(new THREE.Mesh(f, material(color, 0.85)));
+    for (const f of geo.fences) {
+      const fence = new THREE.Mesh(f, material(color, 0.85));
+      // Found by name to be seen through from the side camera (#136).
+      fence.name = 'fence';
+      group.add(fence);
+    }
   }
   // Stands that come with the part are part of the piece, in its colour (#11).
   const stands = partStands(pc.part, pc.geometry);
