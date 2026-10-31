@@ -22,3 +22,5 @@ npx vitest run research/rapier --silent=false
 | `sensitivity.test.ts` | F. 仮の値がラップタイムにどれだけ効くか |
 | `soft-chassis.test.ts` | G. 空気抵抗、やわらかい物体でシャーシのたわみ |
 | `flexible-fence.test.ts` | H. コースのフェンスのしなり |
+| `climb.test.ts` | I. 傾いたフェンスをローラーが乗り越えるコースアウト |
+| `speed-cap.test.ts` | J. Rapier の速さの上限（400 × lengthUnit m/s） |

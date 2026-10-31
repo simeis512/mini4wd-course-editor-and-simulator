@@ -15,6 +15,8 @@ import { lab, RAPIER } from './lab';
 
 async function shoot(speed: number, angleDeg: number, ccd: boolean, step = 1e-3) {
   const world = await lab();
+  // At the simulator's 0.01, Rapier holds every body under 400 × lengthUnit = 4 m/s (see speed-cap.test.ts).
+  world.lengthUnit = 0.1;
   world.timestep = step;
   const course = simCourse(layoutCourse(chain(Array(6).fill('straight'))), 1);
   addCourseColliders(world, course);
@@ -33,13 +35,16 @@ async function shoot(speed: number, angleDeg: number, ccd: boolean, step = 1e-3)
   body.setLinvel({ x: dir.x * speed, y: 0, z: dir.z * speed }, true);
   let through = false;
   let reach = -Infinity;
+  let fastest = 0;
   for (let i = 0; i < Math.round(0.3 / step); i++) {
     world.step();
+    if (i === 0) fastest = Math.hypot(body.linvel().x, body.linvel().z);
     reach = Math.max(reach, body.translation().x);
     if (body.translation().x > fenceOut) through = true;
   }
   world.free();
   if (process.env.DEBUG_TUNNEL) console.log({ speed, angleDeg, ccd, near, fenceOut: fenceOut / MM, reach: reach / MM, start: mid.x });
+  if (Math.abs(fastest - speed) > 0.01) throw new Error(`only reached ${fastest} m/s of ${speed}`);
   return through;
 }
 
