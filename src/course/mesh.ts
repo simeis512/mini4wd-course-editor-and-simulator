@@ -107,7 +107,7 @@ export function halfWidth(laneCount: number): number {
  * the corners stay sharp. Without `caps` the ends are left open, as where
  * pieces meet end to end.
  */
-function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y1: number | readonly number[], caps = true): THREE.BufferGeometry {
+export function sweepBox(frames: THREE.Matrix4[], x0: number, x1: number, y0: number, y1: number | readonly number[], caps = true): THREE.BufferGeometry {
   const top = (i: number) => (typeof y1 === 'number' ? y1 : y1[i]);
   // Corners anticlockwise when looking along the centreline; null height is the top.
   const corners: [number, number | null][] = [

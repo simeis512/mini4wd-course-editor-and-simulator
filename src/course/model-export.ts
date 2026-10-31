@@ -4,8 +4,11 @@ import { variantOf } from './catalog';
 import type { Layout } from './course';
 import { partStands } from './geometry';
 import { supports } from './height';
-import { attachmentGeometry, ATTACHMENT_COLOR, buildPartGeometry, buildSupportMesh, roadLift, SUPPORT_COLOR } from './mesh';
+import { attachmentGeometry, ATTACHMENT_COLOR, buildPartGeometry, buildSupportMesh, roadLift, SUPPORT_COLOR, sweepBox } from './mesh';
+import { GLOBAL_SPEC } from './catalog';
 import { buildPropMeshes } from './props-mesh';
+import { stripBounds, tapeStrips } from './tape';
+import { TAPE_COLORS } from './tape-mesh';
 
 // The course as a 3D model file (#89): GLB for VRChat and other 3D tools,
 // STL / 3MF for printing a miniature. Built from the same shapes as the 3D
@@ -19,6 +22,8 @@ export interface ModelIncludes {
   props: boolean;
   /** A board under everything. */
   floor: boolean;
+  /** The joint tape (#133); left out unless asked for. */
+  tape?: boolean;
 }
 
 /** One solid of the model, world millimetres (Y up), and its colour. */
@@ -63,6 +68,15 @@ export function modelSolids(layout: Layout, includes: ModelIncludes, min?: numbe
       if (a.piece === i) push(`piece-${i}-washboard-${n}`, ATTACHMENT_COLOR, 1, attachmentGeometry(pc, a, lift), pc.matrix);
     });
   });
+  if (includes.tape && layout.tape) {
+    // As thick as anything else when printing, on the thickened road and fences.
+    const size = { thickness: Math.max(thick, 0.2), lift, fenceHalf: Math.max(GLOBAL_SPEC.fenceThickness, thick) / 2 };
+    tapeStrips(layout).forEach((s, n) => {
+      const { x, y } = print ? stripBounds(s, size) : s;
+      const spec = layout.tape![s.where]!;
+      push(`piece-${s.piece}-tape-${s.where}-${n}`, TAPE_COLORS[spec.kind], 1, sweepBox(s.frames, x[0], x[1], y[0], y[1]), layout.pieces[s.piece].matrix);
+    });
+  }
   if (includes.supports) {
     const list = supports(layout);
     if (list.length) push('supports', SUPPORT_COLOR, 1, buildSupportMesh(list, undefined, thick).geometry, undefined, true);

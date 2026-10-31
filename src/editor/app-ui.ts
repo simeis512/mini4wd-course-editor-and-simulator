@@ -9,6 +9,9 @@ import { POSE_FIELDS } from './panels';
 import { bindAbout } from './notice';
 import { bindFullscreen } from './fullscreen';
 import { bindShopping } from './shopping';
+import { bindTape } from './tape';
+import type { Course } from '../course/course';
+import type { JointTape } from '../course/tape';
 import { bindModelExport } from './model-export';
 import { bindQr } from './qr';
 import { ShareImage, type ShareHost } from './share-image';
@@ -20,6 +23,9 @@ import type { SelectedAction } from './selected-edits';
 /** The UI can invoke commands, without accessing EditorApp's internal state (#93). */
 export interface AppUiHost {
   readonly selection: Selection;
+  readonly course: Course;
+  /** Set the course's joint tape (#133). */
+  setTape(tape: JointTape): void;
   readonly top: { turnStep(dir: -1 | 0 | 1): void };
   readonly checks: CheckHandlers;
   readonly sharing: ShareHost;
@@ -55,6 +61,7 @@ export function bindAppUi(host: AppUiHost): ShareImage {
   bindLevelTools((view) => host.setHeightView(view));
   bindTurnTools(host.top);
   bindShopping(() => host.renderCourseInfo());
+  bindTape(() => host.course, (tape) => host.setTape(tape));
   bindCourseInfo(host.checks);
   // Views capture the pointer while dragging, so its moves still bubble up here.
   window.addEventListener('pointermove', (e) => host.overPanel(e));
