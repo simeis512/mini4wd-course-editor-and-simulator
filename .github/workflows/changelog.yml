@@ -1,0 +1,38 @@
+# On merge to main, write the PRs' changes/<PR>.md into CHANGELOG.md, bump
+# the version in package.json and delete the fragments (#137).
+name: Changelog
+
+on:
+  push:
+    branches: [main]
+    paths: ['changes/*.md']
+
+permissions:
+  contents: write
+
+# One at a time, none dropped, so two merges close together both get in.
+concurrency:
+  group: changelog
+  cancel-in-progress: false
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Compile the changelog
+        id: compile
+        run: echo "version=$(node scripts/changes.mjs compile)" >> "$GITHUB_OUTPUT"
+      - name: Commit and push
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A CHANGELOG.md package.json package-lock.json changes
+          git diff --cached --quiet && exit 0
+          git commit -m "chore(release): ${{ steps.compile.outputs.version }}"
+          git push origin HEAD:main

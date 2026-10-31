@@ -124,7 +124,11 @@
       #trash-zone.blocked { background: rgba(60, 64, 74, 0.9); font-weight: 400; font-size: 13px; }
       #fullscreen { margin-left: auto; }
       #fullscreen[hidden] + #about { margin-left: auto; }
-      #about { width: 34px; padding: 0; border-radius: 50%; font-weight: 700; font-family: Georgia, serif; }
+      #about { position: relative; width: 34px; padding: 0; border-radius: 50%; font-weight: 700; font-family: Georgia, serif; }
+      #about.updated::after { content: ''; position: absolute; top: 1px; right: 1px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+      #changelog > div { max-height: 300px; overflow: auto; }
+      #changelog details { margin: 4px 0 4px 8px; }
+      #changelog ul { margin: 4px 0; padding-left: 20px; }
       dialog { width: min(520px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow-y: auto; padding: 14px 18px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 40px #000a; }
       dialog::backdrop { background: #0008; }
       dialog h2 { font-size: 16px; margin: 0 0 8px; padding-right: 28px; }
@@ -542,6 +546,7 @@
     <dialog id="about-dialog" aria-labelledby="about-title">
       <form method="dialog"><button class="close" aria-label="閉じる">×</button></form>
       <h2 id="about-title">ミニ四駆コース作成シミュレーター</h2>
+      <p id="about-version" class="hint"></p>
       <p>ミニ四駆・ジャパンカップジュニアサーキットは株式会社タミヤの商標です。本アプリはタミヤとは関係のない非公式アプリです。</p>
       <h3>データの扱い</h3>
       <p>コースはブラウザの中だけで扱い、サーバーには送りません。 <button id="about-notice" class="small">「はじめに」の案内を見る</button></p>
@@ -559,6 +564,10 @@
         <li><a href="https://github.com/unjs/uqr" target="_blank" rel="noopener">uqr</a>（QRコードの作成）：MIT License</li>
         <li><a href="https://github.com/cozmo/jsQR" target="_blank" rel="noopener">jsQR</a>（QRコードの読み取り）：Apache License 2.0</li>
       </ul>
+      <details id="changelog">
+        <summary>更新履歴</summary>
+        <div></div>
+      </details>
       <details id="licence-texts">
         <summary>ライブラリのライセンス全文</summary>
         <pre></pre>
