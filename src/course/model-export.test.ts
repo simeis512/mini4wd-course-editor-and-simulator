@@ -4,6 +4,7 @@ import { layoutCourse } from './course';
 import { basicOval, chain } from './presets';
 import { addStopper, newStopper } from './stoppers';
 import { placeStart } from './timing';
+import { setTape } from './tape';
 import {
   boundsOf,
   fitsVolume,
@@ -20,8 +21,8 @@ import {
 } from './model-export';
 import { crc32, threeMf, threeMfModel } from './threemf';
 
-const NONE: ModelIncludes = { supports: false, props: false, floor: false };
-const ALL: ModelIncludes = { supports: true, props: true, floor: true };
+const NONE: ModelIncludes = { supports: false, props: false, floor: false, tape: false };
+const ALL: ModelIncludes = { supports: true, props: true, floor: true, tape: true };
 
 /** A course with every kind of thing in it: raised road with supports, the start and timer, an open hose and a box. */
 function busyCourse() {
@@ -29,6 +30,7 @@ function busyCourse() {
   c = placeStart(c, 0, 100);
   c = addStopper(c, { kind: 'hose', points: [[0, -600], [400, -650], [800, -600]], color: 0 });
   c = addStopper(c, newStopper('box', -800, 0));
+  c = setTape(c, { floor: { kind: 'curing', width: 50, friction: 0.5 }, wall: { kind: 'opp', width: 48, friction: 0.35, face: 'both' } });
   return layoutCourse(c);
 }
 
@@ -63,9 +65,11 @@ describe('modelSolids (#89)', () => {
     expect(bare.some((n) => n.includes('fence'))).toBe(true);
     expect(bare).not.toContain('supports');
     expect(bare).not.toContain('floor');
+    expect(bare.some((n) => n.includes('tape'))).toBe(false);
     const all = modelSolids(layout, ALL).map((s) => s.name);
     expect(all).toContain('supports');
     expect(all).toContain('floor');
+    for (const where of ['floor', 'wall']) expect(all.some((n) => n.includes(`tape-${where}`))).toBe(true);
     for (const prop of ['start', 'timer', 'stopper']) expect(all.some((n) => n.startsWith(prop))).toBe(true);
   });
 

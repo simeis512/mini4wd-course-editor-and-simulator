@@ -1,6 +1,7 @@
 import { Matrix4, Vector3 } from 'three';
 import { CATALOG_VERSION, getAttachment, GLOBAL_SPEC, lengthWithin, partOf, portLaneOffsets } from './catalog';
 import type { PartDef, PortDef } from './part';
+import { validateTape, type JointTape } from './tape';
 import { bendAngle, bendMatrix, BEND_LIMIT, pieceGeometry, TWIST_LIMIT, type Bend } from './flex';
 import { attach, FACE, facingError, IDENTITY_POSE, poseToMatrix, type FrameError, type PartGeometry, type Pose } from './geometry';
 
@@ -142,6 +143,8 @@ export interface Course {
   timer?: LapTimer;
   /** Hoses and boxes on the floor (#53). */
   stoppers?: Stopper[];
+  /** Tape over every joint, on the floor and the outer walls (#133). */
+  tape?: JointTape;
 }
 
 export function emptyCourse(): Course {
@@ -226,6 +229,8 @@ export interface Layout {
   start: StartLine | null;
   timer: LapTimer | null;
   stoppers: Stopper[];
+  /** The joint tape, as stored (#133). */
+  tape: JointTape | null;
 }
 
 /**
@@ -295,6 +300,7 @@ export function validateCourse(course: Course): void {
         : s.kind === 'box' && [s.x, s.z, s.yaw].every(Number.isFinite) && Number.isInteger(s.size) && s.size >= 0;
     if (!ok) throw new Error(`bad stopper ${JSON.stringify(s)}`);
   }
+  if (course.tape) validateTape(course.tape);
   for (const [what, marks] of [['split', course.cuts], ['open', course.intended]] as const) {
     for (const [piece, port] of marks ?? []) {
       const rec = course.pieces[piece];
@@ -467,7 +473,8 @@ export function layoutCourse(course: Course, previous?: Layout): Layout {
   }
   const attachments = course.attachments ?? [];
   const [start, timer, stoppers] = [course.start ?? null, course.timer ?? null, course.stoppers ?? []];
-  return { pieces, problems, connected, closures, open, joints, group, split, intended, deadEnds, attachments, start, timer, stoppers };
+  const tape = course.tape ?? null;
+  return { pieces, problems, connected, closures, open, joints, group, split, intended, deadEnds, attachments, start, timer, stoppers, tape };
 }
 
 /**

@@ -1,16 +1,18 @@
 import { ATTACHMENT_CODES, CATALOG_VERSION, hasPart, PART_CODES } from './catalog';
 import { validateCourse, type Attachment, type Course, type PieceRec, type Stopper } from './course';
 import { isZeroBend } from './flex';
+import { TAPE_KIND_ORDER, type JointTape, type TapeSpec, type WallFace } from './tape';
 
 /**
  * Course ⇄ URL hash (spec 6): `#c=<format>.<payload>`, where the payload is
  * a compact binary course, deflate-raw compressed and base64url encoded.
  *
- * Format 7, all integers as LEB128 varints (signed ones zigzag encoded):
+ * Format 8, all integers as LEB128 varints (signed ones zigzag encoded):
  *   catalog version
  *   flags: bit0 dir = -1, bit1 has name, bit2 has split marks,
  *          bit3 has ports left open on purpose, bit4 has attachments,
- *          bit5 has a start line, bit6 has a lap timer, bit7 has stoppers
+ *          bit5 has a start line, bit6 has a lap timer, bit7 has stoppers,
+ *          bit8 has joint tape
  *   [name: byte length, UTF-8]
  *   piece count
  *   per piece:
@@ -36,15 +38,20 @@ import { isZeroBend } from './flex';
  *   [stopper count, then for each: kind (0 hose, 1 box), then  when flagged (#53)
  *     hose: colour, flags (bit0 closed), point count, then x, z (mm, signed) for each
  *     box: size, flags (bit0 upright), x, z (mm, signed), yaw (0.1°)]
+ *   [joint tape: flags (bit0 floor, bit1 walls), then for each: kind (index  when flagged (#133)
+ *    into TAPE_KIND_ORDER), width (mm), friction (0.001); walls then face
+ *    (0 inner, 1 outer, 2 both)]
  *
- * Format 6 is the same with bends and twists in 0.1° steps, format 5 also without the start, timer and stoppers,
+ * Format 7 is the same without the joint tape, format 6 is the same with bends and twists in 0.1° steps, format 5 also without the start, timer and stoppers,
  * format 4 also without lengths and attachments, format 3 also without shifts,
  * format 2 also without the open-on-purpose marks, and format 1 without
  * bends and twists too, so all still read.
  */
-export const FORMAT_VERSION = 7;
+export const FORMAT_VERSION = 8;
 /** Older formats that still read. */
-const READABLE_VERSIONS = [1, 2, 3, 4, 5, 6, FORMAT_VERSION];
+const READABLE_VERSIONS = [1, 2, 3, 4, 5, 6, 7, FORMAT_VERSION];
+/** Wall faces by their code in the URL (#133); append only. */
+const WALL_FACE_CODES: readonly WallFace[] = ['inner', 'outer', 'both'];
 /** The first format with bends and twists in 0.01° steps (#86). */
 const FINE_ANGLES = 7;
 export const HASH_KEY = 'c';
@@ -118,7 +125,8 @@ export function courseToBytes(course: Course): Uint8Array {
       (attachments.length ? 16 : 0) |
       (course.start ? 32 : 0) |
       (course.timer ? 64 : 0) |
-      (stoppers.length ? 128 : 0),
+      (stoppers.length ? 128 : 0) |
+      (course.tape ? 256 : 0),
   );
   if (course.name) {
     const name = new TextEncoder().encode(course.name);
@@ -198,6 +206,17 @@ export function courseToBytes(course: Course): Uint8Array {
         w.tenths(s.yaw);
       }
     }
+  }
+  if (course.tape) {
+    const { floor, wall } = course.tape;
+    w.uint((floor ? 1 : 0) | (wall ? 2 : 0));
+    for (const spec of [floor, wall]) {
+      if (!spec) continue;
+      w.uint(TAPE_KIND_ORDER.indexOf(spec.kind));
+      w.uint(Math.round(spec.width));
+      w.uint(Math.round(spec.friction * 1000));
+    }
+    if (wall) w.uint(WALL_FACE_CODES.indexOf(wall.face));
   }
   return new Uint8Array(w.bytes);
 }
@@ -284,6 +303,23 @@ export function courseFromBytes(bytes: Uint8Array, version = FORMAT_VERSION): Co
       [box.x, box.z, box.yaw] = [r.int(), r.int(), r.tenths()];
       return box;
     });
+  }
+  if (flags & 256) {
+    const which = r.uint();
+    const spec = (): TapeSpec => {
+      const kind = TAPE_KIND_ORDER[r.uint()];
+      if (!kind) throw new Error('unknown tape kind');
+      return { kind, width: r.uint(), friction: r.uint() / 1000 };
+    };
+    const tape: JointTape = {};
+    if (which & 1) tape.floor = spec();
+    if (which & 2) {
+      const wall = spec();
+      const face = WALL_FACE_CODES[r.uint()];
+      if (!face) throw new Error('unknown tape face');
+      tape.wall = { ...wall, face };
+    }
+    course.tape = tape;
   }
   if (r.pos !== bytes.length) throw new Error('unexpected data after course');
   validateCourse(course);

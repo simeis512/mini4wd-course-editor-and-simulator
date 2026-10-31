@@ -44,7 +44,7 @@ const SETTINGS_KEY = 'model.settings';
 
 const DEFAULTS: Settings = {
   format: 'glb',
-  includes: { supports: true, props: true, floor: false },
+  includes: { supports: true, props: true, floor: false, tape: true },
   scale: 20,
   min: PRINT_MIN_THICKNESS,
   volume: [...BUILD_VOLUME],
@@ -78,7 +78,7 @@ async function glb(solids: readonly ModelSolid[]): Promise<ArrayBuffer> {
 export function bindModelExport(host: ModelHost): void {
   const dialog = $<HTMLDialogElement>('model-dialog');
   const format = $<HTMLSelectElement>('model-format');
-  const boxes = { supports: $<HTMLInputElement>('model-supports'), props: $<HTMLInputElement>('model-props'), floor: $<HTMLInputElement>('model-floor') };
+  const boxes = { supports: $<HTMLInputElement>('model-supports'), props: $<HTMLInputElement>('model-props'), floor: $<HTMLInputElement>('model-floor'), tape: $<HTMLInputElement>('model-tape') };
   const scale = $<HTMLSelectElement>('model-scale');
   const min = $<HTMLInputElement>('model-min');
   const volume = (['w', 'd', 'h'] as const).map((k) => $<HTMLInputElement>(`model-vol-${k}`));
@@ -87,14 +87,14 @@ export function bindModelExport(host: ModelHost): void {
 
   const show = (s: Settings) => {
     format.value = s.format;
-    for (const k of Object.keys(boxes) as (keyof ModelIncludes)[]) boxes[k].checked = s.includes[k];
+    for (const k of Object.keys(boxes) as (keyof ModelIncludes)[]) boxes[k].checked = !!s.includes[k];
     scale.value = String(s.scale);
     min.value = String(s.min);
     volume.forEach((input, i) => (input.value = String(s.volume[i])));
   };
   const read = (): Settings => ({
     format: format.value as Format,
-    includes: { supports: boxes.supports.checked, props: boxes.props.checked, floor: boxes.floor.checked },
+    includes: { supports: boxes.supports.checked, props: boxes.props.checked, floor: boxes.floor.checked, tape: boxes.tape.checked },
     scale: Number(scale.value),
     min: Math.max(0.1, Number(min.value) || PRINT_MIN_THICKNESS),
     volume: volume.map((input, i) => Number(input.value) || BUILD_VOLUME[i]) as Settings['volume'],
