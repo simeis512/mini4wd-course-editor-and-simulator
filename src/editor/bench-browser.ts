@@ -133,7 +133,9 @@ function traceControls(app: BenchApp, output: HTMLElement, bench: HTMLButtonElem
     performance.clearMeasures();
     // Distinguish the addition from fixture setup in the Performance timeline.
     // The next rAF mark is a scheduling boundary, not GPU/presentation time.
-    perfSpan(`profile:add:${mode}`, () => app.commit(structuredClone(next), null));
+    // Clone before the span so only the commit is measured, like the regular benchmark.
+    const course = structuredClone(next);
+    perfSpan(`profile:add:${mode}`, () => app.commit(course, null));
     requestAnimationFrame(() => performance.mark('mini4wd:profile:next-frame'));
     // Keep the report DOM unchanged so its own layout/paint does not enter the trace.
   };
