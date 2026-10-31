@@ -130,6 +130,7 @@ async function seriesSpring(give: Give) {
       if (e.collider1() === wallCollider.handle || e.collider2() === wallCollider.handle) f += e.totalForceMagnitude();
     });
     if (give.kind === 'shift' && roller) {
+      // A displacement, not a force: off the fence it eases back over 5 ms, standing in for the fence springing back (provisional).
       held += (f - held) * Math.min(1, world.timestep / 0.005);
       roller.setTranslationWrtParent({ x: at.x - held / give.k, y: at.y, z: at.z });
     }
@@ -198,6 +199,7 @@ async function ovalWithGive(k: number | null) {
     });
     if (k === null) return;
     rollers.forEach((c, i) => {
+      // A displacement: it eases back off the fence, as the fence springs back.
       held[i] += (f[i] - held[i]) * Math.min(1, world.timestep / 0.005);
       const give = Math.min(0.005, held[i] / k);
       most = Math.max(most, give);

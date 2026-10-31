@@ -34,6 +34,8 @@ function hookGrip(world: RAPIER.World, m: Machine, fence: number, grip: Grip, th
   const index = new Map(rollers.map((c, i) => [c.handle, i]));
   const queue = new RAPIER.EventQueue(true);
   const held = [0, 0, 0, 0];
+  /** The fence's lean at each roller, rad: its shape, which eases back off the fence. */
+  const lean = [0, 0, 0, 0];
   const normals = rollers.map(() => new Vector3());
   const stats = { mostLean: 0, down: 0, steps: 0 };
   const before = () => {
@@ -45,11 +47,7 @@ function hookGrip(world: RAPIER.World, m: Machine, fence: number, grip: Grip, th
     rollers.forEach((c, k) => {
       if (held[k] <= 0) return;
       const at = c.translation();
-      if (leanKappa !== null) {
-        const phi = Math.min(MAX_LEAN, (held[k] * ROLLER_H) / leanKappa);
-        stats.mostLean = Math.max(stats.mostLean, phi);
-        m.body.addForceAtPoint({ x: 0, y: held[k] * Math.tan(phi), z: 0 }, at, true);
-      }
+      if (leanKappa !== null) m.body.addForceAtPoint({ x: 0, y: held[k] * Math.tan(lean[k]), z: 0 }, at, true);
       if (grip === 'old') {
         const f = OLD.mu * held[k] * Math.min(1, thrustDeg / OLD.theta0);
         m.body.addForceAtPoint({ x: down.x * f, y: down.y * f, z: down.z * f }, at, true);
@@ -75,7 +73,12 @@ function hookGrip(world: RAPIER.World, m: Machine, fence: number, grip: Grip, th
       normals[k].set(d.x, d.y, d.z);
     });
     const a = Math.min(1, world.timestep / 0.005);
-    f.forEach((v, k) => (held[k] += (v - held[k]) * a));
+    // Off the fence, no push: the smoothing only rides over the knocks while touching (Codex review).
+    f.forEach((v, k) => {
+      held[k] = v > 0 ? held[k] + (v - held[k]) * a : 0;
+      if (leanKappa !== null) lean[k] += (Math.min(MAX_LEAN, (held[k] * ROLLER_H) / leanKappa) - lean[k]) * a;
+      stats.mostLean = Math.max(stats.mostLean, lean[k]);
+    });
   };
   return { queue, before, after, stats };
 }

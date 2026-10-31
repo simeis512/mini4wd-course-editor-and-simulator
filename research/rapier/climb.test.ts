@@ -190,8 +190,10 @@ async function oval(freeRpm: number, thrustDeg: number, kappa: number | null, la
     });
     const a = Math.min(1, world.timestep / 0.005);
     f.forEach((v, k) => {
-      held[k] += (v - held[k]) * a;
-      if (kappa !== null) phi[k] = Math.min(MAX_LEAN, (held[k] * ROLLER_H) / kappa);
+      // The push is smoothed only while touching: off the fence there is none (Codex review).
+      held[k] = v > 0 ? held[k] + (v - held[k]) * a : 0;
+      // The lean is the fence's shape: it follows the push and eases back off it (5 ms, provisional).
+      if (kappa !== null) phi[k] += (Math.min(MAX_LEAN, (held[k] * ROLLER_H) / kappa) - phi[k]) * a;
       mostLean = Math.max(mostLean, phi[k]);
     });
   };

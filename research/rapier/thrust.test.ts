@@ -193,7 +193,7 @@ async function lapWithThrustForce(thetaDeg: number, mu = 0.3, theta0 = 2, smooth
       if (i !== undefined) pressed[i] += e.totalForceMagnitude();
     });
     const k = smooth > 0 ? Math.min(1, world.timestep / smooth) : 1;
-    pressed.forEach((p, i) => (held[i] += (p - held[i]) * k));
+    pressed.forEach((p, i) => (held[i] = p > 0 ? held[i] + (p - held[i]) * k : 0));
   };
   let s = run.advance(0);
   let slowest = Infinity;
