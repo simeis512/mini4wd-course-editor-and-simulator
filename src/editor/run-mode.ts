@@ -3,7 +3,7 @@ import type { Layout } from '../course/course';
 import { timedLane } from '../course/lap-marks';
 import type { OutReason, Run } from '../physics/run';
 import { $, toast } from './dom';
-import { RunCamera, type CameraMode, type CameraView } from './run-camera';
+import { RunCamera, seeThroughPoints, type CameraMode, type CameraView } from './run-camera';
 
 // Running the machine in the 3D view (#27, spec simulator.md 6): a mode of
 // its own, apart from editing. The physics is loaded only when it is first
@@ -21,6 +21,8 @@ export interface RunModeHost {
   setMachine(object: THREE.Object3D | null): void;
   /** Point the 3D view's camera (course mm), or give it back to the user. */
   aim(view: CameraView | null): void;
+  /** See through the fences between the camera and these points (course mm), or none (#136). */
+  seeThrough(points: THREE.Vector3[] | null): void;
   /** Call `tick` before each frame the 3D view draws (in AR too), or stop. */
   onFrame(tick: (() => void) | null): void;
 }
@@ -83,6 +85,7 @@ export class RunMode {
     camera.addEventListener('change', () => {
       this.camera.mode = camera.value as CameraMode;
       this.camera.snap();
+      if (this.camera.mode !== 'side') this.host.seeThrough(null);
       this.draw(0);
     });
   }
@@ -120,6 +123,7 @@ export class RunMode {
     $('ar-run').hidden = true;
     $('ar-run-toggle').textContent = '走らせる';
     this.host.onFrame(null);
+    this.host.seeThrough(null);
     this.host.aim(null);
     this.host.leave();
   }
@@ -207,6 +211,8 @@ export class RunMode {
     physics.spinTyres(mesh, run.spec, s.distance);
     physics.placeShadow(shadow, run.spec, s.position, s.quaternion, run.ground());
     this.host.aim(this.camera.next(s.position, s.quaternion, dt));
+    const facing = this.camera.facing;
+    if (this.camera.mode === 'side' && facing) this.host.seeThrough(seeThroughPoints(s.position, facing));
     const kmh = Math.max(0, s.speed) * 3.6;
     const laps = s.lapTimes;
     const times = laps.length ? ` ・ ラップ ${laps[laps.length - 1].toFixed(2)} 秒（ベスト ${Math.min(...laps).toFixed(2)}）` : '';
