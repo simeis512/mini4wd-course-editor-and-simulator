@@ -124,6 +124,10 @@
       #trash-zone.blocked { background: rgba(60, 64, 74, 0.9); font-weight: 400; font-size: 13px; }
       #fullscreen { margin-left: auto; }
       #fullscreen[hidden] + #about { margin-left: auto; }
+      #info td a { color: var(--accent); }
+      #info .stores { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+      #info .store, .amazon-links .button { font-size: 12px; padding: 2px 8px; min-height: 0; border: 1px solid var(--line); border-radius: 6px; background: #30343d; color: var(--text); text-decoration: none; }
+      .amazon-links .button { font-size: 13px; padding: 6px 10px; }
       #about { width: 34px; padding: 0; border-radius: 50%; font-weight: 700; font-family: Georgia, serif; }
       dialog { width: min(520px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow-y: auto; padding: 14px 18px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 40px #000a; }
       dialog::backdrop { background: #0008; }
@@ -545,6 +549,12 @@
       <p>ミニ四駆・ジャパンカップジュニアサーキットは株式会社タミヤの商標です。本アプリはタミヤとは関係のない非公式アプリです。</p>
       <h3>データの扱い</h3>
       <p>コースはブラウザの中だけで扱い、サーバーには送りません。 <button id="about-notice" class="small">「はじめに」の案内を見る</button></p>
+      <div id="about-amazon" hidden>
+        <h3>Amazon アソシエイト</h3>
+        <p id="about-amazon-disclosure"></p>
+        <p id="about-amazon-cookie" class="hint"></p>
+        <label>購入リストの Amazon のリンク <select id="amazon-choice"></select></label>
+      </div>
       <h3>リンク</h3>
       <ul>
         <li>ソースコード：<a href="https://github.com/simeis512/mini4wd-course-editor-and-simulator" target="_blank" rel="noopener">GitHub リポジトリ</a></li>
@@ -563,6 +573,18 @@
         <summary>ライブラリのライセンス全文</summary>
         <pre></pre>
       </details>
+    </dialog>
+    <dialog id="amazon-dialog" aria-labelledby="amazon-title">
+      <form method="dialog"><button class="close" aria-label="閉じる">×</button></form>
+      <h2 id="amazon-title">Amazon の商品ページを開きます</h2>
+      <p>どちらのリンクで開くかを選んでください。アソシエイトリンクから買うと、このサイトの運営の支えになります。</p>
+      <div class="actions amazon-links">
+        <a id="amazon-tagged" class="button" target="_blank" rel="noopener">アソシエイトリンクで Amazon を開く</a>
+        <a id="amazon-plain" class="button" target="_blank" rel="noopener">アソシエイトなしで Amazon を開く</a>
+      </div>
+      <p id="amazon-disclosure" class="hint"></p>
+      <p id="amazon-cookie" class="hint"></p>
+      <label><input id="amazon-remember" type="checkbox" /> 次からこの画面を出さない（「i」の情報パネルで戻せます）</label>
     </dialog>
     <dialog id="qr-dialog" aria-labelledby="qr-title">
       <form method="dialog"><button class="close" aria-label="閉じる">×</button></form>

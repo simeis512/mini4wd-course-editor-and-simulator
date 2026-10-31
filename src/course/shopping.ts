@@ -1,5 +1,6 @@
 import { getAttachment, getPart, PARTS, variantOf } from './catalog';
 import type { Course } from './course';
+import type { ProductStores } from './store-links';
 
 // What to buy to build a course (spec 7, #18): the sections it uses by
 // colour, the Tamiya items that sell them, and what is left over.
@@ -35,6 +36,8 @@ export interface Product {
   for?: string[];
   /** Bought only as many times as it is filled up, leaving the rest to a smaller pack after it. */
   bulk?: boolean;
+  /** Where to buy it (#128): see `store-links.ts`. Left out where it is not sold there. */
+  stores?: ProductStores;
 }
 
 /** Key of a section in a colour, e.g. `straight/white`; washboards have no colour. */
