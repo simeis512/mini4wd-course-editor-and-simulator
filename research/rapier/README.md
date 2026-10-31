@@ -24,3 +24,4 @@ npx vitest run research/rapier --silent=false
 | `flexible-fence.test.ts` | H. コースのフェンスのしなり |
 | `climb.test.ts` | I. 傾いたフェンスをローラーが乗り越えるコースアウト |
 | `speed-cap.test.ts` | J. Rapier の速さの上限（400 × lengthUnit m/s） |
+| `roller-grip.ts`, `roller-grip.test.ts` | K. ローラーの軸方向の摩擦（細いエッジは食い込む、という通説）と乗り越え |
