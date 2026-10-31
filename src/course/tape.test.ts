@@ -92,11 +92,20 @@ describe('joint tape (#133)', () => {
     ]);
   });
 
-  it('cuts a track end to length between samples', () => {
+  it('lays a strip straight on from the joint, as wide all along, on a bend too (owner, 2026-10-31)', () => {
     const layout = layoutCourse(chain(['curve45']));
-    const frames = endFrames(layout.pieces[0].geometry.tracks[0].samples, false, 30);
-    let length = 0;
-    for (let i = 1; i < frames.length; i++) length += new Vector3().setFromMatrixPosition(frames[i]).distanceTo(new Vector3().setFromMatrixPosition(frames[i - 1]));
-    expect(length).toBeCloseTo(30, 0);
+    const samples = layout.pieces[0].geometry.tracks[0].samples;
+    for (const atStart of [true, false]) {
+      const frames = endFrames(samples, atStart, 30);
+      expect(frames).toHaveLength(2);
+      const [a, b] = frames.map((f) => new Vector3().setFromMatrixPosition(f));
+      expect(a.distanceTo(b)).toBeCloseTo(30);
+      // Straight on from the end, which stays where the track ends.
+      const end = new Vector3().setFromMatrixPosition(samples[atStart ? 0 : samples.length - 1]);
+      expect((atStart ? a : b).distanceTo(end)).toBeCloseTo(0);
+      // Along the track there, into the piece.
+      const inward = new Vector3().setFromMatrixPosition(samples[atStart ? 1 : samples.length - 2]).sub(end).normalize();
+      expect((atStart ? b.clone().sub(a) : a.clone().sub(b)).normalize().dot(inward)).toBeGreaterThan(0.999);
+    }
   });
 });
