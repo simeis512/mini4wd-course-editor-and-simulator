@@ -4,7 +4,7 @@ import { GLOBAL_SPEC } from './catalog';
 import { layoutCourse, validateCourse } from './course';
 import { pointOnFrame } from './geometry';
 import { basicOval, chain } from './presets';
-import { endFrames, setTape, TAPE_THICKNESS, tapeNeeds, tapeStrips, WALL_WRAP, type JointTape } from './tape';
+import { endFrames, setTape, wallFrames, TAPE_THICKNESS, tapeNeeds, tapeStrips, WALL_WRAP, type JointTape } from './tape';
 
 const floor = { kind: 'curing', width: 50, friction: 0.5 } as const;
 const wall = (dividers = false) => ({ kind: 'opp', width: 48, friction: 0.35, dividers }) as const;
@@ -90,6 +90,19 @@ describe('joint tape (#133)', () => {
       ['floor', 2, Math.round(2 * ROAD)],
       ['wall', 2, 2 * 4 * WALL_WRAP],
     ]);
+  });
+
+  it('wraps each wall as wide along it, on the inside of a bend too (owner, 2026-10-31)', () => {
+    const layout = layoutCourse(chain(['curve45']));
+    const samples = layout.pieces[0].geometry.tracks[0].samples;
+    for (const right of [-180, -60, 60, 180]) {
+      for (const atStart of [true, false]) {
+        const points = wallFrames(samples, atStart, 25, right).map((f) => pointOnFrame(f, right, 0));
+        let length = 0;
+        for (let i = 1; i < points.length; i++) length += points[i].distanceTo(points[i - 1]);
+        expect(length).toBeCloseTo(25, 0);
+      }
+    }
   });
 
   it('lays a strip straight on from the joint, as wide all along, on a bend too (owner, 2026-10-31)', () => {
