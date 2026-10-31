@@ -7,7 +7,9 @@ import { SNAP_STEP } from './drag';
 import { bindLevelTools, type HeightView } from './levels';
 import { POSE_FIELDS } from './panels';
 import { bindAbout } from './notice';
+import { bindFullscreen } from './fullscreen';
 import { bindShopping } from './shopping';
+import { bindModelExport } from './model-export';
 import { bindQr } from './qr';
 import { ShareImage, type ShareHost } from './share-image';
 import { bindSidePanel } from './side-panel';
@@ -24,14 +26,13 @@ export interface AppUiHost {
   setHeightView(view: HeightView): void;
   renderCourseInfo(): void;
   overPanel(e: PointerEvent): void;
-  placeContext(): void;
   select(selection: Selection): void;
   setMode(mode: '2d' | '3d'): void;
   undo(): void;
   redo(): void;
   newCourse(): Promise<void>;
   copyUrl(): Promise<void>;
-  exportJson(): void;
+  exportJson(): Promise<void>;
   importJson(file: File): Promise<void>;
   fit(): void;
   edit(action: SelectedAction): void;
@@ -49,6 +50,7 @@ export function readRaiseFields() {
 
 export function bindAppUi(host: AppUiHost): ShareImage {
   bindAbout();
+  bindFullscreen();
   bindSidePanel();
   bindLevelTools((view) => host.setHeightView(view));
   bindTurnTools(host.top);
@@ -56,8 +58,6 @@ export function bindAppUi(host: AppUiHost): ShareImage {
   bindCourseInfo(host.checks);
   // Views capture the pointer while dragging, so its moves still bubble up here.
   window.addEventListener('pointermove', (e) => host.overPanel(e));
-  $<HTMLDetailsElement>('course-info').addEventListener('toggle', () => host.placeContext());
-  $('context').querySelector('details')!.addEventListener('toggle', () => host.placeContext());
   $('context-close').addEventListener('click', () => host.select(null));
   $('mode-2d').addEventListener('click', () => host.setMode('2d'));
   $('mode-3d').addEventListener('click', () => host.setMode('3d'));
@@ -66,8 +66,9 @@ export function bindAppUi(host: AppUiHost): ShareImage {
   $('new').addEventListener('click', () => void host.newCourse());
   $('copy-url').addEventListener('click', () => void host.copyUrl());
   bindQr(host.sharing);
+  bindModelExport(host.sharing);
   const share = new ShareImage(host.sharing);
-  $('export').addEventListener('click', () => host.exportJson());
+  $('export').addEventListener('click', () => void host.exportJson());
   const file = $<HTMLInputElement>('import-file');
   $('import').addEventListener('click', () => file.click());
   file.addEventListener('change', () => {
@@ -122,6 +123,7 @@ export function bindAppUi(host: AppUiHost): ShareImage {
   });
   $('raise-count').addEventListener('input', () => host.renderPanel());
   $('split').addEventListener('click', () => host.edit({ kind: 'split' }));
+  $('close-loop').addEventListener('click', () => host.edit({ kind: 'close-loop' }));
   $('join').addEventListener('click', () => host.edit({ kind: 'join' }));
 
   window.addEventListener('keydown', (e) => {

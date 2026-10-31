@@ -1,19 +1,18 @@
 import type { PaletteItem } from '../course/add';
 import { getPart, PARTS, variantOf } from '../course/catalog';
 import { compatible, movingGroup, placementOf, portKey, type Course, type Layout, type PortRef } from '../course/course';
-import { footprint, jointBend, jointShift, linkHolder, setShift } from '../course/edit';
+import { jointBend, jointShift, linkHolder, setShift } from '../course/edit';
 import { BEND_LIMIT, TWIST_LIMIT } from '../course/flex';
 import { asLink, bendable, joinableNear } from '../course/joining';
 import { previewRun } from '../course/raise';
-import { propOutline, propPoint } from '../course/props';
 import { getTemplate, TEMPLATES } from '../course/templates';
+import { CLOSE_LOOP_CAREFUL_PER_PIECE, CLOSE_LOOP_LIMIT, closeLoopReach, loopEnds } from '../course/close-loop';
 import { renderAttachments } from './attach';
 import { $ } from './dom';
-import { cornerSpot, rectAround, type Rect } from './float';
 import { partIcon, templateIcon } from './icons';
 import { renderPropPanel } from './props';
-import { isProp, type Selection } from './selection';
-import type { EditorView, RunMarks } from './view';
+import type { Selection } from './selection';
+import type { RunMarks } from './view';
 
 export const POSE_FIELDS = ['pose-x', 'pose-y', 'pose-z', 'pose-yaw', 'pose-pitch', 'pose-roll'] as const;
 
@@ -28,6 +27,8 @@ export interface PaletteHandlers {
   down(e: PointerEvent, item: PaletteItem): void;
   move(e: PointerEvent): void;
   up(e: PointerEvent, cancelled: boolean): void;
+  /** Whether a finger is dragging a part out, so the list must not scroll (#114). */
+  holding(): boolean;
 }
 
 /** A button that adds `item` by a click, or by dragging it onto the course (#40, #41). */
@@ -44,6 +45,9 @@ function paletteButton(handlers: PaletteHandlers, item: PaletteItem, icon: SVGSV
   b.addEventListener('pointermove', (e) => handlers.move(e));
   b.addEventListener('pointerup', (e) => handlers.up(e, false));
   b.addEventListener('pointercancel', (e) => handlers.up(e, true));
+  // The list scrolls under a finger (touch-action: pan-y) until it holds a part (#114).
+  b.addEventListener('touchmove', (e) => handlers.holding() && e.preventDefault(), { passive: false });
+  b.addEventListener('contextmenu', (e) => e.preventDefault());
   return b;
 }
 
@@ -121,6 +125,18 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
       group.size > 1
         ? `点線のピースとつながっています。ドラッグするとつながった ${group.size} 個が一緒に動きます`
         : 'ほかのピースとつながっていません';
+    // Closing the loop by force (#86): always shown, usable while the group's two open ends are near enough.
+    const ends = loopEnds(layout, s.index);
+    const reach = closeLoopReach(layout, s.index);
+    const near = !!ends && ends.distance <= reach;
+    $<HTMLButtonElement>('close-loop').disabled = !near;
+    $('close-loop-warn').hidden = !near || ends.distance <= closeLoopReach(layout, s.index, CLOSE_LOOP_CAREFUL_PER_PIECE);
+    $('close-loop-warn').textContent = `ずれが大きいので、ジョイントを大きめ（1 か所 ${CLOSE_LOOP_LIMIT}° まで）に曲げます。閉じたあと形を確かめてください`;
+    $('close-loop-info').textContent = !ends
+      ? layout.open.some((r) => group.has(r.piece))
+        ? '開いた口がちょうど 2 つのときに使えます'
+        : '開いた口はありません'
+      : `口のずれ ${ends.distance.toFixed(1)}mm・${ends.angle.toFixed(1)}°${near ? '' : `（${group.size} ピースでは ${reach.toFixed(0)}mm まで）`}`;
     const { base, pose } = placementOf(pc.rec);
     const from = base ? `${pieceLabel(layout, base.piece)} の口から` : 'ワールド原点から';
     $('placement-base').textContent = 'free' in pc.rec ? `自由配置（${from}）` : base ? `連結（${from}）` : '先頭（原点）';
@@ -162,7 +178,7 @@ export function renderPanels(course: Course, layout: Layout, s: Selection): void
 
   renderPropPanel(layout, s);
 
-  // Settings for the selection float over the editor, in the same place for anything selected (#45, #64).
+  // Settings for the selection, at the top of the side panel (#45, #134).
   $('context').hidden = s === null;
 }
 
@@ -206,52 +222,4 @@ function showLimit(id: string, deg: number, limit: number, what: string): void {
   const warn = $(id);
   warn.hidden = Math.abs(deg) <= limit;
   warn.textContent = `${what}が上限の目安 ${limit}° を超えています（目安は実測待ちの仮の値です）`;
-}
-
-/** Where a piece lies on screen, roughly: its footprint between its lowest and highest port. */
-function pieceRect(view: EditorView, layout: Layout, index: number, stage: DOMRect): Rect | null {
-  const pc = layout.pieces[index];
-  const [x0, x1, z0, z1] = footprint(pc);
-  const ys = pc.ports.map((p) => p.elements[13]);
-  const pts: [number, number][] = [];
-  for (const y of [Math.min(...ys), Math.max(...ys)]) {
-    for (const [x, z] of [[x0, z0], [x0, z1], [x1, z0], [x1, z1]]) {
-      const q = view.clientOf(x, y, z);
-      if (q) pts.push([q[0] - stage.left, q[1] - stage.top]);
-    }
-  }
-  return rectAround(pts);
-}
-
-/**
- * Put the selection's settings in the same corner of the editor whatever is
- * selected (#64), moving only to keep off the selection and the pieces
- * `lit` up for it.
- */
-export function placeContext(view: EditorView, layout: Layout, s: Selection, lit: readonly number[] = []): void {
-  const box = $('context');
-  if (box.hidden || !s) return;
-  const stage = $('stage').getBoundingClientRect();
-  let anchor: Rect | null;
-  if (s.kind === 'piece') {
-    anchor = pieceRect(view, layout, s.index, stage);
-  } else if (isProp(s)) {
-    // All round it, at the height of its middle.
-    const y = propPoint(layout, s)?.y ?? 0;
-    const pts = propOutline(layout, s).flatMap(([x, z]) => {
-      const q = view.clientOf(x, y, z);
-      return q ? [[q[0] - stage.left, q[1] - stage.top] as [number, number]] : [];
-    });
-    anchor = rectAround(pts);
-  } else {
-    const ref = s.kind === 'port' ? s.ref : s.a;
-    const e = layout.pieces[ref.piece].ports[ref.port].elements;
-    const q = view.clientOf(e[12], e[13], e[14]);
-    anchor = q && rectAround([[q[0] - stage.left, q[1] - stage.top]]);
-  }
-  const avoid = lit.map((i) => pieceRect(view, layout, i, stage)).filter((r): r is Rect => r !== null);
-  if (anchor) avoid.push(anchor);
-  const [left, top] = cornerSpot(box.offsetWidth, box.offsetHeight, stage.width, stage.height, avoid);
-  box.style.left = `${left}px`;
-  box.style.top = `${top}px`;
 }

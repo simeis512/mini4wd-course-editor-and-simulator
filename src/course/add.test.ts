@@ -32,6 +32,17 @@ describe('joinPart', () => {
     expect(layoutCourse(climbing!.course).problems).toEqual([]);
   });
 
+  it('turns bank approaches coming down off a banked turn so each one lies on the next and the last on the floor (#116)', () => {
+    let c = chain(['straight', 'bank-approach-20', 'bank-approach-20', 'curve45', 'curve45', 'curve45', 'curve45']);
+    for (const part of ['bank-approach-20', 'bank-approach-20', 'straight']) {
+      const last = c.pieces.length - 1;
+      const open = layoutCourse(c).open.find((r) => r.piece === last)!;
+      c = joinPart(c, part, open)!.course;
+    }
+    // Only the clips to break off, between the two going up and the two coming down.
+    expect(layoutCourse(c).problems.map((p) => p.kind)).toEqual(['forced-join', 'forced-join']);
+  });
+
   it('joins a bridge approach after the lane change centre by its lower end, carrying on the lane change', () => {
     const c = chain(['bridge-approach']);
     c.pieces.push({ part: 'lane-change-center', port: 0, to: [0, 1] });
@@ -39,8 +50,14 @@ describe('joinPart', () => {
     expect(joined?.port).toBe(1);
   });
 
+  it('joins a bank approach to another only end to end (#116)', () => {
+    const rec = (j: ReturnType<typeof joinPart>) => j && j.course.pieces[j.course.pieces.length - 1];
+    // To the high end by its low end; to the low end by its high end, coming down.
+    expect(rec(joinPart(chain(['bank-approach-20']), 'bank-approach-20', { piece: 0, port: 1 }))).toMatchObject({ port: 0 });
+    expect(rec(joinPart(chain(['bank-approach-20']), 'bank-approach-20', { piece: 0, port: 0 }))).toMatchObject({ port: 1 });
+  });
+
   it('refuses parts that cannot join', () => {
-    expect(joinPart(chain(['bank-approach-20']), 'bank-approach-20', { piece: 0, port: 1 })).toBeNull();
     expect(joinPart(chain(['straight']), 'lane-change-center', { piece: 0, port: 1 })).toBeNull();
   });
 });

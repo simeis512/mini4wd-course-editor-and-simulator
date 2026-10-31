@@ -14,17 +14,19 @@ import { stopperContacts } from '../course/stopper-contact';
 import { supports } from '../course/height';
 import { worldTracks } from '../course/mesh';
 import { checkLaps } from '../course/laps';
+import { linkJoined } from '../course/linking';
 import { basicOval } from '../course/presets';
 import { renderCourseInfo, type CourseChecks } from './checks';
 import { $, toast } from './dom';
+import { showContext } from './side-panel';
 import { PaletteDrag, PieceDrag, PropDrag, type DragHost } from './drag';
 import { HandleTool } from './handles';
 import { History } from './history';
 import { Library } from './library';
 import { levelMax, renderLevelTools, type HeightView } from './levels';
-import { buildPalette, placeContext, renderPanels, runMarks } from './panels';
+import { buildPalette, renderPanels, runMarks } from './panels';
 import { PropTools } from './props';
-import { isProp, type Selection } from './selection';
+import { isProp, renumbered, type Selection } from './selection';
 import { showNoticeOnStart } from './notice';
 import type { ShareImage } from './share-image';
 import { renderTurnTools } from './turn-tools';
@@ -44,8 +46,8 @@ export class EditorApp {
   private layout: Layout = layoutCourse(this.course);
   private checks: CourseChecks = { clashes: [], laps: null };
   private selection: Selection = null;
-  /** Pieces lit up for the selection, which its settings keep off. */
-  private lit: number[] = [];
+  /** The selection its settings were last brought into sight for, so only a new one opens the panel. */
+  private shown = '';
   private history = new History<Course>(HISTORY_LIMIT);
   private mode: '2d' | '3d' = '2d';
   private heightView: HeightView = { colors: false, level: 0 };
@@ -122,7 +124,6 @@ export class EditorApp {
     const handlers = {
       onPick: (s: Selection) => this.select(s),
       onViewChange: () => {
-        this.placeContext();
         this.handles?.draw();
         if (this.top) renderTurnTools(this.top);
         this.share?.later();
@@ -154,6 +155,7 @@ export class EditorApp {
       leave: () => this.orbit.setPicking(true),
       setMachine: (object) => this.orbit.setMachine(object),
       aim: (view) => this.orbit.aim(view),
+      onFrame: (tick) => this.orbit.onFrame(tick),
     });
     buildPalette({
       click: (item) => {
@@ -162,6 +164,7 @@ export class EditorApp {
       down: (e, item) => this.paletteDrag.down(e, item),
       move: (e) => this.paletteDrag.move(e),
       up: (e, cancelled) => this.paletteDrag.up(e, cancelled),
+      holding: () => this.paletteDrag.holding,
     });
     this.share = bindAppUi({
       get selection() { return app.selection; },
@@ -180,12 +183,11 @@ export class EditorApp {
         get laps() { return app.checks.laps; },
         name: () => this.courseTitle(),
         url: () => this.hashSync.url(),
-        get fileName() { return fileName(app.course); },
+        get fileName() { return fileName(app.course.name); },
       },
       setHeightView: (view) => this.setHeightView(view),
       renderCourseInfo: () => renderCourseInfo(this.course, this.layout, this.checks),
       overPanel: (e) => this.pieceDrag.overPanel(e),
-      placeContext: () => this.placeContext(),
       select: (selection) => this.select(selection),
       setMode: (mode) => this.setMode(mode),
       undo: () => this.undo(),
@@ -194,7 +196,7 @@ export class EditorApp {
         if (await this.library.confirmReplace('新しく作る')) this.load(emptyCourse(), true);
       },
       copyUrl: () => this.hashSync.copyUrl(),
-      exportJson: () => exportJson(this.course),
+      exportJson: async () => exportJson(this.course, await this.courseTitle()),
       importJson: (file) => this.importJson(file),
       fit: () => this.view.fit(),
       edit: (action) => this.edit(action),
@@ -213,7 +215,8 @@ export class EditorApp {
 
   /** Replace the whole course (new / open), clearing history. */
   private load(course: Course, writeUrl: boolean): void {
-    this.course = course;
+    // Ports that meet are stored as links, also in courses made before that was done (#131).
+    this.course = linkJoined(course).course;
     this.history.clear();
     this.selection = null;
     this.refresh(writeUrl);
@@ -226,8 +229,10 @@ export class EditorApp {
   /** Apply an edit, recording it for undo. */
   private commit(next: Course, selection: Selection = null): void {
     this.history.record(this.course);
-    this.course = next;
-    this.selection = selection;
+    // Pieces left meeting others by the edit are joined to them (#131).
+    const linked = linkJoined(next, this.layout);
+    this.course = linked.course;
+    this.selection = renumbered(selection, linked.order);
     this.refresh(true);
   }
 
@@ -358,7 +363,8 @@ export class EditorApp {
     const next = editSelection({
       course: this.course, layout: this.layout, selection: this.selection, moveAlone: this.moveAlone,
     }, action);
-    if (next) this.commit(next.course, next.selection);
+    if (next?.message) toast(next.message);
+    if (next && next.course !== this.course) this.commit(next.course, next.selection);
   }
 
   private get snapOn(): boolean {
@@ -375,7 +381,6 @@ export class EditorApp {
     const sides = $('raise-box').hidden ? null : raiseSides(this.course, this.selection, fields.intoA);
     const marks = sides ? runMarks(sides.course, sides.from, sides.into, fields.count) : null;
     for (const view of [this.top, this.orbit]) view.setRunMarks(marks);
-    this.lit = marks?.pieces ?? [];
   }
 
   private async importJson(file: File): Promise<void> {
@@ -435,12 +440,10 @@ export class EditorApp {
     $<HTMLButtonElement>('undo').disabled = !this.history.canUndo;
     $<HTMLButtonElement>('redo').disabled = !this.history.canRedo;
     renderPanels(this.course, this.layout, this.selection);
+    const shown = JSON.stringify(this.selection);
+    if (this.selection && shown !== this.shown) showContext();
+    this.shown = shown;
     renderCourseInfo(this.course, this.layout, this.checks);
     this.showRun();
-    this.placeContext();
-  }
-
-  private placeContext(): void {
-    placeContext(this.view, this.layout, this.selection, this.lit);
   }
 }

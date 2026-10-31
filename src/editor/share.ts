@@ -41,8 +41,11 @@ export class HashSync {
   }
 }
 
-/** The name files of `course` are saved under, before the extension. */
-export const fileName = (course: Course) => course.name || 'course';
+/** Characters file systems refuse in a name (Windows is the strictest). */
+const UNSAFE_IN_FILE_NAMES = /[\\/:*?"<>|\u0000-\u001f]/g;
+
+/** A file name, before the extension, for a course called `name`: `course` when it has none. */
+export const fileName = (name = '') => name.replace(UNSAFE_IN_FILE_NAMES, '_').trim() || 'course';
 
 /** Save `blob` as a file called `name`. */
 export function download(blob: Blob, name: string): void {
@@ -53,8 +56,9 @@ export function download(blob: Blob, name: string): void {
   URL.revokeObjectURL(a.href);
 }
 
-export function exportJson(course: Course): void {
-  download(new Blob([JSON.stringify(course, null, 2)], { type: 'application/json' }), `${fileName(course)}.json`);
+/** Save the course as a JSON file named after `name` (its own name or the save it is). */
+export function exportJson(course: Course, name: string): void {
+  download(new Blob([JSON.stringify(course, null, 2)], { type: 'application/json' }), `${fileName(name)}.json`);
 }
 
 /** The course in a file saved by `exportJson`; throws when it is not one. */

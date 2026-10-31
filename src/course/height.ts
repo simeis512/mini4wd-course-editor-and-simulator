@@ -275,8 +275,16 @@ function computeSupports(layout: Layout, tracks: readonly WorldTrack[], previous
         const p = edgeTop(x);
         return p.setY(Math.min(p.y, edgeTop(Math.min(section.right, Math.max(section.left, x))).y));
       };
-      const left = cornerTop(a);
-      const right = cornerTop(b);
+      // A leg is as wide as STAND_LEG seen from above; on a steep bank the
+      // road over its inner side is lower than over its outer side, so its
+      // top goes no higher than either (#113).
+      const level = Math.hypot(f.elements[0], f.elements[2]) || 1;
+      const legTop = (x: number, side: -1 | 1) => {
+        const outer = cornerTop(x);
+        return outer.setY(Math.min(outer.y, cornerTop(x - (side * STAND_LEG) / level).y));
+      };
+      const left = legTop(a, -1);
+      const right = legTop(b, 1);
       // The crossbar must pass over any road between the legs.
       let under = -Infinity;
       for (let x = a; x <= b; x += SCAN_STEP) under = Math.max(under, below(x));

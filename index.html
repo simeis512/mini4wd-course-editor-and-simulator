@@ -32,7 +32,8 @@
       #view3d canvas { display: block; touch-action: none; }
       #handles { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
       body.dragging-part #handles { display: none; }
-      #view3d .ar-button { position: absolute !important; bottom: 12px !important; }
+      /* Top left, clear of the course info, 全体を表示 and the panel tab at any width (#117). */
+      #view3d .ar-button { position: absolute !important; top: 10px !important; bottom: auto !important; left: 10px !important; width: 100px !important; }
       #stage.framing { background: #0d0e11; }
       #stage.framing #view2d, #stage.framing #view3d { outline: 2px solid var(--accent); }
       .share-field { display: flex; flex-direction: column; gap: 2px; margin: 8px 0 6px; }
@@ -41,10 +42,12 @@
       #fit { position: absolute; right: 10px; bottom: 10px; }
       /* Running the machine (#27): its bar over the 3D view, and editing out of the way. */
       #run-bar { position: absolute; left: 10px; right: 10px; top: 10px; z-index: 4; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; background: rgba(36, 39, 46, 0.92); border: 1px solid var(--line); border-radius: 8px; }
+      /* The AR button sits top left in the 3D view, so the run bar starts right of it (owner 2026-10-29). */
+      #stage:has(.ar-button) #run-bar { left: 120px; }
       #run-bar label { display: flex; gap: 6px; align-items: center; }
       #run-status { flex: 1; min-width: 12em; font-variant-numeric: tabular-nums; }
       body.running { grid-template-columns: 1fr 0px; }
-      body.running #toolbar > :not(#run, h1) { pointer-events: none; opacity: 0.4; }
+      body.running #toolbar > :not(#run, #fullscreen, h1) { pointer-events: none; opacity: 0.4; }
       body.running #side, body.running #context, body.running #handles, body.running #course-info, body.running #fit { display: none; }
       #height-tools { position: absolute; left: 10px; top: 10px; z-index: 3; width: 210px; padding: 6px 10px; font-size: 13px; background: rgba(36, 39, 46, 0.92); border: 1px solid var(--line); border-radius: 8px; }
       #height-tools label { display: flex; gap: 6px; align-items: center; }
@@ -73,7 +76,7 @@
       #panel-fold .arrow { display: inline-block; transition: transform 0.25s ease; }
       body.panel-folded #panel-fold .arrow { transform: rotate(180deg); }
       @media (prefers-reduced-motion: reduce) { body, body.panel-folded #panel, #panel-fold .arrow { transition: none; } }
-      #palette button, #templates button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; font-size: 12px; line-height: 1.3; text-align: center; touch-action: none; user-select: none; -webkit-user-select: none; }
+      #palette button, #templates button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; font-size: 12px; line-height: 1.3; text-align: center; touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
       #palette button.dim, #templates button.dim { opacity: 0.55; }
       #palette .part-icon, #templates .part-icon { width: 100%; max-width: 64px; aspect-ratio: 1; pointer-events: none; }
       body.dragging-part, body.dragging-part * { cursor: grabbing !important; }
@@ -84,7 +87,8 @@
       .pose-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
       .pose-grid label { display: flex; gap: 4px; align-items: center; white-space: nowrap; }
       .pose-grid input { width: 100%; min-width: 0; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
-      #context { position: absolute; z-index: 4; width: 290px; max-width: calc(100% - 16px); max-height: calc(100% - 16px); overflow-y: auto; padding: 10px 12px; background: rgba(36, 39, 46, 0.97); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 20px #0008; }
+      /* The selection's settings sit at the top of the side panel, clear of everything over the editor (#134). */
+      #context { position: relative; margin-bottom: 12px; padding: 10px 12px; background: #2b2f37; border: 1px solid var(--accent); border-radius: 10px; }
       #context button, #context select { min-height: 30px; padding: 3px 8px; }
       #context .row { gap: 4px; }
       #context .title { font-weight: 600; padding-right: 28px; }
@@ -118,7 +122,9 @@
       .angle input { width: 64px; font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
       #trash-zone { grid-area: panel; z-index: 7; pointer-events: none; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 15px; font-weight: 600; color: #fff; background: rgba(216, 50, 58, 0.82); border: 3px dashed #fff; }
       #trash-zone.blocked { background: rgba(60, 64, 74, 0.9); font-weight: 400; font-size: 13px; }
-      #about { margin-left: auto; width: 34px; padding: 0; border-radius: 50%; font-weight: 700; font-family: Georgia, serif; }
+      #fullscreen { margin-left: auto; }
+      #fullscreen[hidden] + #about { margin-left: auto; }
+      #about { width: 34px; padding: 0; border-radius: 50%; font-weight: 700; font-family: Georgia, serif; }
       dialog { width: min(520px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow-y: auto; padding: 14px 18px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 40px #000a; }
       dialog::backdrop { background: #0008; }
       dialog h2 { font-size: 16px; margin: 0 0 8px; padding-right: 28px; }
@@ -180,6 +186,11 @@
       #ar-exit { position: absolute; top: 16px; right: 16px; }
       #ar-controls { position: absolute; left: 12px; right: 12px; bottom: 56px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
       #ar-status { position: absolute; left: 12px; right: 12px; bottom: 16px; padding: 6px 10px; border-radius: 8px; background: #000a; font-size: 13px; }
+      /* Running the machine in AR (#99): its controls at the top, clear of the exit button. */
+      #ar-run { position: absolute; top: 16px; left: 12px; right: 110px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      #ar-run-status { flex-basis: 100%; padding: 6px 10px; border-radius: 8px; background: #000a; font-size: 13px; font-variant-numeric: tabular-nums; }
+      #ar-overlay button:disabled { opacity: 0.5; }
+      #ar-arrow { position: absolute; width: 44px; height: 44px; border-radius: 50%; background: #000a; color: #ff8a1f; font-size: 26px; line-height: 44px; text-align: center; }
       @media (max-width: 720px) {
         body { grid-template-columns: 1fr; grid-template-rows: auto 1fr minmax(0, 38vh); grid-template-areas: 'bar' 'stage' 'panel'; }
         #panel { border-left: 0; border-top: 1px solid var(--line); }
@@ -211,9 +222,11 @@
       <button id="copy-url">URLをコピー</button>
       <button id="share" title="SNSで共有する画像（16:9／9:16）を作る" aria-pressed="false">画像で共有</button>
       <button id="qr" title="コースのQRコードを表示・保存／QRコードからコースを開く">QRコード</button>
+      <button id="model" title="コースを3Dモデルとして保存（VRChat などの GLB／3D プリント用の STL・3MF）">3Dモデル</button>
       <button id="export">書き出し</button>
       <button id="import">読み込み</button>
       <input id="import-file" type="file" accept=".json,application/json" hidden />
+      <button id="fullscreen" title="画面いっぱいに表示する（Esc で戻る）" aria-pressed="false" hidden>全画面</button>
       <button id="about" title="このアプリについて（権利表示・ライセンス・リンク）" aria-label="このアプリについて">i</button>
     </header>
     <main id="stage">
@@ -238,6 +251,16 @@
             <option value="free">固定</option>
           </select>
         </label>
+        <label title="走る速さ。スローにするとタイムは変えずにゆっくり見せます">速さ
+          <select id="run-speed" autocomplete="off">
+            <option value="1">等速</option>
+            <option value="2">1/2</option>
+            <option value="3">1/3</option>
+            <option value="4">1/4</option>
+            <option value="8">1/8</option>
+            <option value="16">1/16</option>
+          </select>
+        </label>
         <span id="run-status"></span>
         <button id="run-exit">編集に戻る</button>
       </div>
@@ -256,162 +279,6 @@
           <button id="turn-right" class="small" aria-label="右に15°回す">⟳</button>
         </div>
       </div>
-      <div id="context" hidden>
-        <button id="context-close" class="close" title="選択を解除 (Esc)" aria-label="閉じる">×</button>
-        <section id="selection-panel" hidden>
-          <div id="selection-name" class="title"></div>
-          <div class="row">
-            <label for="variant">色</label>
-            <select id="variant"></select>
-            <button id="flip" title="反転 (F)">反転</button>
-            <button id="delete" title="削除 (Delete)">削除</button>
-          </div>
-          <div id="length-row" class="row angle" hidden>
-            <label for="piece-length" title="自作ストレートの長さ。後ろにつながるピースもずれます">長さ</label>
-            <input id="piece-length" type="number" step="1" /> mm
-            <span id="length-range" class="muted"></span>
-          </div>
-          <div class="row">
-            <button id="rot-left" title="左に15°回す (Q、Shift で 1°)">⟲15°</button>
-            <button id="rot-right" title="右に15°回す (E、Shift で 1°)">⟳15°</button>
-            <button id="raise"></button>
-            <button id="lower"></button>
-          </div>
-          <div class="row angle">
-            <label for="twist" title="入口に対して出口が中心線まわりに回る角度（右下がり+）。ピース全体に均等にねじります">ねじれ</label>
-            <button id="twist-minus" title="0.5° 左下がりへ（Shift で 0.1°）">−</button>
-            <input id="twist" type="number" step="0.1" /> °
-            <button id="twist-plus" title="0.5° 右下がりへ（Shift で 0.1°）">＋</button>
-          </div>
-          <div id="twist-warn" class="hint warn" hidden></div>
-          <div id="attach-box">
-            <div class="row angle">
-              <label title="路面に貼るウォッシュボード。レーンと位置を決めて置きます">ウォッシュボード</label>
-              <button data-attach="washboard-5" title="高さ 5mm のウォッシュボードを貼る">＋5mm</button>
-              <button data-attach="washboard-10" title="高さ 10mm のウォッシュボードを貼る">＋10mm</button>
-            </div>
-            <ul id="attach-list" class="attach-list"></ul>
-          </div>
-          <div class="row">
-            <label title="10mm / 15°刻みで動かす。Shift を押している間は解除"><input id="snap" type="checkbox" checked /> スナップ</label>
-            <label title="つながっているピースを置いて、このピースだけ動かす"><input id="move-alone" type="checkbox" /> このピースだけ動かす</label>
-          </div>
-          <div id="group-info" class="hint"></div>
-          <details>
-            <summary>詳しく（配置の数値など）</summary>
-            <div id="selection-note" class="hint"></div>
-            <div id="placement-base" class="hint"></div>
-            <div class="pose-grid">
-              <label>前 <input id="pose-z" type="number" step="10" /> mm</label>
-              <label>向き <input id="pose-yaw" type="number" step="15" /> °</label>
-              <label>左 <input id="pose-x" type="number" step="10" /> mm</label>
-              <label>上り <input id="pose-pitch" type="number" step="1" /> °</label>
-              <label>上 <input id="pose-y" type="number" step="10" /> mm</label>
-              <label>傾き <input id="pose-roll" type="number" step="1" /> °</label>
-            </div>
-            <p class="hint">ドラッグで移動（3D ではつかんだ高さの水平面上）。開いた口に近づけると吸着してつながります。つながっていないピースはパーツ一覧へドラッグすると片づけ（削除）できます。</p>
-          </details>
-        </section>
-        <section id="joint-panel" hidden>
-          <div id="joint-name" class="title"></div>
-          <div id="bend-row" class="row angle">
-            <label for="bend-pitch" title="ジョイントのしなりで折れる角度（上り+）。つないだ先のピースがジョイントを中心に回ります">折れ角</label>
-            <button id="bend-minus" title="0.5° 下りへ（Shift で 0.1°）">−</button>
-            <input id="bend-pitch" type="number" step="0.1" /> °
-            <button id="bend-plus" title="0.5° 上りへ（Shift で 0.1°）">＋</button>
-          </div>
-          <div id="bend-warn" class="hint warn" hidden></div>
-          <div id="shift-row" class="row angle">
-            <label title="つなぎ目を横に 1 レーンずらして接続します。重なったレーンだけがつながり、はみ出たレーンは行き止まりになります">横ずれ</label>
-            <button id="shift-left" title="1 レーン左へ">◀</button>
-            <span id="shift-value"></span>
-            <button id="shift-right" title="1 レーン右へ">▶</button>
-            <span id="shift-from" class="muted"></span>
-          </div>
-          <div id="raise-box">
-            <div class="row angle">
-              <label title="どちら側のピースを持ち上げるか">向き</label>
-              <span id="raise-dir"></span>
-              <button id="raise-flip" title="反対側のピースを持ち上げる">⇄ 反転</button>
-            </div>
-            <div class="row angle">
-              <label title="このつなぎ目から先のピースを、折れ角とねじれで少しずつ持ち上げます（カーブを重ねた螺旋など）">この先</label>
-              <input id="raise-count" type="number" min="1" step="1" value="8" /> ピースで
-              <input id="raise-mm" type="number" step="10" /> mm
-              <button id="raise-run">上げる</button>
-            </div>
-            <div id="raise-note" class="hint"></div>
-          </div>
-          <p id="bend-closure" class="hint" hidden>ループを閉じたつなぎ目（口が近くで合っているだけ）なので、折れ角は付けられません。</p>
-          <div class="row">
-            <button id="split" title="分断 (Delete)">分断</button>
-          </div>
-          <p class="hint">分断すると、口は向き合ったまま切り離されます（赤い矢印）。ピースを動かすと、それぞれ別に動きます。</p>
-        </section>
-        <section id="prop-panel" hidden>
-          <div id="prop-name" class="title"></div>
-          <div id="prop-offset-row" class="row angle">
-            <label for="prop-offset" title="道に沿った位置。ドラッグでも動かせます">位置</label>
-            <input id="prop-offset" type="number" step="10" /> mm
-            <span id="prop-offset-from" class="muted"></span>
-          </div>
-          <div id="start-row" class="row">
-            <button id="start-flip" title="走り出す向きを反対にする">⇄ 向きを反転</button>
-          </div>
-          <div id="timer-rows">
-            <div class="row">
-              <label for="timer-side">付ける壁</label>
-              <select id="timer-side">
-                <option value="left">左の壁（左のレーンの上）</option>
-                <option value="right">右の壁（右のレーンの上）</option>
-              </select>
-            </div>
-            <div class="row">
-              <label for="timer-mode" title="シミュレーターでの計測のしかた">計測</label>
-              <select id="timer-mode">
-                <option value="covered">覆っているレーンだけ（実物どおり）</option>
-                <option value="every">どのレーンも（レーンごとのラップ）</option>
-              </select>
-            </div>
-          </div>
-          <div id="hose-rows">
-            <div class="row">
-              <label for="hose-color">色</label>
-              <select id="hose-color"></select>
-              <label title="最後の点から最初の点へつないで輪にします"><input id="hose-closed" type="checkbox" /> 輪にする</label>
-            </div>
-            <div class="row">
-              <button id="hose-add-point" title="選んだ点の次（点を選んでいなければ一番長い区間）に点を足す">点を足す</button>
-              <button id="hose-remove-point" title="選んだ点を消す (Delete)">点を消す</button>
-            </div>
-            <div id="hose-length" class="hint"></div>
-          </div>
-          <div id="box-rows" class="row">
-            <label for="box-size">大きさ</label>
-            <select id="box-size"></select>
-            <select id="box-way" aria-label="置き方">
-              <option value="side">横倒し（口をコースへ）</option>
-              <option value="up">口を上に</option>
-            </select>
-          </div>
-          <div id="prop-turn-row" class="row">
-            <button id="prop-rot-left" title="左に15°回す (Q、Shift で 1°)">⟲15°</button>
-            <button id="prop-rot-right" title="右に15°回す (E、Shift で 1°)">⟳15°</button>
-          </div>
-          <div class="row">
-            <button id="prop-delete" title="削除 (Delete)">削除</button>
-          </div>
-          <p id="prop-hint" class="hint"></p>
-        </section>
-        <section id="port-panel" hidden>
-          <div class="title">開いた口</div>
-          <p class="hint">パーツ一覧のパーツをクリックすると、この口につなぎます。</p>
-          <div id="join-row" class="row">
-            <span id="join-name"></span>
-            <button id="join">とつなぐ</button>
-          </div>
-        </section>
-      </div>
       <details id="course-info">
         <summary id="course-summary">コース</summary>
         <div id="info"></div>
@@ -420,6 +287,167 @@
     <div id="side">
       <button id="panel-fold" aria-controls="panel" aria-expanded="true" aria-label="パーツ一覧を畳む・開く"><span class="arrow">›</span></button>
       <aside id="panel">
+        <div id="context" hidden>
+          <button id="context-close" class="close" title="選択を解除 (Esc)" aria-label="閉じる">×</button>
+          <section id="selection-panel" hidden>
+            <div id="selection-name" class="title"></div>
+            <div class="row">
+              <label for="variant">色</label>
+              <select id="variant"></select>
+              <button id="flip" title="反転 (F)">反転</button>
+              <button id="delete" title="削除 (Delete)">削除</button>
+            </div>
+            <div id="length-row" class="row angle" hidden>
+              <label for="piece-length" title="自作ストレートの長さ。後ろにつながるピースもずれます">長さ</label>
+              <input id="piece-length" type="number" step="1" /> mm
+              <span id="length-range" class="muted"></span>
+            </div>
+            <div class="row">
+              <button id="rot-left" title="左に15°回す (Q、Shift で 1°)">⟲15°</button>
+              <button id="rot-right" title="右に15°回す (E、Shift で 1°)">⟳15°</button>
+              <button id="raise"></button>
+              <button id="lower"></button>
+            </div>
+            <div class="row angle">
+              <label for="twist" title="入口に対して出口が中心線まわりに回る角度（右下がり+）。ピース全体に均等にねじります">ねじれ</label>
+              <button id="twist-minus" title="0.5° 左下がりへ（Shift で 0.1°）">−</button>
+              <input id="twist" type="number" step="0.1" /> °
+              <button id="twist-plus" title="0.5° 右下がりへ（Shift で 0.1°）">＋</button>
+            </div>
+            <div id="twist-warn" class="hint warn" hidden></div>
+            <div id="attach-box">
+              <div class="row angle">
+                <label title="路面に貼るウォッシュボード。レーンと位置を決めて置きます">ウォッシュボード</label>
+                <button data-attach="washboard-5" title="高さ 5mm のウォッシュボードを貼る">＋5mm</button>
+                <button data-attach="washboard-10" title="高さ 10mm のウォッシュボードを貼る">＋10mm</button>
+              </div>
+              <ul id="attach-list" class="attach-list"></ul>
+            </div>
+            <div class="row">
+              <label title="10mm / 15°刻みで動かす。Shift を押している間は解除"><input id="snap" type="checkbox" checked /> スナップ</label>
+              <label title="つながっているピースを置いて、このピースだけ動かす"><input id="move-alone" type="checkbox" /> このピースだけ動かす</label>
+            </div>
+            <div id="group-info" class="hint"></div>
+            <div id="close-loop-row" class="row">
+              <button id="close-loop" title="開いた 2 つの口を、たくさんのジョイントとピースに小さな折れ・ねじれ（それぞれ 0.3° まで）を配ってつなぎます">ループを閉じる</button>
+              <span id="close-loop-info" class="muted"></span>
+            </div>
+            <div id="close-loop-warn" class="hint warn" hidden></div>
+            <details>
+              <summary>詳しく（配置の数値など）</summary>
+              <div id="selection-note" class="hint"></div>
+              <div id="placement-base" class="hint"></div>
+              <div class="pose-grid">
+                <label>前 <input id="pose-z" type="number" step="10" /> mm</label>
+                <label>向き <input id="pose-yaw" type="number" step="15" /> °</label>
+                <label>左 <input id="pose-x" type="number" step="10" /> mm</label>
+                <label>上り <input id="pose-pitch" type="number" step="1" /> °</label>
+                <label>上 <input id="pose-y" type="number" step="10" /> mm</label>
+                <label>傾き <input id="pose-roll" type="number" step="1" /> °</label>
+              </div>
+              <p class="hint">ドラッグで移動（3D ではつかんだ高さの水平面上）。開いた口に近づけると吸着してつながります。つながっていないピースはパーツ一覧へドラッグすると片づけ（削除）できます。</p>
+            </details>
+          </section>
+          <section id="joint-panel" hidden>
+            <div id="joint-name" class="title"></div>
+            <div id="bend-row" class="row angle">
+              <label for="bend-pitch" title="ジョイントのしなりで折れる角度（上り+）。つないだ先のピースがジョイントを中心に回ります">折れ角</label>
+              <button id="bend-minus" title="0.5° 下りへ（Shift で 0.1°）">−</button>
+              <input id="bend-pitch" type="number" step="0.1" /> °
+              <button id="bend-plus" title="0.5° 上りへ（Shift で 0.1°）">＋</button>
+            </div>
+            <div id="bend-warn" class="hint warn" hidden></div>
+            <div id="shift-row" class="row angle">
+              <label title="つなぎ目を横に 1 レーンずらして接続します。重なったレーンだけがつながり、はみ出たレーンは行き止まりになります">横ずれ</label>
+              <button id="shift-left" title="1 レーン左へ">◀</button>
+              <span id="shift-value"></span>
+              <button id="shift-right" title="1 レーン右へ">▶</button>
+              <span id="shift-from" class="muted"></span>
+            </div>
+            <div id="raise-box">
+              <div class="row angle">
+                <label title="どちら側のピースを持ち上げるか">向き</label>
+                <span id="raise-dir"></span>
+                <button id="raise-flip" title="反対側のピースを持ち上げる">⇄ 反転</button>
+              </div>
+              <div class="row angle">
+                <label title="このつなぎ目から先のピースを、折れ角とねじれで少しずつ持ち上げます（カーブを重ねた螺旋など）">この先</label>
+                <input id="raise-count" type="number" min="1" step="1" value="8" /> ピースで
+                <input id="raise-mm" type="number" step="10" /> mm
+                <button id="raise-run">上げる</button>
+              </div>
+              <div id="raise-note" class="hint"></div>
+            </div>
+            <p id="bend-closure" class="hint" hidden>ループを閉じたつなぎ目（口が近くで合っているだけ）なので、折れ角は付けられません。</p>
+            <div class="row">
+              <button id="split" title="分断 (Delete)">分断</button>
+            </div>
+            <p class="hint">分断すると、口は向き合ったまま切り離されます（赤い矢印）。ピースを動かすと、それぞれ別に動きます。</p>
+          </section>
+          <section id="prop-panel" hidden>
+            <div id="prop-name" class="title"></div>
+            <div id="prop-offset-row" class="row angle">
+              <label for="prop-offset" title="道に沿った位置。ドラッグでも動かせます">位置</label>
+              <input id="prop-offset" type="number" step="10" /> mm
+              <span id="prop-offset-from" class="muted"></span>
+            </div>
+            <div id="start-row" class="row">
+              <button id="start-flip" title="走り出す向きを反対にする">⇄ 向きを反転</button>
+            </div>
+            <div id="timer-rows">
+              <div class="row">
+                <label for="timer-side">付ける壁</label>
+                <select id="timer-side">
+                  <option value="left">左の壁（左のレーンの上）</option>
+                  <option value="right">右の壁（右のレーンの上）</option>
+                </select>
+              </div>
+              <div class="row">
+                <label for="timer-mode" title="シミュレーターでの計測のしかた">計測</label>
+                <select id="timer-mode">
+                  <option value="covered">覆っているレーンだけ（実物どおり）</option>
+                  <option value="every">どのレーンも（レーンごとのラップ）</option>
+                </select>
+              </div>
+            </div>
+            <div id="hose-rows">
+              <div class="row">
+                <label for="hose-color">色</label>
+                <select id="hose-color"></select>
+                <label title="最後の点から最初の点へつないで輪にします"><input id="hose-closed" type="checkbox" /> 輪にする</label>
+              </div>
+              <div class="row">
+                <button id="hose-add-point" title="選んだ点の次（点を選んでいなければ一番長い区間）に点を足す">点を足す</button>
+                <button id="hose-remove-point" title="選んだ点を消す (Delete)">点を消す</button>
+              </div>
+              <div id="hose-length" class="hint"></div>
+            </div>
+            <div id="box-rows" class="row">
+              <label for="box-size">大きさ</label>
+              <select id="box-size"></select>
+              <select id="box-way" aria-label="置き方">
+                <option value="side">横倒し（口をコースへ）</option>
+                <option value="up">口を上に</option>
+              </select>
+            </div>
+            <div id="prop-turn-row" class="row">
+              <button id="prop-rot-left" title="左に15°回す (Q、Shift で 1°)">⟲15°</button>
+              <button id="prop-rot-right" title="右に15°回す (E、Shift で 1°)">⟳15°</button>
+            </div>
+            <div class="row">
+              <button id="prop-delete" title="削除 (Delete)">削除</button>
+            </div>
+            <p id="prop-hint" class="hint"></p>
+          </section>
+          <section id="port-panel" hidden>
+            <div class="title">開いた口</div>
+            <p class="hint">パーツ一覧のパーツをクリックすると、この口につなぎます。</p>
+            <div id="join-row" class="row">
+              <span id="join-name"></span>
+              <button id="join">とつなぐ</button>
+            </div>
+          </section>
+        </div>
         <div id="palette-section">
           <h2>パーツ</h2>
           <div id="palette"></div>
@@ -577,6 +605,46 @@
         <p class="hint">スマホの標準のカメラで読んでも、URLとしてそのまま開けます。</p>
       </div>
     </dialog>
+    <dialog id="model-dialog" aria-labelledby="model-title">
+      <form method="dialog"><button class="close" aria-label="閉じる">×</button></form>
+      <h2 id="model-title">3Dモデルとして保存</h2>
+      <div class="row">
+        <label>形式
+          <select id="model-format">
+            <option value="glb">GLB（VRChat・3D ツール向け、実寸）</option>
+            <option value="stl">STL（3D プリント）</option>
+            <option value="3mf">3MF（3D プリント、色ごとに分ける）</option>
+          </select>
+        </label>
+      </div>
+      <h3>含めるもの</h3>
+      <div class="row">
+        <label><input type="checkbox" checked disabled /> 道とフェンス</label>
+        <label><input id="model-supports" type="checkbox" checked /> 支柱</label>
+        <label><input id="model-props" type="checkbox" checked /> 置き物</label>
+        <label><input id="model-floor" type="checkbox" /> 床の板</label>
+      </div>
+      <div id="model-print" hidden>
+        <h3>3D プリント</h3>
+        <div class="row">
+          <label>縮尺 <select id="model-scale"></select></label>
+          <label class="angle">最小の厚み <input id="model-min" type="number" min="0.1" max="5" step="0.1" /> mm</label>
+        </div>
+        <div class="row angle">
+          <span>造形範囲</span>
+          <input id="model-vol-w" type="number" min="10" step="10" aria-label="幅" /> ×
+          <input id="model-vol-d" type="number" min="10" step="10" aria-label="奥行き" /> ×
+          <input id="model-vol-h" type="number" min="10" step="10" aria-label="高さ" /> mm
+        </div>
+        <p class="hint">印刷すると薄すぎる道・フェンス・支柱などは、最小の厚みまで太らせます。スタートのシールは平らなので入りません。</p>
+      </div>
+      <p id="model-size" class="hint"></p>
+      <p id="model-warn" class="hint warn" hidden></p>
+      <div class="actions">
+        <button id="model-fit" hidden></button>
+        <button id="model-save" class="primary">保存</button>
+      </div>
+    </dialog>
     <dialog id="qr-sheet" class="sheet" aria-label="QRコードを読む">
       <button id="qr-sheet-camera" class="sheet-item">
         <svg class="viewfinder" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8V4h4M17 4h4v4M21 16v4h-4M7 20H3v-4" /><path class="beam" d="M5 12h14" /></svg>
@@ -600,8 +668,17 @@
         <button id="ar-replace">置き直す</button>
         <button id="ar-depth" hidden>奥行き：表示</button>
         <button id="ar-occlusion" hidden aria-label="実物の後ろにコースを隠す">隠れ：オン</button>
+        <button id="ar-run-toggle" title="床に置いたコースでマシンを走らせる">走らせる</button>
       </div>
       <div id="ar-status"></div>
+      <div id="ar-run" hidden>
+        <div id="ar-run-status"></div>
+        <button id="ar-run-play">スタート</button>
+        <button id="ar-run-reset">リセット</button>
+        <button id="ar-run-lane">レーン：左</button>
+        <button id="ar-run-speed" title="走る速さ（等速・1/2・1/3・1/4・1/8・1/16 のスロー）">速さ：等速</button>
+      </div>
+      <div id="ar-arrow" hidden aria-hidden="true">➤</div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

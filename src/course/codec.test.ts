@@ -38,7 +38,7 @@ describe('codec', () => {
   it('round-trips through the URL hash', async () => {
     const c = sample();
     const hash = await courseToHash(c);
-    expect(hash).toMatch(/^#c=6\.[A-Za-z0-9_-]+$/);
+    expect(hash).toMatch(/^#c=7\.[A-Za-z0-9_-]+$/);
     expect(await courseFromHash(hash)).toEqual(c);
   });
 
@@ -46,6 +46,18 @@ describe('codec', () => {
     // Each older format is the newer one without lengths, shifts, open-on-purpose marks, bends and twists in turn.
     const payload = (await encodeCourse(basicOval())).split('.')[1];
     for (const v of [1, 2, 3, 4, 5]) expect(await decodeCourse(`${v}.${payload}`)).toEqual(basicOval());
+  });
+
+  it('reads bends and twists of format 6 links in 0.1° steps, and keeps 0.01° from format 7 on (#86)', async () => {
+    const c = sample();
+    const rec = c.pieces.find((r) => 'to' in r)! as { bend?: { pitch?: number; yaw?: number }; twist?: number };
+    rec.bend = { pitch: 0.12, yaw: -0.05 };
+    rec.twist = 0.07;
+    expect(courseFromBytes(courseToBytes(c))).toEqual(c);
+    // The same numbers read as format 6 count tenths.
+    const old = courseFromBytes(courseToBytes(c), 6).pieces[c.pieces.indexOf(rec as never)] as typeof rec;
+    expect(old.bend).toEqual({ pitch: 1.2, yaw: -0.5 });
+    expect(old.twist).toBeCloseTo(0.7);
   });
 
   it('keeps the basic oval short', async () => {

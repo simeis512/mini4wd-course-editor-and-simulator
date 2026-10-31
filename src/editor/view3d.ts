@@ -73,6 +73,8 @@ export class OrbitView implements EditorView {
   private clashMarks = new THREE.Group();
   private picking = true;
   private machine: THREE.Object3D | null = null;
+  /** Called before each frame is drawn, as by the running machine. */
+  private ticker: (() => void) | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -123,11 +125,13 @@ export class OrbitView implements EditorView {
         // AR is for looking at the course only, so the editing marks stay in the 3D view.
         this.markers.visible = this.outlines.visible = this.clashMarks.visible = false;
       },
+      machine: () => this.machine?.getObjectByName('machine') ?? null,
       onEnd: () => {
         this.scene.background = BACKGROUND;
         this.grid.visible = true;
         this.controls.enabled = true;
-        this.markers.visible = this.outlines.visible = this.clashMarks.visible = true;
+        this.markers.visible = this.picking;
+        this.outlines.visible = this.clashMarks.visible = true;
         this.restoreCamera?.();
         this.restoreCamera = null;
         // Keep the loop matching the current view now the session is over.
@@ -173,16 +177,23 @@ export class OrbitView implements EditorView {
   /** Picking, dragging and the editing marks on or off; the camera still orbits (off while the machine runs, #27). */
   setPicking(on: boolean): void {
     this.picking = on;
-    this.markers.visible = on;
+    this.markers.visible = on && !this.renderer.xr.isPresenting;
   }
 
   /** Look from `eye` at `target` (course mm) with the orbit controls off, or hand the camera back to them (#28). */
   aim(view: { eye: THREE.Vector3; target: THREE.Vector3 } | null): void {
-    this.controls.enabled = !view && !this.renderer.xr.isPresenting;
+    // In AR the phone is the camera (#99).
+    if (this.renderer.xr.isPresenting) return;
+    this.controls.enabled = !view;
     if (!view) return;
     this.root.updateMatrixWorld();
     this.camera.position.copy(this.root.localToWorld(view.eye.clone()));
     this.controls.target.copy(this.root.localToWorld(view.target.clone()));
+  }
+
+  /** Call `tick` before each frame is drawn, in AR too, or stop (#99). */
+  onFrame(tick: (() => void) | null): void {
+    this.ticker = tick;
   }
 
   /** Show a machine running on the course (#27), in course mm, or take it away. */
@@ -446,6 +457,7 @@ export class OrbitView implements EditorView {
 
   private render(frame?: XRFrame): void {
     try {
+      this.ticker?.();
       if (this.renderer.xr.isPresenting) this.ar.onFrame(frame);
       else this.controls.update();
       const glow = blink(performance.now());

@@ -94,6 +94,32 @@ describe('supports', () => {
     }
   });
 
+  it('keeps both legs under a steeply banked road across their width (#113)', () => {
+    const c = addPiece(emptyCourse(), 'straight', null);
+    const layout = layoutCourse(setPose(c, 0, { pos: [0, 600, 0], rot: [0, 0, 60] }));
+    const m = layout.pieces[0].matrix;
+    const o = new Vector3().setFromMatrixPosition(m);
+    const n = new Vector3(0, 1, 0).transformDirection(m);
+    // The road's underside above a point on the floor plan.
+    const side = new Vector3(1, 0, 0).transformDirection(m).setY(0).normalize();
+    const underside = (p: Vector3) => o.y - (n.x * (p.x - o.x) + n.z * (p.z - o.z)) / n.y - GLOBAL_SPEC.roadThickness / n.y;
+    const s = supports(layout);
+    expect(s.length).toBeGreaterThan(0);
+    for (const st of s) {
+      const across = st.right.clone().sub(st.left).setY(0).normalize().multiplyScalar(STAND_LEG);
+      for (const [top, inner] of [
+        [st.left, st.left.clone().add(across)],
+        [st.right, st.right.clone().sub(across)],
+      ]) {
+        // Where the leg reaches in under the road, its top stays under it.
+        const reach = Math.abs(inner.clone().sub(o).setY(0).dot(side));
+        if (reach < halfWidth(3) * Math.cos(Math.PI / 3)) {
+          expect(top.y).toBeLessThanOrEqual(underside(inner) + 1e-6);
+        }
+      }
+    }
+  });
+
   it('keeps the corners of a stand clear of road it crosses at an angle', () => {
     const below = addPiece(emptyCourse(), 'straight', null);
     const c = addPiece(below, 'straight', null);

@@ -65,3 +65,24 @@ export function angleDelta(from: number, to: number): number {
 export function turnAbout(at: THREE.Vector3, centre: THREE.Vector3, turn: number): THREE.Vector3 {
   return at.clone().sub(centre).applyAxisAngle(new THREE.Vector3(0, 1, 0), turn).add(centre);
 }
+
+
+/** How far in from the screen's edge the arrow to an unseen machine stands, as a share of half the screen (cosmetic). */
+export const EDGE_INSET = 0.12;
+
+/**
+ * Where on the screen's edge to show the arrow to a machine that is off
+ * the screen (#99), from where the machine projects to (normalised device
+ * x, y; `behind` when it is behind the phone, where the projection turns
+ * round): the arrow's place in the same terms and the way it points
+ * (radians, from the screen's right, counterclockwise). Null while the
+ * machine is on the screen.
+ */
+export function edgeArrow(x: number, y: number, behind: boolean, inset = EDGE_INSET): { x: number; y: number; angle: number } | null {
+  if (!behind && Math.abs(x) <= 1 && Math.abs(y) <= 1) return null;
+  let [dx, dy] = behind ? [-x, -y] : [x, y];
+  // Right behind the phone: point down, to turn round.
+  if (Math.abs(dx) + Math.abs(dy) < 1e-9) [dx, dy] = [0, -1];
+  const k = (1 - inset) / Math.max(Math.abs(dx), Math.abs(dy));
+  return { x: dx * k, y: dy * k, angle: Math.atan2(dy, dx) };
+}

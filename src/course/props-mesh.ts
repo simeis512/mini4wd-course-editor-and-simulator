@@ -22,6 +22,7 @@ export const PROP_COLORS: Record<string, string> = {
 
 function blockMesh(b: Block): THREE.Mesh {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(...b.size), material(PROP_COLORS[b.role], 1));
+  mesh.name = b.role;
   mesh.matrixAutoUpdate = false;
   mesh.matrix.copy(b.frame);
   return mesh;
