@@ -1,7 +1,7 @@
 import { ATTACHMENT_CODES, CATALOG_VERSION, hasPart, PART_CODES } from './catalog';
 import { validateCourse, type Attachment, type Course, type PieceRec, type Stopper } from './course';
 import { isZeroBend } from './flex';
-import { TAPE_KIND_ORDER, type JointTape, type TapeSpec, type WallFace } from './tape';
+import { TAPE_KIND_ORDER, type JointTape, type TapeSpec } from './tape';
 
 /**
  * Course ⇄ URL hash (spec 6): `#c=<format>.<payload>`, where the payload is
@@ -39,8 +39,8 @@ import { TAPE_KIND_ORDER, type JointTape, type TapeSpec, type WallFace } from '.
  *     hose: colour, flags (bit0 closed), point count, then x, z (mm, signed) for each
  *     box: size, flags (bit0 upright), x, z (mm, signed), yaw (0.1°)]
  *   [joint tape: flags (bit0 floor, bit1 walls), then for each: kind (index  when flagged (#133)
- *    into TAPE_KIND_ORDER), width (mm), friction (0.001); walls then face
- *    (0 inner, 1 outer, 2 both)]
+ *    into TAPE_KIND_ORDER), width (mm), friction (0.001); walls then which
+ *    (0 outer walls, 1 dividers too)]
  *
  * Format 7 is the same without the joint tape, format 6 is the same with bends and twists in 0.1° steps, format 5 also without the start, timer and stoppers,
  * format 4 also without lengths and attachments, format 3 also without shifts,
@@ -51,7 +51,6 @@ export const FORMAT_VERSION = 8;
 /** Older formats that still read. */
 const READABLE_VERSIONS = [1, 2, 3, 4, 5, 6, 7, FORMAT_VERSION];
 /** Wall faces by their code in the URL (#133); append only. */
-const WALL_FACE_CODES: readonly WallFace[] = ['inner', 'outer', 'both'];
 /** The first format with bends and twists in 0.01° steps (#86). */
 const FINE_ANGLES = 7;
 export const HASH_KEY = 'c';
@@ -216,7 +215,7 @@ export function courseToBytes(course: Course): Uint8Array {
       w.uint(Math.round(spec.width));
       w.uint(Math.round(spec.friction * 1000));
     }
-    if (wall) w.uint(WALL_FACE_CODES.indexOf(wall.face));
+    if (wall) w.uint(wall.dividers ? 1 : 0);
   }
   return new Uint8Array(w.bytes);
 }
@@ -315,9 +314,9 @@ export function courseFromBytes(bytes: Uint8Array, version = FORMAT_VERSION): Co
     if (which & 1) tape.floor = spec();
     if (which & 2) {
       const wall = spec();
-      const face = WALL_FACE_CODES[r.uint()];
-      if (!face) throw new Error('unknown tape face');
-      tape.wall = { ...wall, face };
+      const dividers = r.uint();
+      if (dividers > 1) throw new Error('unknown tape walls');
+      tape.wall = { ...wall, dividers: dividers === 1 };
     }
     course.tape = tape;
   }

@@ -4,10 +4,10 @@ import { GLOBAL_SPEC } from './catalog';
 import { layoutCourse, validateCourse } from './course';
 import { pointOnFrame } from './geometry';
 import { basicOval, chain } from './presets';
-import { endFrames, setTape, tapeNeeds, tapeStrips, type JointTape } from './tape';
+import { endFrames, setTape, TAPE_THICKNESS, tapeNeeds, tapeStrips, WALL_WRAP, type JointTape } from './tape';
 
 const floor = { kind: 'curing', width: 50, friction: 0.5 } as const;
-const wall = (face: 'inner' | 'outer' | 'both') => ({ kind: 'opp', width: 48, friction: 0.35, face }) as const;
+const wall = (dividers = false) => ({ kind: 'opp', width: 48, friction: 0.35, dividers }) as const;
 const taped = (tape: JointTape, pieces = ['straight', 'straight']) => layoutCourse(setTape(chain(pieces), tape));
 /** Full width of three lanes to the outsides of the outer fences, mm. */
 const ROAD = 3 * GLOBAL_SPEC.lanePitch + GLOBAL_SPEC.fenceThickness;
@@ -31,29 +31,26 @@ describe('joint tape (#133)', () => {
     expect(new Set(strips.map((s) => s.piece))).toEqual(new Set([0, 1]));
   });
 
-  it('tapes only the outer walls, on the face asked for', () => {
-    const inner = tapeStrips(taped({ wall: wall('inner') }));
+  it('tapes the outer walls, over the top and down both faces, and the dividers when asked (owner, 2026-10-31)', () => {
+    const outer = tapeStrips(taped({ wall: wall() }));
     // Two outer walls on each of the two pieces.
-    expect(inner).toHaveLength(4);
+    expect(outer).toHaveLength(4);
     const half = GLOBAL_SPEC.fenceThickness / 2;
     const outerFence = 1.5 * GLOBAL_SPEC.lanePitch;
-    for (const s of inner) {
-      const mid = (s.x[0] + s.x[1]) / 2;
-      // On the road side of the outer fence.
-      expect(Math.abs(mid)).toBeLessThan(outerFence - half);
-      expect(Math.abs(mid)).toBeGreaterThan(outerFence - half - 1);
+    for (const s of outer) {
+      expect(Math.abs(s.wall!)).toBeCloseTo(outerFence);
+      expect(s.x[0]).toBeCloseTo(s.wall! - half - TAPE_THICKNESS);
+      expect(s.x[1]).toBeCloseTo(s.wall! + half + TAPE_THICKNESS);
+      expect(s.y[1]).toBeCloseTo(GLOBAL_SPEC.fenceHeight + TAPE_THICKNESS);
       expect(s.friction).toBe(0.35);
     }
-    const outer = tapeStrips(taped({ wall: wall('outer') }));
-    for (const s of outer) {
-      expect(Math.abs((s.x[0] + s.x[1]) / 2)).toBeGreaterThan(outerFence + half);
-      expect(s.friction).toBeNull();
-    }
-    expect(tapeStrips(taped({ wall: wall('both') }))).toHaveLength(8);
+    const all = tapeStrips(taped({ wall: wall(true) }));
+    expect(all).toHaveLength(8);
+    expect(new Set(all.map((s) => Math.round(Math.abs(s.wall!))))).toEqual(new Set([GLOBAL_SPEC.lanePitch / 2, outerFence]));
   });
 
   it('tapes every joint of a course with a lane change, walls only at its outer edges', () => {
-    const layout = layoutCourse(setTape(basicOval(), { floor, wall: wall('inner') }));
+    const layout = layoutCourse(setTape(basicOval(), { floor, wall: wall() }));
     const strips = tapeStrips(layout);
     expect(strips.filter((s) => s.where === 'floor').length).toBeGreaterThanOrEqual(2 * layout.joints.length);
     // Two outer walls at each end, even where a lane change's tracks meet at one port.
@@ -73,15 +70,25 @@ describe('joint tape (#133)', () => {
           return ends.sort((a, b) => Math.abs(a.z) - Math.abs(b.z))[0].x;
         });
       const lanes = pc.part.ports[portIndex].lanes.length;
-      expect(Math.abs(xs[0] - xs[1])).toBeCloseTo(lanes * GLOBAL_SPEC.lanePitch - GLOBAL_SPEC.fenceThickness, 0);
+      expect(Math.abs(xs[0] - xs[1])).toBeCloseTo(lanes * GLOBAL_SPEC.lanePitch, 0);
+    }
+  });
+
+  it('tapes each wall once at an end where a lane change\'s tracks meet, dividers and all', () => {
+    const layout = layoutCourse(setTape(basicOval(), { wall: wall(true) }));
+    const perEnd = new Map<string, number>();
+    for (const s of tapeStrips(layout)) perEnd.set(`${s.piece}:${s.port}`, (perEnd.get(`${s.piece}:${s.port}`) ?? 0) + 1);
+    for (const [key, n] of perEnd) {
+      const [piece, port] = key.split(':').map(Number);
+      expect(n).toBe(layout.pieces[piece].part.ports[port].lanes.length + 1);
     }
   });
 
   it('says how much tape the course takes', () => {
-    const needs = tapeNeeds(taped({ floor, wall: wall('both') }, ['straight', 'straight', 'straight']));
+    const needs = tapeNeeds(taped({ floor, wall: wall(true) }, ['straight', 'straight', 'straight']));
     expect(needs.map((n) => [n.where, n.joints, Math.round(n.length)])).toEqual([
       ['floor', 2, Math.round(2 * ROAD)],
-      ['wall', 2, 2 * 4 * GLOBAL_SPEC.fenceHeight],
+      ['wall', 2, 2 * 4 * WALL_WRAP],
     ]);
   });
 

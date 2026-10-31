@@ -6,17 +6,16 @@ import {
   TAPE_KINDS,
   TAPE_WIDTH_RANGE,
   TAPE_WIDTHS,
-  WALL_FACES,
   type JointTape,
   type TapeKind,
   type TapeSpec,
-  type WallFace,
   type WallTape,
 } from '../course/tape';
 import { $ } from './dom';
 
 // The joint tape setting in the course box (#133): floor and walls each on
-// or off, with the kind of tape, its width and friction; walls also the face.
+// or off, with the kind of tape, its width and friction; walls also
+// whether the dividers between the lanes are taped too.
 
 const escape = (text: string) => text.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -40,11 +39,12 @@ function specRow(where: 'floor' | 'wall', spec: TapeSpec | undefined, label: str
 export function tapeHtml(course: Course): string[] {
   if (!course.pieces.length) return [];
   const tape = course.tape ?? {};
-  const out = ['<h3>つなぎ目のテープ</h3>', specRow('floor', tape.floor, '床'), specRow('wall', tape.wall, '外側の壁')];
+  const out = ['<h3>つなぎ目のテープ</h3>', specRow('floor', tape.floor, '床'), specRow('wall', tape.wall, '壁')];
   if (tape.wall) {
-    const faces = (Object.keys(WALL_FACES) as WallFace[]).map((f) => `<option value="${f}"${f === tape.wall!.face ? ' selected' : ''}>${WALL_FACES[f]}</option>`);
-    out.push(`<div class="row tape"><label>貼る面 <select data-tape="wall-face">${faces.join('')}</select></label></div>`);
-    if (tape.wall.face === 'outer') out.push('<div class="muted">外面だけでは、ローラーに摩擦は効きません</div>');
+    out.push(
+      `<div class="row tape"><label><input type="checkbox" data-tape="wall-dividers"${tape.wall.dividers ? ' checked' : ''}>レーンの間の仕切りにも貼る</label></div>`,
+      '<div class="muted">外側の壁（と仕切り）に上からかぶせて、上面と両側の面を覆います</div>',
+    );
   }
   out.push(`<datalist id="tape-widths">${TAPE_WIDTHS.map((w) => `<option value="${w}">`).join('')}</datalist>`);
   out.push('<div class="muted">すべてのつなぎ目に同じように貼ります。摩擦係数は実測までの仮の値です</div>');
@@ -61,7 +61,7 @@ export function changedTape(tape: JointTape, name: string, value: string, checke
   const spec = tape[where];
   if (!field) {
     if (!checked) delete next[where];
-    else if (where === 'wall') next.wall = { ...defaultTape(), face: 'inner' };
+    else if (where === 'wall') next.wall = { ...defaultTape(), dividers: false };
     else next.floor = defaultTape();
     return next;
   }
@@ -74,8 +74,8 @@ export function changedTape(tape: JointTape, name: string, value: string, checke
     changed = { width: Math.round(clamp(Number(value), TAPE_WIDTH_RANGE, spec.width)) };
   } else if (field === 'friction') {
     changed = { friction: Math.round(clamp(Number(value), FRICTION_RANGE, spec.friction) * 1000) / 1000 };
-  } else if (field === 'face' && where === 'wall' && value in WALL_FACES) {
-    changed = { face: value as WallFace };
+  } else if (field === 'dividers' && where === 'wall') {
+    changed = { dividers: checked };
   } else {
     return null;
   }
