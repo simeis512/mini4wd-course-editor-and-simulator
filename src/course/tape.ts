@@ -1,4 +1,4 @@
-import { Matrix4, Vector3 } from 'three';
+import { Matrix4, Quaternion, Vector3 } from 'three';
 import { GLOBAL_SPEC } from './catalog';
 import type { Course, Layout, PortRef } from './course';
 import { pointOnFrame } from './geometry';
@@ -114,8 +114,8 @@ const AT_PORT = 1;
 
 /**
  * Frames at a track's start or end and `length` mm on straight into the
- * piece, in the track's own order (so swept boxes face outwards): tape is
- * as wide all the way across, also on a bend (owner, 2026-10-31).
+ * piece, in the track's own order (so swept boxes face outwards): tape on
+ * the floor is as wide all the way across, also on a bend (owner, 2026-10-31).
  */
 export function endFrames(samples: readonly Matrix4[], atStart: boolean, length: number): Matrix4[] {
   const end = (atStart ? samples[0] : samples[samples.length - 1]).clone();
@@ -123,6 +123,38 @@ export function endFrames(samples: readonly Matrix4[], atStart: boolean, length:
   const along = new Vector3().setFromMatrixColumn(end, 2).normalize();
   const inner = end.clone().setPosition(new Vector3().setFromMatrixPosition(end).addScaledVector(along, atStart ? length : -length));
   return atStart ? [end, inner] : [inner, end];
+}
+
+/**
+ * The track's frames from its start or end on along a wall `right` mm
+ * across, until `length` mm along that wall, in the track's own order: tape
+ * wrapped round a wall follows it and is as wide along it, on the inside of
+ * a bend too (owner, 2026-10-31); the inner frame is cut to length.
+ */
+export function wallFrames(samples: readonly Matrix4[], atStart: boolean, length: number, right: number): Matrix4[] {
+  const list = atStart ? samples : [...samples].reverse();
+  const out = [list[0]];
+  const ordered = () => (atStart ? out : out.reverse());
+  const a = new Vector3();
+  const b = new Vector3();
+  let gone = 0;
+  for (let i = 1; i < list.length; i++) {
+    pointOnFrame(list[i - 1], right, 0, a);
+    pointOnFrame(list[i], right, 0, b);
+    const step = a.distanceTo(b);
+    if (gone + step >= length) {
+      // Between the two samples, turning as well as moving, so the wall's point lands where it should.
+      const k = step ? (length - gone) / step : 0;
+      const [p0, q0, p1, q1, scale] = [new Vector3(), new Quaternion(), new Vector3(), new Quaternion(), new Vector3()];
+      list[i - 1].decompose(p0, q0, scale);
+      list[i].decompose(p1, q1, scale);
+      out.push(new Matrix4().compose(p0.lerp(p1, k), q0.slerp(q1, k), scale));
+      return ordered();
+    }
+    gone += step;
+    out.push(list[i]);
+  }
+  return ordered();
 }
 
 /** Strips on one piece by one joined port. */
@@ -155,13 +187,13 @@ function stripsAt(layout: Layout, ref: PortRef, tape: JointTape): TapeStrip[] {
       out.push({ ...base, where: 'floor', frames: endFrames(e.samples, e.atStart, tape.floor.width / 2), x: [section.left, section.right], y: [0, TAPE_THICKNESS], friction: tape.floor.friction });
     }
     if (!tape.wall) continue;
-    const frames = endFrames(e.samples, e.atStart, tape.wall.width / 2);
     for (const wall of section.fences) {
       const at = across(e, wall);
       const outer = Math.abs(at - lo) <= AT_PORT || Math.abs(at - hi) <= AT_PORT;
       if (!outer && !tape.wall.dividers) continue;
       if (taped.some((t) => Math.abs(t - at) <= AT_PORT)) continue;
       taped.push(at);
+      const frames = wallFrames(e.samples, e.atStart, tape.wall.width / 2, wall);
       out.push({ ...base, where: 'wall', frames, ...stripBounds({ where: 'wall', x: [0, 0], wall }), wall, friction: tape.wall.friction });
     }
   }
