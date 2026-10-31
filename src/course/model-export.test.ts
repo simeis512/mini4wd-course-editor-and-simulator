@@ -30,7 +30,7 @@ function busyCourse() {
   c = placeStart(c, 0, 100);
   c = addStopper(c, { kind: 'hose', points: [[0, -600], [400, -650], [800, -600]], color: 0 });
   c = addStopper(c, newStopper('box', -800, 0));
-  c = setTape(c, { floor: { kind: 'curing', width: 50, friction: 0.5 }, wall: { kind: 'opp', width: 48, friction: 0.35, face: 'both' } });
+  c = setTape(c, { floor: { kind: 'curing', width: 50, friction: 0.5 }, wall: { kind: 'opp', width: 48, friction: 0.35, dividers: true } });
   return layoutCourse(c);
 }
 

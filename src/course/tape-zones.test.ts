@@ -8,7 +8,7 @@ import { setTape, type JointTape } from './tape';
 import { tapeFrictionAt, tapeZones } from './tape-zones';
 
 const floor = { kind: 'curing', width: 50, friction: 0.5 } as const;
-const wall = (face: 'inner' | 'outer' | 'both') => ({ kind: 'cloth', width: 50, friction: 0.6, face }) as const;
+const wall = (dividers = false) => ({ kind: 'cloth', width: 50, friction: 0.6, dividers }) as const;
 const taped = (tape: JointTape, course = chain(['straight', 'straight'])) => layoutCourse(setTape(course, tape));
 
 /** A point by the joint of piece `piece`'s port `port`: `right` across, `up`, `ahead` into the piece, world mm. */
@@ -33,8 +33,8 @@ describe('joint tape friction zones (#133)', () => {
     expect(tapeFrictionAt(tapeZones(layout), 'wall', nearPort(layout, 1, 0, 0, 0, 10))).toBeNull();
   });
 
-  it('finds the wall strip only by the outer walls\' inner face, within the reach given', () => {
-    const layout = taped({ wall: wall('inner') });
+  it('finds the wall strip by the walls taped, within the reach given', () => {
+    const layout = taped({ wall: wall() });
     const face = 1.5 * GLOBAL_SPEC.lanePitch - GLOBAL_SPEC.fenceThickness / 2;
     const zones = tapeZones(layout);
     for (const side of [1, -1]) {
@@ -45,8 +45,12 @@ describe('joint tape friction zones (#133)', () => {
     // In the middle of the road, and along past the strip.
     expect(tapeFrictionAt(zones, 'wall', nearPort(layout, 1, 0, 0, 12, 10), 7)).toBeNull();
     expect(tapeFrictionAt(zones, 'wall', nearPort(layout, 1, 0, face - 6.5, 12, 60), 7)).toBeNull();
-    // Tape on the outer face only meets no roller.
-    expect(tapeZones(taped({ wall: wall('outer') }))).toEqual([]);
+    // By a divider only when the dividers are taped too.
+    const divider = GLOBAL_SPEC.lanePitch / 2 - GLOBAL_SPEC.fenceThickness / 2 - 6.5;
+    expect(tapeFrictionAt(zones, 'wall', nearPort(layout, 1, 0, divider, 12, 10), 7)).toBeNull();
+    const all = taped({ wall: wall(true) });
+    expect(tapeFrictionAt(tapeZones(all), 'wall', nearPort(all, 1, 0, divider, 12, 10), 7)).toBe(0.6);
+    expect(tapeFrictionAt(tapeZones(all), 'wall', nearPort(all, 1, 0, -divider, 12, 10), 7)).toBe(0.6);
   });
 
   it('covers the strips at bends and at the narrow ends of a lane change as well', () => {

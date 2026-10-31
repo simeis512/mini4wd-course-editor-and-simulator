@@ -17,7 +17,7 @@ import { createPhysicsWorld } from './world';
 
 const spec = STANDARD_MACHINE;
 const floor = { kind: 'cloth', width: 50, friction: 0.6 * ROAD_FRICTION } as const;
-const wall = { kind: 'cloth', width: 50, friction: 2 * WALL_FRICTION, face: 'inner' } as const;
+const wall = { kind: 'cloth', width: 50, friction: 2 * WALL_FRICTION, dividers: false } as const;
 const straights = (tape?: JointTape) => layoutCourse(setTape(chain(Array(4).fill('straight')), tape));
 
 /**
@@ -94,7 +94,7 @@ describe('joint tape under the tyres and against the rollers (#133)', () => {
       return s;
     };
     const bare = await lap();
-    const rough = await lap({ wall: { kind: 'cloth', width: 100, friction: 2, face: 'inner' } });
+    const rough = await lap({ wall: { kind: 'cloth', width: 100, friction: 2, dividers: false } });
     expect(rough.out).toBeNull();
     expect(rough.distance).toBeLessThan(bare.distance - 50);
   }, 30000);

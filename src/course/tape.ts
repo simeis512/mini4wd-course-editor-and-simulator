@@ -6,12 +6,12 @@ import { crossSection } from './mesh';
 
 // Tape over the joints, set once for the whole course (#133, owner
 // 2026-10-30): on the floor one strip across the whole road, on the walls
-// the outer walls only, on their inner face (where the rollers run), outer
-// face or both. Every kind of joint is taped alike; no wall strip where
+// the outer walls and, if asked, the dividers between the lanes too
+// (owner, 2026-10-31). A wall strip goes on from above, over the top and
+// down both faces. Every kind of joint is taped alike; no wall strip where
 // there is no wall.
 
 export type TapeKind = 'curing' | 'opp' | 'cloth';
-export type WallFace = 'inner' | 'outer' | 'both';
 
 /** One kind of tape: how wide a strip, mm, and its friction against the machine. */
 export interface TapeSpec {
@@ -21,7 +21,8 @@ export interface TapeSpec {
 }
 
 export interface WallTape extends TapeSpec {
-  face: WallFace;
+  /** The dividers between the lanes too, not only the outer walls. */
+  dividers: boolean;
 }
 
 /** The course's joint tape; nothing set is no tape. */
@@ -48,8 +49,6 @@ export const FRICTION_RANGE = [0, 2] as const;
 /** How thick a strip is drawn, mm: looks only, not in the collision meshes (#133, provisional). */
 export const TAPE_THICKNESS = 0.2;
 
-export const WALL_FACES: Record<WallFace, string> = { inner: '内面（ローラーが当たる面）', outer: '外面', both: '両面' };
-
 export function defaultTape(kind: TapeKind = 'curing'): TapeSpec {
   const k = TAPE_KINDS[kind];
   return { kind, width: k.width, friction: k.friction };
@@ -73,7 +72,7 @@ export function validateTape(tape: JointTape): void {
       spec.friction >= FRICTION_RANGE[0] && spec.friction <= FRICTION_RANGE[1];
     if (!ok) throw new Error(`bad tape ${JSON.stringify(spec)}`);
   }
-  if (tape.wall && !(tape.wall.face in WALL_FACES)) throw new Error(`tape on wall face ${tape.wall.face}`);
+  if (tape.wall && typeof tape.wall.dividers !== 'boolean') throw new Error(`tape on dividers ${tape.wall.dividers}`);
 }
 
 /**
@@ -85,12 +84,14 @@ export function stripBounds(
   strip: Pick<TapeStrip, 'where' | 'x' | 'wall'>,
   { thickness = TAPE_THICKNESS, lift = 0, fenceHalf = GLOBAL_SPEC.fenceThickness / 2 } = {},
 ): { x: [number, number]; y: [number, number] } {
-  if (strip.where === 'floor' || !strip.wall) return { x: strip.x, y: [lift, lift + thickness] };
-  const { fence, side } = strip.wall;
-  const face = fence + side * fenceHalf;
-  const out = face + side * thickness;
-  return { x: [Math.min(face, out), Math.max(face, out)], y: [0, GLOBAL_SPEC.fenceHeight + lift] };
+  if (strip.where === 'floor' || strip.wall === undefined) return { x: strip.x, y: [lift, lift + thickness] };
+  // Over the top of the wall and down both its faces.
+  const half = fenceHalf + thickness;
+  return { x: [strip.wall - half, strip.wall + half], y: [0, GLOBAL_SPEC.fenceHeight + lift + thickness] };
 }
+
+/** Tape it takes to go over one wall from the road on one side to the road on the other, mm. */
+export const WALL_WRAP = 2 * GLOBAL_SPEC.fenceHeight + GLOBAL_SPEC.fenceThickness;
 
 /** One strip of tape on one piece, by one of its ends. */
 export interface TapeStrip {
@@ -102,10 +103,10 @@ export interface TapeStrip {
   /** Across the road (+ right of the frames) and up from the road, mm. */
   x: [number, number];
   y: [number, number];
-  /** On a wall: the fence's centre across the road, and which way from it the taped face lies (+1 right). */
-  wall?: { fence: number; side: 1 | -1 };
-  /** Against the machine; null on a wall's outer face, which nothing runs on. */
-  friction: number | null;
+  /** On a wall: the fence's centre across the road, mm. */
+  wall?: number;
+  /** Against the machine. */
+  friction: number;
 }
 
 /** How near a track's end must lie to a port to be at it, mm. */
@@ -159,6 +160,8 @@ function stripsAt(layout: Layout, ref: PortRef, tape: JointTape): TapeStrip[] {
   const all = ends.flatMap((e) => crossSection(e.lanes).fences.map((x) => across(e, x)));
   const [lo, hi] = [Math.min(...all), Math.max(...all)];
   const out: TapeStrip[] = [];
+  /** Where across the port walls are taped already: two tracks ending together may share one. */
+  const taped: number[] = [];
   for (const e of ends) {
     const section = crossSection(e.lanes);
     const base = { piece: ref.piece, port: ref.port };
@@ -167,24 +170,13 @@ function stripsAt(layout: Layout, ref: PortRef, tape: JointTape): TapeStrip[] {
     }
     if (!tape.wall) continue;
     const frames = endFrames(e.samples, e.atStart, tape.wall.width / 2);
-    for (const x of section.fences) {
-      const at = across(e, x);
-      if (Math.abs(at - lo) > AT_PORT && Math.abs(at - hi) > AT_PORT) continue;
-      // Inward is towards the middle of the road at this end.
-      const inward = x < (section.left + section.right) / 2 ? 1 : -1;
-      const faces = tape.wall.face === 'both' ? [1, -1] : [tape.wall.face === 'inner' ? 1 : -1];
-      for (const side of faces) {
-        const wall = { fence: x, side: (side * inward) as 1 | -1 };
-        out.push({
-          ...base,
-          where: 'wall',
-          frames,
-          ...stripBounds({ where: 'wall', x: [0, 0], wall }),
-          wall,
-          // Only the inner face meets the rollers (owner, 2026-10-30).
-          friction: side === 1 ? tape.wall.friction : null,
-        });
-      }
+    for (const wall of section.fences) {
+      const at = across(e, wall);
+      const outer = Math.abs(at - lo) <= AT_PORT || Math.abs(at - hi) <= AT_PORT;
+      if (!outer && !tape.wall.dividers) continue;
+      if (taped.some((t) => Math.abs(t - at) <= AT_PORT)) continue;
+      taped.push(at);
+      out.push({ ...base, where: 'wall', frames, ...stripBounds({ where: 'wall', x: [0, 0], wall }), wall, friction: tape.wall.friction });
     }
   }
   return out;
@@ -222,7 +214,8 @@ export interface TapeNeed {
 
 /**
  * Tape the course takes: a floor strip runs across the whole road, a wall
- * strip up a wall face; one per joint, each wall face its own strip.
+ * strip up one face of a wall, over its top and down the other; one per
+ * joint and wall.
  */
 export function tapeNeeds(layout: Layout): TapeNeed[] {
   const tape = layout.tape;
@@ -241,9 +234,9 @@ export function tapeNeeds(layout: Layout): TapeNeed[] {
     out.push({ where: 'floor', spec: tape.floor, joints, length });
   }
   if (tape.wall) {
-    // Each wall face at a joint: the strips of one of the two pieces.
-    const faces = layout.joints.reduce((n, j) => n + strips.filter((s) => s.where === 'wall' && s.piece === j.a.piece && s.port === j.a.port).length, 0);
-    if (faces) out.push({ where: 'wall', spec: tape.wall, joints, length: faces * GLOBAL_SPEC.fenceHeight });
+    // Each wall at a joint: the strips of one of the two pieces.
+    const walls = layout.joints.reduce((n, j) => n + strips.filter((s) => s.where === 'wall' && s.piece === j.a.piece && s.port === j.a.port).length, 0);
+    if (walls) out.push({ where: 'wall', spec: tape.wall, joints, length: walls * WALL_WRAP });
   }
   return out;
 }

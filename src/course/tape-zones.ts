@@ -3,8 +3,8 @@ import type { Layout } from './course';
 import { tapeStrips } from './tape';
 
 // Where the joint tape's friction acts on a running machine (#133, owner
-// 2026-10-31): the tyres on a floor strip, the rollers on a wall strip's
-// inner face. A strip's outer face meets nothing and is left out.
+// 2026-10-31): the tyres on a floor strip, the rollers by a wall strip
+// (which wraps the wall, so on either face).
 
 /**
  * Friction of the bare road against the tyres and of the bare fences
@@ -37,7 +37,7 @@ export function tapeZones(layout: Layout): TapeZone[] {
   if (zones) return zones;
   zones = [];
   for (const s of tapeStrips(layout)) {
-    if (s.friction === null || s.frames.length < 2) continue;
+    if (s.frames.length < 2) continue;
     const m = layout.pieces[s.piece].matrix;
     const frames = s.frames.map((f) => m.clone().multiply(f));
     const points = frames.map((f) => new Vector3().setFromMatrixPosition(f));

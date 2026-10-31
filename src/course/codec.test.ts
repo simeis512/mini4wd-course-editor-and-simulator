@@ -27,7 +27,7 @@ function sample(): Course {
   c = addStopper(c, { ...(newStopper('hose', -500, 300) as Hose), color: 2 });
   c = addStopper(c, { kind: 'hose', points: [[0, 0], [-30, 700]], color: 0 });
   c = addStopper(c, { kind: 'box', size: 2, x: 1200, z: -40, yaw: -37.5, upright: true });
-  c = setTape(c, { floor: { kind: 'opp', width: 48, friction: 0.35 }, wall: { kind: 'cloth', width: 38, friction: 0.725, face: 'both' } });
+  c = setTape(c, { floor: { kind: 'opp', width: 48, friction: 0.35 }, wall: { kind: 'cloth', width: 38, friction: 0.725, dividers: true } });
   return { ...c, name: 'テストコース', dir: -1 };
 }
 
