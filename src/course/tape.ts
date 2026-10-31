@@ -113,30 +113,16 @@ export interface TapeStrip {
 const AT_PORT = 1;
 
 /**
- * The track's frames over `length` mm from its start or end, in the
- * track's own order (so swept boxes face outwards); the inner one cut to length.
+ * Frames at a track's start or end and `length` mm on straight into the
+ * piece, in the track's own order (so swept boxes face outwards): tape is
+ * as wide all the way across, also on a bend (owner, 2026-10-31).
  */
 export function endFrames(samples: readonly Matrix4[], atStart: boolean, length: number): Matrix4[] {
-  const list = atStart ? samples : [...samples].reverse();
-  const out = [list[0]];
-  const ordered = () => (atStart ? out : out.reverse());
-  const a = new Vector3();
-  const b = new Vector3();
-  let gone = 0;
-  for (let i = 1; i < list.length; i++) {
-    a.setFromMatrixPosition(list[i - 1]);
-    b.setFromMatrixPosition(list[i]);
-    const step = a.distanceTo(b);
-    if (gone + step >= length) {
-      const cut = list[i].clone();
-      cut.setPosition(a.lerp(b, step ? (length - gone) / step : 0));
-      out.push(cut);
-      return ordered();
-    }
-    gone += step;
-    out.push(list[i]);
-  }
-  return ordered();
+  const end = (atStart ? samples[0] : samples[samples.length - 1]).clone();
+  // The track's way at the end (frames look along + Z): into the piece at its start, out of it at its end.
+  const along = new Vector3().setFromMatrixColumn(end, 2).normalize();
+  const inner = end.clone().setPosition(new Vector3().setFromMatrixPosition(end).addScaledVector(along, atStart ? length : -length));
+  return atStart ? [end, inner] : [inner, end];
 }
 
 /** Strips on one piece by one joined port. */
