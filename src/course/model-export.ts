@@ -69,7 +69,7 @@ export function modelSolids(layout: Layout, includes: ModelIncludes, min?: numbe
     });
   });
   if (includes.tape && layout.tape) {
-    // On the thickened road and fences when printing, standing up from them only enough to be seen (owner, 2026-11-01).
+    // On the thickened road and fences when printing, standing out from them only a hair (owner, 2026-11-01).
     const size = { thickness: Math.max(thick * TAPE_PRINT_SHARE, TAPE_THICKNESS), lift, fenceHalf: Math.max(GLOBAL_SPEC.fenceThickness, thick) / 2 };
     tapeStrips(layout).forEach((s, n) => {
       const { x, y } = print ? stripBounds(s, size) : s;
@@ -190,11 +190,12 @@ export const PRINT_SCALES = [10, 20, 50] as const;
 /** Thinnest wall a home printer makes, mm on the print (#89, provisional; a setting). */
 export const PRINT_MIN_THICKNESS = 0.8;
 /**
- * How far printed tape stands up from the road and fences, as a share of
- * the thinnest wall: an accent you can just see, one 0.2mm layer at the
- * usual 0.8mm (owner, 2026-11-01; provisional).
+ * How far printed tape stands out from the road and fences, as a share of
+ * the thinnest wall: 0.1mm at the usual 0.8mm, under half a usual 0.2mm
+ * layer, so it makes no layer of its own on top but a slight step in X and
+ * Y on the sides of the walls (owner, 2026-11-01; provisional).
  */
-export const TAPE_PRINT_SHARE = 0.25;
+export const TAPE_PRINT_SHARE = 0.125;
 /** A common printer's build volume, mm: width, depth, height (#89, provisional; a setting). */
 export const BUILD_VOLUME: readonly [number, number, number] = [220, 220, 250];
 
