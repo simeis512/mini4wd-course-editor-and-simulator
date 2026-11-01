@@ -34,10 +34,11 @@ export interface WallTape extends TapeSpec {
 
 /**
  * How far down from the top a wall's road side is taped when it is kept
- * off the rollers, mm (#133, owner 2026-11-01; provisional): the rollers
- * run up to about 20mm above the road and the walls are 50mm tall.
+ * off the rollers, mm (#133, owner 2026-11-01; provisional): about 10mm,
+ * so that the upper rollers of a two-tier stay off it too; the walls are
+ * 50mm tall.
  */
-export const INSIDE_FLAP = 20;
+export const INSIDE_FLAP = 10;
 
 /** The course's joint tape; nothing set is no tape. */
 export interface JointTape {
