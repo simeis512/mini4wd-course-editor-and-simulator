@@ -53,6 +53,15 @@ describe('joint tape friction zones (#133)', () => {
     expect(tapeFrictionAt(tapeZones(all), 'wall', nearPort(all, 1, 0, -divider, 12, 10), 7)).toBe(0.6);
   });
 
+  it('leaves the rollers alone where the wall tape is kept off them (owner, 2026-11-01)', () => {
+    const layout = taped({ wall: { ...wall(true), shortInside: true } });
+    const face = 1.5 * GLOBAL_SPEC.lanePitch - GLOBAL_SPEC.fenceThickness / 2;
+    const divider = GLOBAL_SPEC.lanePitch / 2 - GLOBAL_SPEC.fenceThickness / 2 - 6.5;
+    for (const right of [face - 6.5, -(face - 6.5), divider, -divider]) {
+      expect(tapeFrictionAt(tapeZones(layout), 'wall', nearPort(layout, 1, 0, right, 12, 10), 7)).toBeNull();
+    }
+  });
+
   it('covers the strips at bends and at the narrow ends of a lane change as well', () => {
     const layout = taped({ floor }, basicOval());
     const zones = tapeZones(layout);

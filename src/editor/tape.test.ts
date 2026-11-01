@@ -18,6 +18,7 @@ describe('tape setting (#133)', () => {
     expect(changedTape(t, 'wall-friction', '0.4444', true)!.wall!.friction).toBe(0.444);
     expect(changedTape(t, 'wall-dividers', 'on', true)!.wall!.dividers).toBe(true);
     expect(changedTape(t, 'wall-dividers', 'on', false)!.wall!.dividers).toBe(false);
+    expect(changedTape(t, 'wall-inside', 'on', true)!.wall!.shortInside).toBe(true);
     expect(changedTape(t, 'floor-width', '30', true)).toBeNull();
   });
 });
