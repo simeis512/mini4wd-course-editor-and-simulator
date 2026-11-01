@@ -1,0 +1,282 @@
+{
+  "url": "https://127.0.0.1:5178/?perf&bench",
+  "browser": "156.0.8078.74",
+  "headless": false,
+  "runs": 3,
+  "results": [
+    {
+      "mode": "2D",
+      "run": 1,
+      "add": 15.19,
+      "refresh": 13.99,
+      "toFrame": 17.48,
+      "style": 0.27,
+      "styleInRefresh": 0.27,
+      "layout": 0.55,
+      "layoutInRefresh": 0.55,
+      "paint": 0.81,
+      "paintInRefresh": 0,
+      "commit": 0.2,
+      "commitInRefresh": 0,
+      "rAF": 0.07,
+      "rAFInRefresh": 0,
+      "gc": 0,
+      "gcInRefresh": 0,
+      "task": 17.47,
+      "taskInRefresh": 13.99
+    },
+    {
+      "mode": "3D",
+      "run": 1,
+      "add": 16.2,
+      "refresh": 14.83,
+      "toFrame": 22.69,
+      "style": 0.18,
+      "styleInRefresh": 0.18,
+      "layout": 0.37,
+      "layoutInRefresh": 0.37,
+      "paint": 0.83,
+      "paintInRefresh": 0,
+      "commit": 0.17,
+      "commitInRefresh": 0,
+      "rAF": 4.64,
+      "rAFInRefresh": 0,
+      "gc": 0.93,
+      "gcInRefresh": 0.93,
+      "task": 22.68,
+      "taskInRefresh": 14.83
+    },
+    {
+      "mode": "2D",
+      "run": 2,
+      "add": 11.89,
+      "refresh": 11,
+      "toFrame": 14.8,
+      "style": 0.17,
+      "styleInRefresh": 0.17,
+      "layout": 0.4,
+      "layoutInRefresh": 0.4,
+      "paint": 0.95,
+      "paintInRefresh": 0,
+      "commit": 0.3,
+      "commitInRefresh": 0,
+      "rAF": 0.07,
+      "rAFInRefresh": 0,
+      "gc": 0,
+      "gcInRefresh": 0,
+      "task": 14.78,
+      "taskInRefresh": 11
+    },
+    {
+      "mode": "3D",
+      "run": 2,
+      "add": 11.57,
+      "refresh": 10.28,
+      "toFrame": 19.05,
+      "style": 0.18,
+      "styleInRefresh": 0.18,
+      "layout": 0.35,
+      "layoutInRefresh": 0.35,
+      "paint": 0.83,
+      "paintInRefresh": 0,
+      "commit": 0.21,
+      "commitInRefresh": 0,
+      "rAF": 5.55,
+      "rAFInRefresh": 0,
+      "gc": 0,
+      "gcInRefresh": 0,
+      "task": 19.04,
+      "taskInRefresh": 10.28
+    },
+    {
+      "mode": "2D",
+      "run": 3,
+      "add": 12.08,
+      "refresh": 11.04,
+      "toFrame": 15.09,
+      "style": 0.18,
+      "styleInRefresh": 0.18,
+      "layout": 0.44,
+      "layoutInRefresh": 0.44,
+      "paint": 1.04,
+      "paintInRefresh": 0,
+      "commit": 0.16,
+      "commitInRefresh": 0,
+      "rAF": 0.07,
+      "rAFInRefresh": 0,
+      "gc": 0,
+      "gcInRefresh": 0,
+      "task": 15.08,
+      "taskInRefresh": 11.04
+    },
+    {
+      "mode": "3D",
+      "run": 3,
+      "add": 10.08,
+      "refresh": 9.15,
+      "toFrame": 17.86,
+      "style": 0.15,
+      "styleInRefresh": 0.15,
+      "layout": 0.31,
+      "layoutInRefresh": 0.31,
+      "paint": 0.85,
+      "paintInRefresh": 0,
+      "commit": 0.17,
+      "commitInRefresh": 0,
+      "rAF": 5.46,
+      "rAFInRefresh": 0,
+      "gc": 0,
+      "gcInRefresh": 0,
+      "task": 17.85,
+      "taskInRefresh": 9.15
+    }
+  ],
+  "summary": {
+    "2D": {
+      "add": 12.08,
+      "refresh": 11.04,
+      "toFrame": 15.09,
+      "style": 0.18,
+      "styleInRefresh": 0.18,
+      "layout": 0.44,
+      "layoutInRefresh": 0.44,
+      "paint": 0.95,
+      "paintInRefresh": 0,
+      "commit": 0.2,
+      "commitInRefresh": 0,
+      "rAF": 0.07,
+      "rAFInRefresh": 0,
+      "gc": 0,
+      "gcInRefresh": 0,
+      "task": 15.08,
+      "taskInRefresh": 11.04
+    },
+    "3D": {
+      "add": 11.57,
+      "refresh": 10.28,
+      "toFrame": 19.05,
+      "style": 0.18,
+      "styleInRefresh": 0.18,
+      "layout": 0.35,
+      "layoutInRefresh": 0.35,
+      "paint": 0.83,
+      "paintInRefresh": 0,
+      "commit": 0.17,
+      "commitInRefresh": 0,
+      "rAF": 5.46,
+      "rAFInRefresh": 0,
+      "gc": 0,
+      "gcInRefresh": 0,
+      "task": 19.04,
+      "taskInRefresh": 10.28
+    }
+  },
+  "benches": [
+    {
+      "run": 1,
+      "L": [
+        {
+          "mode": "2d",
+          "refresh": {
+            "layout": 0.9,
+            "refresh:2d": 14.3,
+            "supports": 4.2,
+            "clashes": 0.8,
+            "stopperContacts": 1,
+            "laps": 0.4,
+            "view2d": 3.6,
+            "panel": 2.4,
+            "url+save": 0,
+            "view3d": 0.7
+          }
+        },
+        {
+          "mode": "3d",
+          "refresh": {
+            "layout": 0.5,
+            "refresh:3d": 10.3,
+            "supports": 3.3,
+            "clashes": 0.7,
+            "stopperContacts": 0.9,
+            "laps": 0.3,
+            "view2d": 0.2,
+            "panel": 2.2,
+            "url+save": 0,
+            "view3d": 0.6
+          }
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "L": [
+        {
+          "mode": "2d",
+          "refresh": {
+            "layout": 0.5,
+            "refresh:2d": 12.2,
+            "supports": 3.5,
+            "clashes": 0.7,
+            "stopperContacts": 0.8,
+            "laps": 0.3,
+            "view2d": 3.1,
+            "panel": 1.9,
+            "url+save": 0,
+            "view3d": 0.6
+          }
+        },
+        {
+          "mode": "3d",
+          "refresh": {
+            "layout": 0.5,
+            "refresh:3d": 9.5,
+            "supports": 3.6,
+            "clashes": 0.7,
+            "stopperContacts": 0.8,
+            "laps": 0.3,
+            "view2d": 0.2,
+            "panel": 1.8,
+            "url+save": 0,
+            "view3d": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "L": [
+        {
+          "mode": "2d",
+          "refresh": {
+            "layout": 0.5,
+            "refresh:2d": 12.4,
+            "supports": 3.4,
+            "clashes": 0.7,
+            "stopperContacts": 0.9,
+            "laps": 0.3,
+            "view2d": 3.2,
+            "panel": 2.1,
+            "url+save": 0,
+            "view3d": 0.6
+          }
+        },
+        {
+          "mode": "3d",
+          "refresh": {
+            "refresh:3d": 9.6,
+            "layout": 0.5,
+            "supports": 3.5,
+            "clashes": 0.7,
+            "stopperContacts": 0.8,
+            "laps": 0.4,
+            "view2d": 0.2,
+            "panel": 1.9,
+            "url+save": 0,
+            "view3d": 0.6
+          }
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

@@ -156,6 +156,7 @@ export class EditorApp {
       leave: () => this.orbit.setPicking(true),
       setMachine: (object) => this.orbit.setMachine(object),
       aim: (view) => this.orbit.aim(view),
+      seeThrough: (points) => this.orbit.seeThrough(points),
       onFrame: (tick) => this.orbit.onFrame(tick),
     });
     buildPalette({
