@@ -2,6 +2,7 @@ import type { Course } from '../course/course';
 import {
   defaultTape,
   FRICTION_RANGE,
+  INSIDE_FLAP,
   TAPE_KIND_ORDER,
   TAPE_KINDS,
   TAPE_WIDTH_RANGE,
@@ -43,7 +44,10 @@ export function tapeHtml(course: Course): string[] {
   if (tape.wall) {
     out.push(
       `<div class="row tape"><label><input type="checkbox" data-tape="wall-dividers"${tape.wall.dividers ? ' checked' : ''}>レーンの間の仕切りにも貼る</label></div>`,
-      '<div class="muted">外側の壁（と仕切り）に上からかぶせて、上面と両側の面を覆います</div>',
+      `<div class="row tape"><label title="コースの内側の面は上から ${INSIDE_FLAP}mm だけ貼り、ローラーに当てません"><input type="checkbox" data-tape="wall-inside"${tape.wall.shortInside ? ' checked' : ''}>コースの内側は下まで貼らない</label></div>`,
+      tape.wall.shortInside
+        ? `<div class="muted">上からかぶせて、コースの内側の面は上から ${INSIDE_FLAP}mm まで（ローラーに当たりません）。外側の壁の外の面は下まで貼ります</div>`
+        : '<div class="muted">外側の壁（と仕切り）に上からかぶせて、上面と両側の面を覆います</div>',
     );
   }
   out.push(`<datalist id="tape-widths">${TAPE_WIDTHS.map((w) => `<option value="${w}">`).join('')}</datalist>`);
@@ -76,6 +80,8 @@ export function changedTape(tape: JointTape, name: string, value: string, checke
     changed = { friction: Math.round(clamp(Number(value), FRICTION_RANGE, spec.friction) * 1000) / 1000 };
   } else if (field === 'dividers' && where === 'wall') {
     changed = { dividers: checked };
+  } else if (field === 'inside' && where === 'wall') {
+    changed = { shortInside: checked };
   } else {
     return null;
   }

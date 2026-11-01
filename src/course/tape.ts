@@ -8,8 +8,9 @@ import { crossSection } from './mesh';
 // 2026-10-30): on the floor one strip across the whole road, on the walls
 // the outer walls and, if asked, the dividers between the lanes too
 // (owner, 2026-10-31). A wall strip goes on from above, over the top and
-// down both faces. Every kind of joint is taped alike; no wall strip where
-// there is no wall.
+// down both faces, or, kept off the rollers, only a little way down the
+// faces the machines run along (owner, 2026-11-01). Every kind of joint is
+// taped alike; no wall strip where there is no wall.
 
 export type TapeKind = 'curing' | 'opp' | 'cloth';
 
@@ -23,7 +24,21 @@ export interface TapeSpec {
 export interface WallTape extends TapeSpec {
   /** The dividers between the lanes too, not only the outer walls. */
   dividers: boolean;
+  /**
+   * Down the faces the machines run along only `INSIDE_FLAP` from the top,
+   * so the rollers do not touch it (owner, 2026-11-01); the outer walls'
+   * outside faces are still taped all the way down.
+   */
+  shortInside?: boolean;
 }
+
+/**
+ * How far down from the top a wall's road side is taped when it is kept
+ * off the rollers, mm (#133, owner 2026-11-01; provisional): about 10mm,
+ * so that the upper rollers of a two-tier stay off it too; the walls are
+ * 50mm tall.
+ */
+export const INSIDE_FLAP = 10;
 
 /** The course's joint tape; nothing set is no tape. */
 export interface JointTape {
@@ -73,6 +88,7 @@ export function validateTape(tape: JointTape): void {
     if (!ok) throw new Error(`bad tape ${JSON.stringify(spec)}`);
   }
   if (tape.wall && typeof tape.wall.dividers !== 'boolean') throw new Error(`tape on dividers ${tape.wall.dividers}`);
+  if (tape.wall && tape.wall.shortInside !== undefined && typeof tape.wall.shortInside !== 'boolean') throw new Error(`tape inside ${tape.wall.shortInside}`);
 }
 
 /**
@@ -81,17 +97,31 @@ export function validateTape(tape: JointTape): void {
  * their centres (thicker for printing, #89).
  */
 export function stripBounds(
-  strip: Pick<TapeStrip, 'where' | 'x' | 'wall'>,
+  strip: Pick<TapeStrip, 'where' | 'x' | 'wall' | 'part' | 'side'>,
   { thickness = TAPE_THICKNESS, lift = 0, fenceHalf = GLOBAL_SPEC.fenceThickness / 2 } = {},
 ): { x: [number, number]; y: [number, number] } {
   if (strip.where === 'floor' || strip.wall === undefined) return { x: strip.x, y: [lift, lift + thickness] };
-  // Over the top of the wall and down both its faces.
+  const top = GLOBAL_SPEC.fenceHeight + lift;
   const half = fenceHalf + thickness;
-  return { x: [strip.wall - half, strip.wall + half], y: [0, GLOBAL_SPEC.fenceHeight + lift + thickness] };
+  if (strip.part === 'face') {
+    // Down one face, below the cap.
+    const face = strip.wall + strip.side! * fenceHalf;
+    const out = face + strip.side! * thickness;
+    return { x: [Math.min(face, out), Math.max(face, out)], y: [0, top - INSIDE_FLAP] };
+  }
+  // Over the top and down both faces: all the way, or only as far as the flap.
+  return { x: [strip.wall - half, strip.wall + half], y: [strip.part === 'cap' ? top - INSIDE_FLAP : 0, top + thickness] };
 }
 
 /** Tape it takes to go over one wall from the road on one side to the road on the other, mm. */
 export const WALL_WRAP = 2 * GLOBAL_SPEC.fenceHeight + GLOBAL_SPEC.fenceThickness;
+
+/** Tape one wall strip takes, mm. */
+function stripLength(s: TapeStrip): number {
+  if (s.part === 'cap') return 2 * INSIDE_FLAP + GLOBAL_SPEC.fenceThickness;
+  if (s.part === 'face') return GLOBAL_SPEC.fenceHeight - INSIDE_FLAP;
+  return WALL_WRAP;
+}
 
 /** One strip of tape on one piece, by one of its ends. */
 export interface TapeStrip {
@@ -105,6 +135,13 @@ export interface TapeStrip {
   y: [number, number];
   /** On a wall: the fence's centre across the road, mm. */
   wall?: number;
+  /**
+   * On a wall: all round it (`wrap`, the default), over its top a little
+   * way down both faces (`cap`), or down one face below the cap (`face`,
+   * on the side `side`: +1 right).
+   */
+  part?: 'wrap' | 'cap' | 'face';
+  side?: 1 | -1;
   /** Against the machine. */
   friction: number;
 }
@@ -194,7 +231,19 @@ function stripsAt(layout: Layout, ref: PortRef, tape: JointTape): TapeStrip[] {
       if (taped.some((t) => Math.abs(t - at) <= AT_PORT)) continue;
       taped.push(at);
       const frames = wallFrames(e.samples, e.atStart, tape.wall.width / 2, wall);
-      out.push({ ...base, where: 'wall', frames, ...stripBounds({ where: 'wall', x: [0, 0], wall }), wall, friction: tape.wall.friction });
+      const strip = (part: TapeStrip['part'], side?: 1 | -1): TapeStrip => {
+        const s: TapeStrip = { ...base, where: 'wall', frames, x: [0, 0], y: [0, 0], wall, friction: tape.wall!.friction };
+        if (part !== 'wrap') s.part = part;
+        if (side) s.side = side;
+        return { ...s, ...stripBounds(s) };
+      };
+      if (!tape.wall.shortInside) {
+        out.push(strip('wrap'));
+        continue;
+      }
+      out.push(strip('cap'));
+      // An outer wall's outside, which no machine runs along, is still taped all the way down.
+      if (outer) out.push(strip('face', wall < (section.left + section.right) / 2 ? -1 : 1));
     }
   }
   return out;
@@ -253,8 +302,11 @@ export function tapeNeeds(layout: Layout): TapeNeed[] {
   }
   if (tape.wall) {
     // Each wall at a joint: the strips of one of the two pieces.
-    const walls = layout.joints.reduce((n, j) => n + strips.filter((s) => s.where === 'wall' && s.piece === j.a.piece && s.port === j.a.port).length, 0);
-    if (walls) out.push({ where: 'wall', spec: tape.wall, joints, length: walls * WALL_WRAP });
+    const length = layout.joints.reduce(
+      (n, j) => n + strips.filter((s) => s.where === 'wall' && s.piece === j.a.piece && s.port === j.a.port).reduce((m, s) => m + stripLength(s), 0),
+      0,
+    );
+    if (length) out.push({ where: 'wall', spec: tape.wall, joints, length });
   }
   return out;
 }

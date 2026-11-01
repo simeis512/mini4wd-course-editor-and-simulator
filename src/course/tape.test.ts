@@ -4,7 +4,7 @@ import { GLOBAL_SPEC } from './catalog';
 import { layoutCourse, validateCourse } from './course';
 import { pointOnFrame } from './geometry';
 import { basicOval, chain } from './presets';
-import { endFrames, setTape, wallFrames, TAPE_THICKNESS, tapeNeeds, tapeStrips, WALL_WRAP, type JointTape } from './tape';
+import { endFrames, INSIDE_FLAP, setTape, wallFrames, TAPE_THICKNESS, tapeNeeds, tapeStrips, WALL_WRAP, type JointTape } from './tape';
 
 const floor = { kind: 'curing', width: 50, friction: 0.5 } as const;
 const wall = (dividers = false) => ({ kind: 'opp', width: 48, friction: 0.35, dividers }) as const;
@@ -82,6 +82,25 @@ describe('joint tape (#133)', () => {
       const [piece, port] = key.split(':').map(Number);
       expect(n).toBe(layout.pieces[piece].part.ports[port].lanes.length + 1);
     }
+  });
+
+  it('keeps the wall tape off the rollers when asked: a cap over the top, the outer walls\' outsides all the way down (owner, 2026-11-01)', () => {
+    const strips = tapeStrips(taped({ wall: { ...wall(true), shortInside: true } }));
+    const top = GLOBAL_SPEC.fenceHeight;
+    const caps = strips.filter((s) => s.part === 'cap');
+    const faces = strips.filter((s) => s.part === 'face');
+    // Four walls on each of two pieces; the two outer walls of each also down their outsides.
+    expect(caps).toHaveLength(8);
+    expect(faces).toHaveLength(4);
+    for (const s of caps) expect(s.y).toEqual([top - INSIDE_FLAP, top + TAPE_THICKNESS]);
+    for (const s of faces) {
+      expect(s.y).toEqual([0, top - INSIDE_FLAP]);
+      // On the side away from the road.
+      expect(Math.abs((s.x[0] + s.x[1]) / 2)).toBeGreaterThan(Math.abs(s.wall!));
+    }
+    const needs = tapeNeeds(taped({ wall: { ...wall(true), shortInside: true } }, ['straight', 'straight', 'straight']));
+    // Per joint: four caps and two outsides.
+    expect(needs[0].length).toBeCloseTo(2 * (4 * (2 * INSIDE_FLAP + GLOBAL_SPEC.fenceThickness) + 2 * (top - INSIDE_FLAP)));
   });
 
   it('says how much tape the course takes', () => {

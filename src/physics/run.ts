@@ -5,9 +5,11 @@ import { GLOBAL_SPEC } from '../course/catalog';
 import { MM } from '../course/mesh';
 import { laneStart, lapMarks } from '../course/lap-marks';
 import { laneSpot, simCourse, type SimCourse } from '../course/sim-course';
+import { tapeZones, type TapeZone } from '../course/tape-zones';
 import { addCourseColliders, type CourseColliders } from './course-colliders';
 import { createMachine, driveMachine, type Machine } from './machine';
 import { frontReach, STANDARD_MACHINE, type MachineSpec } from './machine-spec';
+import { touchTape } from './tape-grip';
 import { createPhysicsWorld } from './world';
 
 // One machine running round a course (#27, #28, spec simulator.md): a fixed
@@ -106,6 +108,8 @@ export class Run {
   private startAt = 0;
   /** Time asked for but not yet run, less than a step, s. */
   private owed = 0;
+  /** The joint tape the tyres and rollers run on (#133). */
+  private tape: readonly TapeZone[] = [];
 
   private constructor(
     readonly world: RAPIER.World,
@@ -133,6 +137,7 @@ export class Run {
     const start = laneStart(layout, line, frontReach(spec) / MM);
     const machine = createMachine(world, spec, start.position.clone().multiplyScalar(MM), start.forward);
     const run = new Run(world, course, colliders, machine, lane);
+    run.tape = tapeZones(layout);
     run.along = run.startAt = start.along;
     const marks = lapMarks(layout, course.lanes);
     run.lapAt = layout.start ? marks.start : course.lanes.map((l) => laneStart(layout, l).along);
@@ -162,6 +167,7 @@ export class Run {
   }
 
   private step(): void {
+    touchTape(this.machine, this.tape);
     driveMachine(this.machine, STEP);
     this.world.step();
     this.time += STEP;
