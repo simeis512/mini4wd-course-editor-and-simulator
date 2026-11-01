@@ -13,6 +13,7 @@ import {
   largestFit,
   modelSolids,
   printSolids,
+  TAPE_PRINT_SHARE,
   sizeOf,
   stlBinary,
   triangleCount,
@@ -116,6 +117,18 @@ describe('printSolids (#89)', () => {
     const fence = straight.find((s) => s.name.includes('fence'))!;
     const road = straight.find((s) => s.name.includes('road'))!;
     expect(boundsOf([fence]).max.z - boundsOf([road]).max.z).toBeCloseTo(50 / 20, 3);
+  });
+
+  it('raises printed tape only a little over the road and wall it covers (owner, 2026-11-01)', () => {
+    const taped = layoutCourse(setTape(chain(['straight', 'straight']), { floor: { kind: 'curing', width: 50, friction: 0.5 }, wall: { kind: 'opp', width: 48, friction: 0.35, dividers: false } }));
+    const print = printSolids(taped, { ...NONE, tape: true }, 20, 0.8);
+    const top = (part: string) => Math.max(...print.filter((s) => s.name.includes(part)).map((s) => boundsOf([s]).max.z));
+    const raise = 0.8 * TAPE_PRINT_SHARE;
+    expect(top('tape-floor') - top('road')).toBeCloseTo(raise, 3);
+    expect(top('tape-wall') - top('fence')).toBeCloseTo(raise, 3);
+    // Across the wall too: no wider than the thickened wall and a layer each side.
+    const wall = print.find((s) => s.name.includes('tape-wall'))!;
+    expect(Math.min(...sizeOf([wall]).slice(0, 2))).toBeLessThan(0.8 + 2 * raise + 1e-3);
   });
 
   it('keeps thick enough parts as they are', () => {

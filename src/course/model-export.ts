@@ -7,7 +7,7 @@ import { supports } from './height';
 import { attachmentGeometry, ATTACHMENT_COLOR, buildPartGeometry, buildSupportMesh, roadLift, SUPPORT_COLOR, sweepBox } from './mesh';
 import { GLOBAL_SPEC } from './catalog';
 import { buildPropMeshes } from './props-mesh';
-import { stripBounds, tapeStrips } from './tape';
+import { stripBounds, TAPE_THICKNESS, tapeStrips } from './tape';
 import { TAPE_COLORS } from './tape-mesh';
 
 // The course as a 3D model file (#89): GLB for VRChat and other 3D tools,
@@ -69,8 +69,8 @@ export function modelSolids(layout: Layout, includes: ModelIncludes, min?: numbe
     });
   });
   if (includes.tape && layout.tape) {
-    // As thick as anything else when printing, on the thickened road and fences.
-    const size = { thickness: Math.max(thick, 0.2), lift, fenceHalf: Math.max(GLOBAL_SPEC.fenceThickness, thick) / 2 };
+    // On the thickened road and fences when printing, standing up from them only enough to be seen (owner, 2026-11-01).
+    const size = { thickness: Math.max(thick * TAPE_PRINT_SHARE, TAPE_THICKNESS), lift, fenceHalf: Math.max(GLOBAL_SPEC.fenceThickness, thick) / 2 };
     tapeStrips(layout).forEach((s, n) => {
       const { x, y } = print ? stripBounds(s, size) : s;
       const spec = layout.tape![s.where]!;
@@ -189,6 +189,12 @@ function capped(tube: THREE.TubeGeometry, radial: number): THREE.BufferGeometry 
 export const PRINT_SCALES = [10, 20, 50] as const;
 /** Thinnest wall a home printer makes, mm on the print (#89, provisional; a setting). */
 export const PRINT_MIN_THICKNESS = 0.8;
+/**
+ * How far printed tape stands up from the road and fences, as a share of
+ * the thinnest wall: an accent you can just see, one 0.2mm layer at the
+ * usual 0.8mm (owner, 2026-11-01; provisional).
+ */
+export const TAPE_PRINT_SHARE = 0.25;
 /** A common printer's build volume, mm: width, depth, height (#89, provisional; a setting). */
 export const BUILD_VOLUME: readonly [number, number, number] = [220, 220, 250];
 
