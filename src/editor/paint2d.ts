@@ -5,6 +5,8 @@ import { portKey, sameJoint, type Layout, type PortRef } from '../course/course'
 import { pointOnFrame } from '../course/geometry';
 import { atLevel, type HeightRange } from '../course/height';
 import { attachmentOutline } from '../course/attachments';
+import { stripOutline, tapeStrips } from '../course/tape';
+import { TAPE_COLORS } from '../course/tape-mesh';
 import { ATTACHMENT_COLOR, halfWidth } from '../course/mesh';
 import { colorRange, heightColor, type HeightView } from './levels';
 import { xz, type Outline } from './outline2d';
@@ -71,6 +73,9 @@ export function paint2d(state: PaintState, target?: { ctx: CanvasRenderingContex
   if (stoppersShown) drawStoppers(painter, layout);
   const range = colorRange(Math.max(0, ...heights.map((r) => r[1])));
   const drawnMarks = new Set<number>();
+  // The joint tape, by piece, drawn on each piece's road (#133).
+  const tapeByPiece = new Map<number, ReturnType<typeof tapeStrips>>();
+  for (const s of tapeStrips(layout)) tapeByPiece.set(s.piece, [...(tapeByPiece.get(s.piece) ?? []), s]);
   for (const i of order) {
     const o = outlines[i];
     if (!shown(o.piece)) {
@@ -134,6 +139,13 @@ export function paint2d(state: PaintState, target?: { ctx: CanvasRenderingContex
         path(thick.map(xz), false);
         ctx.stroke();
         ctx.lineWidth = 1;
+      }
+      for (const strip of tapeByPiece.get(o.piece) ?? []) {
+        path(stripOutline(layout, strip).map(xz), true);
+        ctx.fillStyle = TAPE_COLORS[layout.tape![strip.where]!.kind];
+        ctx.globalAlpha = 0.8;
+        ctx.fill();
+        ctx.globalAlpha = 1;
       }
       // The start line on the road, under anything higher (#56).
       if (layout.start?.piece === o.piece) drawStart(painter, layout);

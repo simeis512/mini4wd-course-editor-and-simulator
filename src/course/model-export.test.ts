@@ -4,6 +4,7 @@ import { layoutCourse } from './course';
 import { basicOval, chain } from './presets';
 import { addStopper, newStopper } from './stoppers';
 import { placeStart } from './timing';
+import { setTape } from './tape';
 import {
   boundsOf,
   fitsVolume,
@@ -12,6 +13,7 @@ import {
   largestFit,
   modelSolids,
   printSolids,
+  TAPE_PRINT_SHARE,
   sizeOf,
   stlBinary,
   triangleCount,
@@ -20,8 +22,8 @@ import {
 } from './model-export';
 import { crc32, threeMf, threeMfModel } from './threemf';
 
-const NONE: ModelIncludes = { supports: false, props: false, floor: false };
-const ALL: ModelIncludes = { supports: true, props: true, floor: true };
+const NONE: ModelIncludes = { supports: false, props: false, floor: false, tape: false };
+const ALL: ModelIncludes = { supports: true, props: true, floor: true, tape: true };
 
 /** A course with every kind of thing in it: raised road with supports, the start and timer, an open hose and a box. */
 function busyCourse() {
@@ -29,6 +31,7 @@ function busyCourse() {
   c = placeStart(c, 0, 100);
   c = addStopper(c, { kind: 'hose', points: [[0, -600], [400, -650], [800, -600]], color: 0 });
   c = addStopper(c, newStopper('box', -800, 0));
+  c = setTape(c, { floor: { kind: 'curing', width: 50, friction: 0.5 }, wall: { kind: 'opp', width: 48, friction: 0.35, dividers: true } });
   return layoutCourse(c);
 }
 
@@ -63,9 +66,11 @@ describe('modelSolids (#89)', () => {
     expect(bare.some((n) => n.includes('fence'))).toBe(true);
     expect(bare).not.toContain('supports');
     expect(bare).not.toContain('floor');
+    expect(bare.some((n) => n.includes('tape'))).toBe(false);
     const all = modelSolids(layout, ALL).map((s) => s.name);
     expect(all).toContain('supports');
     expect(all).toContain('floor');
+    for (const where of ['floor', 'wall']) expect(all.some((n) => n.includes(`tape-${where}`))).toBe(true);
     for (const prop of ['start', 'timer', 'stopper']) expect(all.some((n) => n.startsWith(prop))).toBe(true);
   });
 
@@ -112,6 +117,18 @@ describe('printSolids (#89)', () => {
     const fence = straight.find((s) => s.name.includes('fence'))!;
     const road = straight.find((s) => s.name.includes('road'))!;
     expect(boundsOf([fence]).max.z - boundsOf([road]).max.z).toBeCloseTo(50 / 20, 3);
+  });
+
+  it('raises printed tape only a little over the road and wall it covers (owner, 2026-11-01)', () => {
+    const taped = layoutCourse(setTape(chain(['straight', 'straight']), { floor: { kind: 'curing', width: 50, friction: 0.5 }, wall: { kind: 'opp', width: 48, friction: 0.35, dividers: false } }));
+    const print = printSolids(taped, { ...NONE, tape: true }, 20, 0.8);
+    const top = (part: string) => Math.max(...print.filter((s) => s.name.includes(part)).map((s) => boundsOf([s]).max.z));
+    const raise = 0.8 * TAPE_PRINT_SHARE;
+    expect(top('tape-floor') - top('road')).toBeCloseTo(raise, 3);
+    expect(top('tape-wall') - top('fence')).toBeCloseTo(raise, 3);
+    // Across the wall too: no wider than the thickened wall and a layer each side.
+    const wall = print.find((s) => s.name.includes('tape-wall'))!;
+    expect(Math.min(...sizeOf([wall]).slice(0, 2))).toBeLessThan(0.8 + 2 * raise + 1e-3);
   });
 
   it('keeps thick enough parts as they are', () => {

@@ -1,4 +1,5 @@
-import type { Course } from '../course/course';
+import type { Course, Layout } from '../course/course';
+import { TAPE_KINDS, tapeNeeds } from '../course/tape';
 import { BASE_SETS, shoppingList, type Line } from '../course/shopping';
 import { $ } from './dom';
 
@@ -29,7 +30,7 @@ const escape = (text: string) => text.replace(/[&<>"]/g, (c) => `&#${c.charCodeA
 const rows = (lines: readonly Line[]) => lines.map((l) => `<tr><td>${escape(l.name)}</td><td class="num">${l.count}</td></tr>`).join('');
 
 /** The shopping list for a course, as HTML for the course box. */
-export function shoppingHtml(course: Course): string[] {
+export function shoppingHtml(course: Course, layout: Layout): string[] {
   const list = shoppingList(course, owned.item ? [owned] : []);
   if (!list.used.length && !list.custom.length) return [];
   const sets = BASE_SETS.map((p) => `<option value="${p.item}"${p.item === owned.item ? ' selected' : ''}>${p.item} ${escape(p.name)}</option>`);
@@ -52,6 +53,12 @@ export function shoppingHtml(course: Course): string[] {
   if (list.custom.length) {
     const custom = list.custom.map((c) => `<tr><td>${c.length}mm</td><td class="num">${c.count}</td></tr>`);
     out.push(`<table class="laps"><tr><th>自作ストレート</th><th>数</th></tr>${custom.join('')}</table>`);
+  }
+  const tape = tapeNeeds(layout);
+  if (tape.length) {
+    // Tape is bought anywhere: a common name and width only (#133).
+    const lines = tape.map((n) => `<tr><td>${escape(TAPE_KINDS[n.spec.kind].name)} ${n.spec.width}mm 幅（${n.where === 'floor' ? '床' : '壁'}）</td><td class="num">${n.joints}</td><td class="num">${(n.length / 1000).toFixed(1)}m</td></tr>`);
+    out.push(`<table class="laps"><tr><th>つなぎ目のテープ</th><th>か所</th><th>長さの目安</th></tr>${lines.join('')}</table>`);
   }
   out.push('<div class="muted">セットの中身はタミヤの商品説明から。価格は考えていません</div>');
   return out;

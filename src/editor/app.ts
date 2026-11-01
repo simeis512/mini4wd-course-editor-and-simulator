@@ -9,6 +9,7 @@ import {
   type PortRef,
 } from '../course/course';
 import { addPiece, markIntended, reverseDirection } from '../course/edit';
+import { setTape } from '../course/tape';
 import { findClashes } from '../course/clash';
 import { stopperContacts } from '../course/stopper-contact';
 import { supports } from '../course/height';
@@ -169,6 +170,8 @@ export class EditorApp {
     });
     this.share = bindAppUi({
       get selection() { return app.selection; },
+      get course() { return app.course; },
+      setTape: (tape) => this.commit(setTape(this.course, tape), this.selection),
       top: this.top,
       checks: {
         pick: (t) => {
