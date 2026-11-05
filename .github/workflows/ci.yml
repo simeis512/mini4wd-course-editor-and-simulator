@@ -14,11 +14,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The base branch too, to compare against it (#137).
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           # The same as Cloudflare Pages builds with (#21).
           node-version: 22
           cache: npm
       - run: npm ci
+      # A PR that changes what users see needs changes/<PR>.md, with the
+      # new URL format when FORMAT_VERSION changes (#137).
+      - if: github.event_name == 'pull_request'
+        run: node scripts/changes.mjs check ${{ github.event.pull_request.number }} origin/${{ github.base_ref }}
       - run: npm test
       - run: npm run build

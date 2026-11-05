@@ -1,3 +1,5 @@
+import { FORMAT_VERSION } from '../course/codec';
+import { markSeen, parseChangelog, updateMark } from './changelog';
 import { $ } from './dom';
 
 // The notice shown on start (#67) and the about panel (#70).
@@ -54,9 +56,67 @@ async function loadLicences(): Promise<string> {
   return names.map((name, i) => `${name}\n\n${texts[i].default}`).join('\n\n----\n\n');
 }
 
+/** The browser's storage, or none when it is blocked. */
+function storage(): Storage | null {
+  try {
+    return localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** Versions shown open in the changelog; older ones are folded (#137). */
+const OPEN_RELEASES = 3;
+
+/** Fill the changelog in the about panel from CHANGELOG.md, loaded only when asked for (#137). */
+async function loadChangelog(box: HTMLElement): Promise<void> {
+  const { default: text } = await import('../../CHANGELOG.md?raw');
+  box.replaceChildren(
+    ...parseChangelog(text).map((r, i) => {
+      const d = document.createElement('details');
+      d.open = i < OPEN_RELEASES;
+      const s = document.createElement('summary');
+      s.textContent = `v${r.version}（${r.date}）`;
+      const ul = document.createElement('ul');
+      for (const line of r.lines) ul.append(Object.assign(document.createElement('li'), { textContent: line }));
+      d.append(s, ul);
+      return d;
+    }),
+  );
+}
+
 export function bindAbout(): void {
   const about = $<HTMLDialogElement>('about-dialog');
-  $('about').addEventListener('click', () => about.showModal());
+  const button = $('about');
+  // Version, share URL format and commit, for bug reports (#137).
+  $('about-version').textContent = [`v${__APP_VERSION__}`, `共有 URL 形式 ${FORMAT_VERSION}`, __APP_COMMIT__].filter(Boolean).join(' ・ ');
+  const store = storage();
+  try {
+    if (store && updateMark(__APP_VERSION__, store)) {
+      button.classList.add('updated');
+      button.title += '（更新があります）';
+    }
+  } catch {
+    // Storage blocked: no mark.
+  }
+  button.addEventListener('click', () => {
+    about.showModal();
+    if (!button.classList.contains('updated')) return;
+    button.classList.remove('updated');
+    button.title = button.title.replace('（更新があります）', '');
+    try {
+      if (store) markSeen(__APP_VERSION__, store);
+    } catch {
+      // Storage blocked: the mark shows again next time.
+    }
+  });
+  const changelog = $<HTMLDetailsElement>('changelog');
+  changelog.addEventListener('toggle', () => {
+    const box = changelog.querySelector('div')!;
+    if (!changelog.open || box.childElementCount) return;
+    box.textContent = '読み込み中…';
+    loadChangelog(box).catch(() => (box.textContent = '読み込めませんでした'));
+  });
   $('about-notice').addEventListener('click', () => {
     about.close();
     void openNotice();

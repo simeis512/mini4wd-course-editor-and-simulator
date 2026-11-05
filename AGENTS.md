@@ -12,6 +12,7 @@
 - 同じ処理を 2 か所に書かない
 - 仮の値は名前付き定数にして `provisional` と出どころ（spec の節や issue）をコメントに書く
 - `PART_CODES` と `variants` は末尾に追加するだけ。URL 形式を変えるなら `FORMAT_VERSION` を上げる
+- 画面やコードを変える PR は、PR を作ったあとに更新履歴の断片 `changes/<PR番号>.md` を足す（[changes/README.md](changes/README.md)）。`CHANGELOG.md` と `package.json` の `version` は手で書き換えない
 - `npm test` と `npm run build` を通し、画面の変更はブラウザで確かめてから PR を出す（文書だけの変更では省いてよい）
 - 確認用のスクリーンショットは PR の本文やコメントに貼り、リポジトリには入れない。貼れない環境では、リポジトリの外に保存してオーナーに貼ってもらう（使い方説明の画像は対象外。CONTRIBUTING.md「実装の進め方」の 5）
 
