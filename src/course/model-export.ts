@@ -4,8 +4,11 @@ import { variantOf } from './catalog';
 import type { Layout } from './course';
 import { partStands } from './geometry';
 import { supports } from './height';
-import { attachmentGeometry, ATTACHMENT_COLOR, buildPartGeometry, buildSupportMesh, roadLift, SUPPORT_COLOR } from './mesh';
+import { attachmentGeometry, ATTACHMENT_COLOR, buildPartGeometry, buildSupportMesh, roadLift, SUPPORT_COLOR, sweepBox } from './mesh';
+import { GLOBAL_SPEC } from './catalog';
 import { buildPropMeshes } from './props-mesh';
+import { stripBounds, TAPE_THICKNESS, tapeStrips } from './tape';
+import { TAPE_COLORS } from './tape-mesh';
 
 // The course as a 3D model file (#89): GLB for VRChat and other 3D tools,
 // STL / 3MF for printing a miniature. Built from the same shapes as the 3D
@@ -19,6 +22,8 @@ export interface ModelIncludes {
   props: boolean;
   /** A board under everything. */
   floor: boolean;
+  /** The joint tape (#133); left out unless asked for. */
+  tape?: boolean;
 }
 
 /** One solid of the model, world millimetres (Y up), and its colour. */
@@ -63,6 +68,15 @@ export function modelSolids(layout: Layout, includes: ModelIncludes, min?: numbe
       if (a.piece === i) push(`piece-${i}-washboard-${n}`, ATTACHMENT_COLOR, 1, attachmentGeometry(pc, a, lift), pc.matrix);
     });
   });
+  if (includes.tape && layout.tape) {
+    // On the thickened road and fences when printing, standing out from them only a hair (owner, 2026-11-01).
+    const size = { thickness: Math.max(thick * TAPE_PRINT_SHARE, TAPE_THICKNESS), lift, fenceHalf: Math.max(GLOBAL_SPEC.fenceThickness, thick) / 2 };
+    tapeStrips(layout).forEach((s, n) => {
+      const { x, y } = print ? stripBounds(s, size) : s;
+      const spec = layout.tape![s.where]!;
+      push(`piece-${s.piece}-tape-${s.where}-${n}`, TAPE_COLORS[spec.kind], 1, sweepBox(s.frames, x[0], x[1], y[0], y[1]), layout.pieces[s.piece].matrix);
+    });
+  }
   if (includes.supports) {
     const list = supports(layout);
     if (list.length) push('supports', SUPPORT_COLOR, 1, buildSupportMesh(list, undefined, thick).geometry, undefined, true);
@@ -175,6 +189,13 @@ function capped(tube: THREE.TubeGeometry, radial: number): THREE.BufferGeometry 
 export const PRINT_SCALES = [10, 20, 50] as const;
 /** Thinnest wall a home printer makes, mm on the print (#89, provisional; a setting). */
 export const PRINT_MIN_THICKNESS = 0.8;
+/**
+ * How far printed tape stands out from the road and fences, as a share of
+ * the thinnest wall: 0.1mm at the usual 0.8mm, under half a usual 0.2mm
+ * layer, so it makes no layer of its own on top but a slight step in X and
+ * Y on the sides of the walls (owner, 2026-11-01; provisional).
+ */
+export const TAPE_PRINT_SHARE = 0.125;
 /** A common printer's build volume, mm: width, depth, height (#89, provisional; a setting). */
 export const BUILD_VOLUME: readonly [number, number, number] = [220, 220, 250];
 

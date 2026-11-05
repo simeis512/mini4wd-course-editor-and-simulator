@@ -11,6 +11,7 @@ import { blink, drawShortMark, type EditorView, type RunMarks } from './view';
 import { perfSpan } from './perf';
 import { disposeGeometries } from './resources';
 import { CourseMeshes } from './meshes3d';
+import { FenceFade } from './fence-fade';
 import {
   outlineOf,
   MARKER_GEOMETRY,
@@ -73,6 +74,7 @@ export class OrbitView implements EditorView {
   private clashMarks = new THREE.Group();
   private picking = true;
   private machine: THREE.Object3D | null = null;
+  private fenceFade = new FenceFade();
   /** Called before each frame is drawn, as by the running machine. */
   private ticker: (() => void) | null = null;
 
@@ -189,6 +191,13 @@ export class OrbitView implements EditorView {
     this.root.updateMatrixWorld();
     this.camera.position.copy(this.root.localToWorld(view.eye.clone()));
     this.controls.target.copy(this.root.localToWorld(view.target.clone()));
+  }
+
+  /** See through the fences between the camera and `points` (course mm), or none (#136). */
+  seeThrough(points: THREE.Vector3[] | null): void {
+    const on = points && !this.renderer.xr.isPresenting;
+    this.root.updateMatrixWorld();
+    this.fenceFade.update(this.pieces, this.camera.position, on ? points.map((p) => this.root.localToWorld(p.clone())) : null);
   }
 
   /** Call `tick` before each frame is drawn, in AR too, or stop (#99). */

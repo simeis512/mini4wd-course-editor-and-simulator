@@ -124,6 +124,10 @@
       #trash-zone.blocked { background: rgba(60, 64, 74, 0.9); font-weight: 400; font-size: 13px; }
       #fullscreen { margin-left: auto; }
       #fullscreen[hidden] + #about { margin-left: auto; }
+      #info td a { color: var(--accent); }
+      #info .stores { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+      #info .store, .amazon-links .button { font-size: 12px; padding: 2px 8px; min-height: 0; border: 1px solid var(--line); border-radius: 6px; background: #30343d; color: var(--text); text-decoration: none; }
+      .amazon-links .button { font-size: 13px; padding: 6px 10px; }
       #about { position: relative; width: 34px; padding: 0; border-radius: 50%; font-weight: 700; font-family: Georgia, serif; }
       #about.updated::after { content: ''; position: absolute; top: 1px; right: 1px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
       #changelog > div { max-height: 300px; overflow: auto; }
@@ -251,6 +255,7 @@
         <label title="走っている間のカメラ。固定のときはドラッグで自由に動かせます">視点
           <select id="run-camera">
             <option value="follow">追従</option>
+            <option value="side">追従（横）</option>
             <option value="overhead">俯瞰</option>
             <option value="free">固定</option>
           </select>
@@ -550,6 +555,12 @@
       <p>ミニ四駆・ジャパンカップジュニアサーキットは株式会社タミヤの商標です。本アプリはタミヤとは関係のない非公式アプリです。</p>
       <h3>データの扱い</h3>
       <p>コースはブラウザの中だけで扱い、サーバーには送りません。 <button id="about-notice" class="small">「はじめに」の案内を見る</button></p>
+      <div id="about-amazon" hidden>
+        <h3>Amazon アソシエイト</h3>
+        <p id="about-amazon-disclosure"></p>
+        <p id="about-amazon-cookie" class="hint"></p>
+        <label>購入リストの Amazon のリンク <select id="amazon-choice"></select></label>
+      </div>
       <h3>リンク</h3>
       <ul>
         <li>ソースコード：<a href="https://github.com/simeis512/mini4wd-course-editor-and-simulator" target="_blank" rel="noopener">GitHub リポジトリ</a></li>
@@ -572,6 +583,18 @@
         <summary>ライブラリのライセンス全文</summary>
         <pre></pre>
       </details>
+    </dialog>
+    <dialog id="amazon-dialog" aria-labelledby="amazon-title">
+      <form method="dialog"><button class="close" aria-label="閉じる">×</button></form>
+      <h2 id="amazon-title">Amazon の商品ページを開きます</h2>
+      <p>どちらのリンクで開くかを選んでください。アソシエイトリンクから買うと、このサイトの運営の支えになります。</p>
+      <div class="actions amazon-links">
+        <a id="amazon-tagged" class="button" target="_blank" rel="noopener">アソシエイトリンクで Amazon を開く</a>
+        <a id="amazon-plain" class="button" target="_blank" rel="noopener">アソシエイトなしで Amazon を開く</a>
+      </div>
+      <p id="amazon-disclosure" class="hint"></p>
+      <p id="amazon-cookie" class="hint"></p>
+      <label><input id="amazon-remember" type="checkbox" /> 次からこの画面を出さない（「i」の情報パネルで戻せます）</label>
     </dialog>
     <dialog id="qr-dialog" aria-labelledby="qr-title">
       <form method="dialog"><button class="close" aria-label="閉じる">×</button></form>
@@ -632,6 +655,7 @@
         <label><input id="model-supports" type="checkbox" checked /> 支柱</label>
         <label><input id="model-props" type="checkbox" checked /> 置き物</label>
         <label><input id="model-floor" type="checkbox" /> 床の板</label>
+        <label title="コースにつなぎ目のテープを設定しているとき。3D プリントでは最小の厚みまで厚くします"><input id="model-tape" type="checkbox" checked /> つなぎ目のテープ</label>
       </div>
       <div id="model-print" hidden>
         <h3>3D プリント</h3>

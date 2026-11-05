@@ -4,6 +4,7 @@ import { supports, type Support } from '../course/height';
 import { sameRoad } from '../course/layout-diff';
 import { buildPieceMesh, buildSupportMesh, worldTracks } from '../course/mesh';
 import { buildPropMeshes } from '../course/props-mesh';
+import { buildTapeMesh } from '../course/tape-mesh';
 import { disposeGeometries } from './resources';
 
 /** Retain unchanged piece/support meshes, releasing only replaced geometry (#92). */
@@ -12,6 +13,8 @@ export class CourseMeshes {
   private pieces: Group[] = [];
   private stands = new Map<number, { list: Support[]; mesh: Mesh }>();
   props: Group[] = [];
+  /** The joint tape (#133), rebuilt when the tape or any piece changes. */
+  private tape: Group | null = null;
 
   constructor(private root: Group) {}
 
@@ -61,6 +64,16 @@ export class CourseMeshes {
       }
       this.props = buildPropMeshes(layout);
       for (const mesh of this.props) this.root.add(mesh);
+    }
+    const sameTape = before && JSON.stringify(before.tape) === JSON.stringify(layout.tape) &&
+      before.joints.length === layout.joints.length && pieces.length === this.pieces.length && pieces.every((p, i) => p === this.pieces[i]);
+    if (!sameTape) {
+      if (this.tape) {
+        this.root.remove(this.tape);
+        disposeGeometries(this.tape);
+      }
+      this.tape = buildTapeMesh(layout);
+      if (this.tape) this.root.add(this.tape);
     }
     this.layout = layout;
     this.pieces = pieces;
