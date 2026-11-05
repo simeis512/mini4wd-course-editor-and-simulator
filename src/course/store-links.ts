@@ -35,6 +35,11 @@ export function officialUrl(item: string): string {
   return `https://www.tamiya.com/japan/products/${encodeURIComponent(item)}/index.html`;
 }
 
+/** The item's page in Tamiya's shop (checked for the items sold there, 2026-11-05). */
+export function tamiyaShopUrl(item: string): string {
+  return `https://tamiyashop.jp/shop/g/g${encodeURIComponent(item)}/`;
+}
+
 /** The item's page on amazon.co.jp, with the associate tag or without. */
 export function amazonUrl(asin: string, tag = ''): string {
   if (!isAsin(asin)) throw new Error(`not an ASIN: ${asin}`);

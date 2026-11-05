@@ -1,6 +1,6 @@
 import { getAttachment, getPart, PARTS, variantOf } from './catalog';
 import type { Course } from './course';
-import type { ProductStores } from './store-links';
+import { tamiyaShopUrl, type ProductStores } from './store-links';
 
 // What to buy to build a course (spec 7, #18): the sections it uses by
 // colour, the Tamiya items that sell them, and what is left over.
@@ -53,30 +53,35 @@ function basicSet(straight: string, curves: [string, number][], rest: string): R
 
 const LANE_CHANGE_WHITE = ['bridge-approach', 'over-bridge', 'under-bridge'].map((s) => sectionKey(s, 'white'));
 
+// Where to buy (#128, looked up 2026-11-05): the ASIN of the listing Amazon
+// sells itself where there is one, amazonNote where Amazon has only other
+// sellers above list price; Tamiya's shop where it still lists the item
+// (not 販売終了). Items on neither have none.
 /** Items in the order they are worked through: the basic sets first, then the lane change set, as it brings straights and a wave. */
 export const PRODUCTS: readonly Product[] = [
-  { item: '94892', name: 'ジャパンカップ ジュニアサーキット（レッド/ブルー/ホワイト）', contents: basicSet('white', [['red', 4], ['blue', 4]], 'white'), base: true },
-  { item: '95677', name: 'ジャパンカップ ジュニアサーキット スペシャルカラー（イエロー）', contents: basicSet('black', [['yellow', 8]], 'black'), base: true },
+  { item: '94892', name: 'ジャパンカップ ジュニアサーキット（レッド/ブルー/ホワイト）', contents: basicSet('white', [['red', 4], ['blue', 4]], 'white'), base: true, stores: { asin: 'B0DF26NQPT', tamiyaShop: tamiyaShopUrl('94892') } },
+  { item: '95677', name: 'ジャパンカップ ジュニアサーキット スペシャルカラー（イエロー）', contents: basicSet('black', [['yellow', 8]], 'black'), base: true, stores: { asin: 'B0D8NZ7QJ9', amazonNote: true } },
   { item: '69506', name: 'ジャパンカップ ジュニアサーキット（グレー）', contents: basicSet('gray', [['gray', 8]], 'gray'), base: true, discontinued: true },
   {
     item: '69579',
     name: 'レーンチェンジ拡張セット（ホワイト）',
     contents: { ...Object.fromEntries(LANE_CHANGE_WHITE.map((k, i) => [k, i === 2 ? 1 : 2])), 'straight/white': 2, 'wave/white': 1 },
     for: LANE_CHANGE_WHITE,
+    stores: { asin: 'B0DRPC88FH', tamiyaShop: tamiyaShopUrl('69579') },
   },
-  { item: '69578', name: 'カーブ（レッド/ブルー）各4枚セット', contents: { 'curve45/red': 4, 'curve45/blue': 4 }, bulk: true },
+  { item: '69578', name: 'カーブ（レッド/ブルー）各4枚セット', contents: { 'curve45/red': 4, 'curve45/blue': 4 }, bulk: true, stores: { asin: 'B0DHRQQ6ZP', tamiyaShop: tamiyaShopUrl('69578') } },
   { item: '69573', name: 'カーブ（レッド/ブルー）各2枚セット', contents: { 'curve45/red': 2, 'curve45/blue': 2 } },
   { item: '95491', name: 'カーブ（グリーン）4枚セット', contents: { 'curve45/green': 4 } },
   { item: '95522', name: 'カーブ（ブラック）4枚セット', contents: { 'curve45/black': 4 } },
-  { item: '69574', name: 'ストレート（ホワイト）4枚セット', contents: { 'straight/white': 4 } },
+  { item: '69574', name: 'ストレート（ホワイト）4枚セット', contents: { 'straight/white': 4 }, stores: { asin: 'B0DK8G189B', tamiyaShop: tamiyaShopUrl('69574') } },
   { item: '95506', name: 'ストレート（ブラック）4枚セット', contents: { 'straight/black': 4 } },
-  { item: '69575', name: 'ウェーブ（ホワイト）4枚セット', contents: { 'wave/white': 4 } },
-  { item: '69570', name: 'スロープセクション（レッド）', contents: { 'slope/red': 2 } },
+  { item: '69575', name: 'ウェーブ（ホワイト）4枚セット', contents: { 'wave/white': 4 }, stores: { asin: 'B0DRPBZGSK', tamiyaShop: tamiyaShopUrl('69575') } },
+  { item: '69570', name: 'スロープセクション（レッド）', contents: { 'slope/red': 2 }, stores: { asin: 'B008RX57E6', tamiyaShop: tamiyaShopUrl('69570') } },
   { item: '95447', name: 'スロープセクション（オレンジ）', contents: { 'slope/orange': 2 } },
   { item: '69571', name: 'バンクアプローチ20（レッド）', contents: { 'bank-approach-20/red': 2 } },
   { item: '95448', name: 'バンクアプローチ20（オレンジ）', contents: { 'bank-approach-20/orange': 2 } },
   { item: '95591', name: 'バンクアプローチ20（ブラック）', contents: { 'bank-approach-20/black': 2 } },
-  { item: '69572', name: 'ウォッシュボードセクション 5mm・10mm 各2枚', contents: { 'washboard-5': 2, 'washboard-10': 2 } },
+  { item: '69572', name: 'ウォッシュボードセクション 5mm・10mm 各2枚', contents: { 'washboard-5': 2, 'washboard-10': 2 }, stores: { asin: 'B00U9Z5KOM', amazonNote: true, tamiyaShop: tamiyaShopUrl('69572') } },
 ];
 
 export const BASE_SETS = PRODUCTS.filter((p) => p.base);

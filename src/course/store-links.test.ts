@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { amazonLinks, amazonUrl, isAsin, officialUrl } from './store-links';
+import { amazonLinks, amazonUrl, isAsin, officialUrl, tamiyaShopUrl } from './store-links';
 import { PRODUCTS } from './shopping';
 
 describe('store links (#128)', () => {
   it("makes Tamiya's product page from the item number", () => {
     expect(officialUrl('94892')).toBe('https://www.tamiya.com/japan/products/94892/index.html');
+    expect(tamiyaShopUrl('69574')).toBe('https://tamiyashop.jp/shop/g/g69574/');
   });
 
   it('links straight to amazon.co.jp, with the tag or without', () => {
