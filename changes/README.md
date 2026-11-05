@@ -1,7 +1,7 @@
 # 更新履歴の断片
 
 画面やコードを変える PR は、ここに `<PR番号>.md` を 1 つ置きます（#137）。main に merge されると
-GitHub Actions がまとめて [`CHANGELOG.md`](../CHANGELOG.md) に書き、`package.json` の `version` を上げ、断片を消します。
+GitHub Actions がまとめて [`CHANGELOG.md`](../CHANGELOG.md) に書き、`package.json` の `version` を上げ、断片を消します（main は PR 経由でしか変えられないので、`chore(release): v…` の PR を作って自分で merge します）。
 PR ごとに別のファイルなので、並行する PR どうしで衝突しません。
 
 ```md
