@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { followOwnPointers } from './orbit-pointers';
 import type { Clash } from '../course/clash';
 import { portKey, sameJoint, type Layout } from '../course/course';
 import { GLOBAL_SPEC } from '../course/catalog';
@@ -105,7 +106,9 @@ export class OrbitView implements EditorView {
     this.scene.add(this.root);
 
     this.camera.position.set(2, 2.5, -2);
-    this.controls = new OrbitControls(this.camera, renderer.domElement);
+    this.controls = new OrbitControls(this.camera);
+    followOwnPointers(this.controls);
+    this.controls.connect(renderer.domElement);
     // Middle drag moves the camera (as in most 3D tools); the wheel still zooms.
     this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
     this.controls.addEventListener('change', () => this.handlers.onViewChange?.());
