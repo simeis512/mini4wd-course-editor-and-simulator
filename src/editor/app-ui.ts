@@ -9,6 +9,7 @@ import { POSE_FIELDS } from './panels';
 import { bindAbout } from './notice';
 import { bindFullscreen } from './fullscreen';
 import { bindShopping } from './shopping';
+import { bindAmazon } from './amazon-link';
 import { bindTape } from './tape';
 import type { Course } from '../course/course';
 import type { JointTape } from '../course/tape';
@@ -61,6 +62,7 @@ export function bindAppUi(host: AppUiHost): ShareImage {
   bindLevelTools((view) => host.setHeightView(view));
   bindTurnTools(host.top);
   bindShopping(() => host.renderCourseInfo());
+  bindAmazon(() => host.renderCourseInfo());
   bindTape(() => host.course, (tape) => host.setTape(tape));
   bindCourseInfo(host.checks);
   // Views capture the pointer while dragging, so its moves still bubble up here.
