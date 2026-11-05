@@ -40,13 +40,23 @@ export function hitAt(state: PickState, e: { clientX: number; clientY: number })
  * The open ports and joints under a point on the page, in the order a tap
  * goes through them (#146): those whose middle is within the same screen
  * radius as in the top view, so the small joint bars are as easy to hit as
- * in 2D. Fences of the marker's own pieces may hide it; any other road in
+ * in 2D, and joints whose mark itself is under the point, all along its
+ * bar. Fences of the marker's own pieces may hide it; any other road in
  * front does.
  */
 export function marksNear(state: PickState, clientX: number, clientY: number): Mark[] {
   state.root.updateMatrixWorld();
   const eye = state.camera.getWorldPosition(new THREE.Vector3());
   const ray = new THREE.Raycaster();
+  // Joint marks the pointer is on, and how far along the ray.
+  const joints = state.markers.children.filter((m) => m.userData.joint);
+  const onMark = new Map<THREE.Object3D, number>();
+  const pointer = raycaster(state, { clientX, clientY });
+  for (const h of pointer.intersectObjects(joints, true)) {
+    let o: THREE.Object3D | null = h.object;
+    while (o && !o.userData.joint) o = o.parent;
+    if (o && !onMark.has(o)) onMark.set(o, h.distance);
+  }
   const hits: MarkHit[] = [];
   for (const m of state.markers.children) {
     const kind = m.userData.port ? 'port' : m.userData.joint ? 'joint' : null;
@@ -56,11 +66,17 @@ export function marksNear(state: PickState, clientX: number, clientY: number): M
     const q = state.toClient(centre);
     if (!q) continue;
     const d = Math.hypot(q[0] - clientX, q[1] - clientY);
-    if (d >= (kind === 'port' ? PORT_HIT : JOINT_HIT)) continue;
+    const at = onMark.get(m);
+    if (at === undefined && d >= (kind === 'port' ? PORT_HIT : JOINT_HIT)) continue;
     const own = kind === 'port' ? [data.piece] : [data.a.piece, data.b.piece];
-    const toward = centre.clone().sub(eye);
-    ray.set(eye, toward.clone().normalize());
-    ray.far = toward.length();
+    if (at === undefined) {
+      const toward = centre.clone().sub(eye);
+      ray.set(eye, toward.clone().normalize());
+      ray.far = toward.length();
+    } else {
+      ray.set(pointer.ray.origin, pointer.ray.direction);
+      ray.far = at;
+    }
     if (ray.intersectObjects(state.pieces, true).some((h) => !own.includes(pieceOf(h.object)))) continue;
     hits.push({ mark: kind === 'port' ? { kind, ref: data } : { kind, a: data.a, b: data.b }, d });
   }
