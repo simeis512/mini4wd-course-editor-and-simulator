@@ -88,22 +88,32 @@ const JOINT_BAR = { height: 12, depth: 16 };
 const JOINT_DISC = 22;
 /** How far the dark edge stands out round a joint mark, mm (#146). */
 const JOINT_EDGE = 3;
-export const MARK_EDGE = new THREE.MeshBasicMaterial({ color: MARK_OUTLINE, side: THREE.BackSide });
+/** Gap between the road and the bottom of a joint mark's edge, mm, so that none of it sinks into the road (#146). */
+const JOINT_LIFT = 1;
+// The edge writes no depth and is drawn after the course but before the
+// mark, so the mark always covers it where they overlap: only the rim
+// round the mark shows, never the edge of the bar across the disc (#146).
+export const MARK_EDGE = new THREE.MeshBasicMaterial({ color: MARK_OUTLINE, side: THREE.BackSide, depthWrite: false });
+const EDGE_ORDER = 1;
+const MARK_ORDER = 2;
 const jointGeometries = new Map<string, THREE.BufferGeometry[]>();
 
 /**
  * The geometries of a joint mark across `laneCount` lanes, as in 2D (#146):
  * a bar across JOINT_REACH of the track and a disc in its middle, standing
- * just above the road, thicker by `size`; then the same grown by the edge.
+ * on the road with its edge just clear of it, thicker by `size`; then the
+ * same grown by the edge.
  */
 function jointGeometry(laneCount: number, size: number): THREE.BufferGeometry[] {
   const key = `${laneCount}:${size}`;
   let g = jointGeometries.get(key);
   if (!g) {
     const length = 2 * halfWidth(laneCount) * JOINT_REACH;
+    const height = JOINT_BAR.height * size;
+    const y = height / 2 + JOINT_EDGE + JOINT_LIFT;
     const parts = (grow: number) => [
-      new THREE.BoxGeometry(length + 2 * grow, JOINT_BAR.height * size + 2 * grow, JOINT_BAR.depth * size + 2 * grow).translate(0, 8, 0),
-      new THREE.CylinderGeometry(JOINT_DISC * size + grow, JOINT_DISC * size + grow, JOINT_BAR.height * size + 2 * grow, 24).translate(0, 8, 0),
+      new THREE.BoxGeometry(length + 2 * grow, height + 2 * grow, JOINT_BAR.depth * size + 2 * grow).translate(0, y, 0),
+      new THREE.CylinderGeometry(JOINT_DISC * size + grow, JOINT_DISC * size + grow, height + 2 * grow, 24).translate(0, y, 0),
     ];
     g = [...parts(0), ...parts(JOINT_EDGE)];
     jointGeometries.set(key, g);
@@ -115,7 +125,12 @@ function jointGeometry(laneCount: number, size: number): THREE.BufferGeometry[] 
 export function jointMark(laneCount: number, material: THREE.Material, selected: boolean): THREE.Group {
   const [bar, disc, barEdge, discEdge] = jointGeometry(laneCount, selected ? JOINT_SELECTED_SIZE : 1);
   const g = new THREE.Group();
-  g.add(new THREE.Mesh(bar, material), new THREE.Mesh(disc, material), new THREE.Mesh(barEdge, MARK_EDGE), new THREE.Mesh(discEdge, MARK_EDGE));
+  const mesh = (geometry: THREE.BufferGeometry, m: THREE.Material, order: number) => {
+    const x = new THREE.Mesh(geometry, m);
+    x.renderOrder = order;
+    return x;
+  };
+  g.add(mesh(bar, material, MARK_ORDER), mesh(disc, material, MARK_ORDER), mesh(barEdge, MARK_EDGE, EDGE_ORDER), mesh(discEdge, MARK_EDGE, EDGE_ORDER));
   return g;
 }
 
