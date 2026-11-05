@@ -86,6 +86,11 @@ export const MARKER_PICK_HEIGHT = 10;
 const JOINT_BAR = { height: 12, depth: 16 };
 /** Radius of the disc in the middle of the joint mark, mm (2D's dot over its line). */
 const JOINT_DISC = 22;
+/**
+ * How much of the selected size the disc takes on, so that it does not
+ * swell past the bar when selected (owner 2026-11-05, #146).
+ */
+const JOINT_DISC_GROWTH = 0.4;
 /** How far the dark edge stands out round a joint mark, mm (#146). */
 const JOINT_EDGE = 3;
 /** Gap between the road and the bottom of a joint mark's edge, mm, so that none of it sinks into the road (#146). */
@@ -110,10 +115,11 @@ function jointGeometry(laneCount: number, size: number): THREE.BufferGeometry[] 
   if (!g) {
     const length = 2 * halfWidth(laneCount) * JOINT_REACH;
     const height = JOINT_BAR.height * size;
+    const radius = JOINT_DISC * (1 + (size - 1) * JOINT_DISC_GROWTH);
     const y = height / 2 + JOINT_EDGE + JOINT_LIFT;
     const parts = (grow: number) => [
       new THREE.BoxGeometry(length + 2 * grow, height + 2 * grow, JOINT_BAR.depth * size + 2 * grow).translate(0, y, 0),
-      new THREE.CylinderGeometry(JOINT_DISC * size + grow, JOINT_DISC * size + grow, height + 2 * grow, 24).translate(0, y, 0),
+      new THREE.CylinderGeometry(radius + grow, radius + grow, height + 2 * grow, 24).translate(0, y, 0),
     ];
     g = [...parts(0), ...parts(JOINT_EDGE)];
     jointGeometries.set(key, g);
