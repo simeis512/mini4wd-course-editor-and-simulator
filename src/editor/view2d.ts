@@ -9,6 +9,7 @@ import { propAt } from '../course/props';
 import { hosePointAt, stopperBounds } from '../course/stoppers';
 import { HANDLE_RADIUS } from './props2d';
 import { JOINT_HIT, PORT_HIT, type DragHandlers, type PickHandlers, type Selection } from './selection';
+import { candidates, cyclePick, type MarkHit } from './mark-pick';
 import type { EditorView, RunMarks } from './view';
 import { perfSpan } from './perf';
 import { paint2d, portPoint } from './paint2d';
@@ -219,22 +220,22 @@ export class TopView implements EditorView {
   private pick(sx: number, sy: number): Selection {
     const layout = this.layout;
     if (!layout) return null;
-    let best: { ref: PortRef; d: number } | null = null;
+    // Open ports and joints under the pointer; tapping again goes to the next one (#146).
+    const hits: MarkHit[] = [];
     for (const ref of layout.open) {
       if (!this.shown(ref.piece)) continue;
       const [px, py] = this.portPoint(ref);
       const d = Math.hypot(px - sx, py - sy);
-      if (d < PORT_HIT && (!best || d < best.d)) best = { ref, d };
+      if (d < PORT_HIT) hits.push({ mark: { kind: 'port', ref }, d });
     }
-    if (best) return { kind: 'port', ref: best.ref };
-    let joint: { a: PortRef; b: PortRef; d: number } | null = null;
     for (const j of layout.joints) {
       if (!this.shown(j.a.piece) && !this.shown(j.b.piece)) continue;
       const [px, py] = this.portPoint(j.a);
       const d = Math.hypot(px - sx, py - sy);
-      if (d < JOINT_HIT && (!joint || d < joint.d)) joint = { a: j.a, b: j.b, d };
+      if (d < JOINT_HIT) hits.push({ mark: { kind: 'joint', a: j.a, b: j.b }, d });
     }
-    if (joint) return { kind: 'joint', a: joint.a, b: joint.b };
+    const mark = cyclePick(candidates(hits), this.selection);
+    if (mark) return mark;
     const prop = this.propAt(sx, sy);
     if (prop) return prop;
     const piece = this.pieceAt(sx, sy);

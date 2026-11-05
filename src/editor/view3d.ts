@@ -25,12 +25,16 @@ import {
   CLASH_MATERIALS,
   HANDLE_GEOMETRY,
   HANDLE,
-  JOINT_GEOMETRY,
+  jointMark,
+  stackSprite,
+  STACK_MARK_SIZE,
+  MARKER_PICK_HEIGHT,
   RUN_LEVEL,
   highlighted,
   unhighlighted,
 } from './marks3d';
-import { hitAt, markerNear, raycaster, type PickState } from './pick3d';
+import { hitAt, marksNear, raycaster, type PickState } from './pick3d';
+import { cyclePick, markStacks, stackLabel } from './mark-pick';
 
 const BACKGROUND = new THREE.Color(0x1b1d22);
 
@@ -83,7 +87,7 @@ export class OrbitView implements EditorView {
     private container: HTMLElement,
     private handlers: PickHandlers & DragHandlers,
   ) {
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true }); // stencil: joint marks (marks3d)
     renderer.setPixelRatio(window.devicePixelRatio);
     // Clear to transparent so the camera feed shows through in AR.
     renderer.setClearColor(0x000000, 0);
@@ -294,6 +298,7 @@ export class OrbitView implements EditorView {
         for (const line of outlineOf(pc, i, i === selection.index)) this.outlines.add(line);
       });
     }
+    for (const o of this.markers.children) if (o instanceof THREE.Sprite) o.material.dispose();
     this.markers.clear();
     const split = new Set(layout.split.map(portKey));
     const intended = new Set(layout.intended.map(portKey));
@@ -318,10 +323,19 @@ export class OrbitView implements EditorView {
     }
     for (const j of layout.joints) {
       const selected = selection?.kind === 'joint' && sameJoint(selection, j);
-      const m = new THREE.Mesh(JOINT_GEOMETRY, selected ? MARKER_SELECTED : MARKER_JOINT);
+      const lanes = layout.pieces[j.a.piece].part.ports[j.a.port].lanes.length;
+      const m = jointMark(lanes, selected ? MARKER_SELECTED : MARKER_JOINT, selected);
       m.applyMatrix4(layout.pieces[j.a.piece].ports[j.a.port]);
       m.userData.joint = { a: j.a, b: j.b };
       this.markers.add(m);
+    }
+    // Marks on top of each other: tapping again picks the next (#146).
+    for (const stack of markStacks(layout)) {
+      const sprite = stackSprite(stackLabel(stack, selection));
+      // The course is scaled to metres, which would shrink the mark too.
+      sprite.scale.set((2 * STACK_MARK_SIZE) / MM, STACK_MARK_SIZE / MM, 1);
+      sprite.position.copy(stack.at).setY(stack.at.y + MARKER_PICK_HEIGHT);
+      this.markers.add(sprite);
     }
   }
 
@@ -498,9 +512,7 @@ export class OrbitView implements EditorView {
   }
 
   private pick(e: PointerEvent): void {
-    const marker = markerNear(this.pickState, e.clientX, e.clientY);
-    if (marker?.userData.port) return this.handlers.onPick({ kind: 'port', ref: marker.userData.port });
-    if (marker?.userData.joint) return this.handlers.onPick({ kind: 'joint', ...marker.userData.joint });
-    this.handlers.onPick(this.hitAt(e)?.target ?? null);
+    const mark = cyclePick(marksNear(this.pickState, e.clientX, e.clientY), this.selection);
+    this.handlers.onPick(mark ?? this.hitAt(e)?.target ?? null);
   }
 }

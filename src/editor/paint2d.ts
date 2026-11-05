@@ -13,7 +13,15 @@ import { xz, type Outline } from './outline2d';
 import type { TopCamera } from './top-camera';
 import { drawPropSelection, drawStart, drawStoppers, drawTimer, type Painter } from './props2d';
 import type { Selection } from './selection';
-import { blink, drawClashMark, drawShortMark, type RunMarks } from './view';
+import { blink, drawClashMark, drawShortMark, drawStackMark, type RunMarks } from './view';
+import { markStacks, stackLabel } from './mark-pick';
+
+/** How far up and to the right of the marks their count stands, px (#146). */
+const STACK_MARK_OFFSET = 18;
+import { JOINT_OPACITY_2D, JOINT_REACH, JOINT_SELECTED_SIZE, MARK_OUTLINE, MARK_OUTLINE_PX } from './mark-style';
+
+/** The joints are drawn here first, then onto the view see-through all at once, so overlaps are not darker (#146). */
+let jointLayer: HTMLCanvasElement | null = null;
 
 /** The current top view, read only while painting (#93). */
 export interface PaintState {
@@ -187,11 +195,22 @@ export function paint2d(state: PaintState, target?: { ctx: CanvasRenderingContex
     }
   }
 
+  jointLayer ??= document.createElement('canvas');
+  jointLayer.width = ctx.canvas.width;
+  jointLayer.height = ctx.canvas.height;
+  const layer = jointLayer.getContext('2d')!;
+  layer.setTransform(dpr, 0, 0, dpr, 0, 0);
   for (const j of layout.joints) {
     if (!shown(j.a.piece) && !shown(j.b.piece)) continue;
     const selected = sel?.kind === 'joint' && sameJoint(sel, j);
-    drawJoint(j.a, selected ? '#3fd0ff' : '#39c26b', selected ? 1.6 : 1);
+    drawJoint(layer, j.a, selected ? '#3fd0ff' : '#39c26b', selected ? JOINT_SELECTED_SIZE : 1);
   }
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = JOINT_OPACITY_2D;
+  // A hidden view has no pixels, and drawing an empty canvas throws.
+  if (jointLayer.width && jointLayer.height) ctx.drawImage(jointLayer, 0, 0);
+  ctx.restore();
   const split = new Set(layout.split.map(portKey));
   const intended = new Set(layout.intended.map(portKey));
   for (const ref of layout.open) {
@@ -201,6 +220,11 @@ export function paint2d(state: PaintState, target?: { ctx: CanvasRenderingContex
     // Ports left open on purpose are grey (#13).
     const color = selected ? '#3fd0ff' : split.has(key) ? '#ff5a5a' : intended.has(key) ? '#8a9099' : '#ff9a2e';
     drawPort(ref, color, selected ? 1.3 : 1);
+  }
+  // Marks on top of each other: tapping again picks the next (#146).
+  for (const stack of markStacks(layout, shown)) {
+    const [sx, sy] = toScreen(stack.at.x, stack.at.z);
+    drawStackMark(ctx, sx + STACK_MARK_OFFSET, sy - STACK_MARK_OFFSET, stackLabel(stack, sel));
   }
   for (const c of clashes) {
     const [sx, sy] = toScreen(c.at.x, c.at.z);
@@ -212,32 +236,38 @@ export function paint2d(state: PaintState, target?: { ctx: CanvasRenderingContex
   }
 
   /**
-   * A bar across the track at a port, `reach` of its width long, in `color`
-   * for strokes and fills; returns the screen point at its middle.
+   * A bar across the track at a port, `reach` of its width long, `width` px
+   * thick, in `color` for strokes and fills; returns the screen point at its
+   * middle.
    */
-  function drawBar(ref: PortRef, reach: number, color: string, size: number): [number, number] {
+  function drawBar(to: CanvasRenderingContext2D, ref: PortRef, reach: number, color: string, width: number): [number, number] {
     const pc = layout!.pieces[ref.piece];
     const frame = pc.ports[ref.port];
     const half = halfWidth(pc.part.ports[ref.port].lanes.length) * reach;
     const p = new Vector3();
     const [ax, ay] = toScreen(...xz(pointOnFrame(frame, -half, 0, p)));
     const [bx, by] = toScreen(...xz(pointOnFrame(frame, half, 0, p)));
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = 3 * size;
-    ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.lineTo(bx, by);
-    ctx.stroke();
+    to.strokeStyle = color;
+    to.fillStyle = color;
+    to.lineWidth = width;
+    to.beginPath();
+    to.moveTo(ax, ay);
+    to.lineTo(bx, by);
+    to.stroke();
     return pointAtPort(ref);
   }
 
-  /** A short bar across the middle of a joint. */
-  function drawJoint(ref: PortRef, color: string, size: number): void {
-    const [cx, cy] = drawBar(ref, 0.6, color, size);
-    ctx.beginPath();
-    ctx.arc(cx, cy, 4 * size, 0, Math.PI * 2);
-    ctx.fill();
+  /** A short bar across the middle of a joint with a dot on it, edged dark (#146). */
+  function drawJoint(to: CanvasRenderingContext2D, ref: PortRef, color: string, size: number): void {
+    for (const [c, grow] of [
+      [MARK_OUTLINE, MARK_OUTLINE_PX],
+      [color, 0],
+    ] as const) {
+      const [cx, cy] = drawBar(to, ref, JOINT_REACH, c, 3 * size + 2 * grow);
+      to.beginPath();
+      to.arc(cx, cy, 4 * size + grow, 0, Math.PI * 2);
+      to.fill();
+    }
   }
 
   function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number): void {
@@ -267,7 +297,7 @@ export function paint2d(state: PaintState, target?: { ctx: CanvasRenderingContex
 
   /** A bar across the track at the port with an arrow pointing out of the piece. */
   function drawPort(ref: PortRef, color: string, size: number): void {
-    const [cx, cy] = drawBar(ref, 1, color, size);
+    const [cx, cy] = drawBar(ctx, ref, 1, color, 3 * size);
     const frame = layout!.pieces[ref.piece].ports[ref.port];
     const [fx, fy] = toScreen(...xz(new Vector3(0, 0, 1).applyMatrix4(frame)));
     const len = Math.hypot(fx - cx, fy - cy) || 1;

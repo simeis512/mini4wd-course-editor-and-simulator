@@ -1,9 +1,11 @@
 import * as THREE from 'three';
+import { halfWidth } from '../course/mesh';
+import { JOINT_OPACITY_3D, JOINT_REACH, JOINT_SELECTED_SIZE, MARK_OUTLINE } from './mark-style';
 import type { Clash } from '../course/clash';
 import type { PlacedPiece } from '../course/course';
 import { GLOBAL_SPEC } from '../course/catalog';
 import { pieceTracks, roadOutline } from '../course/mesh';
-import { drawClashMark } from './view';
+import { drawClashMark, drawStackMark } from './view';
 
 const OUTLINE_SOLID = new THREE.LineBasicMaterial({ color: 0x3fd0ff });
 const OUTLINE_DASHED = new THREE.LineDashedMaterial({ color: 0x3fd0ff, dashSize: 50, gapSize: 30 });
@@ -46,6 +48,30 @@ function clashMaterial(kind: Clash['kind']): () => THREE.SpriteMaterial {
     return new THREE.SpriteMaterial({ map, depthTest: false, sizeAttenuation: false });
   };
 }
+/** Height of a stack's count on screen, as a share of the view's height (#146). */
+export const STACK_MARK_SIZE = 0.035;
+const stackMaps = new Map<string, THREE.CanvasTexture>();
+
+/** A sprite showing a stack's count (#146), its lower left corner at the mark so it stands up and to the right. */
+export function stackSprite(text: string): THREE.Sprite {
+  let map = stackMaps.get(text);
+  if (!map) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 96;
+    canvas.height = 48;
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(2, 2);
+    drawStackMark(ctx, 24, 12, text);
+    map = new THREE.CanvasTexture(canvas);
+    map.colorSpace = THREE.SRGBColorSpace;
+    stackMaps.set(text, map);
+  }
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, depthTest: false, sizeAttenuation: false }));
+  sprite.center.set(0.1, 0);
+  sprite.renderOrder = 10;
+  return sprite;
+}
+
 export const CLASH_MATERIALS: Record<Clash['kind'], () => THREE.SpriteMaterial> = {
   interference: clashMaterial('interference'),
   clearance: clashMaterial('clearance'),
@@ -56,8 +82,101 @@ export const HANDLE_GEOMETRY = new THREE.SphereGeometry(18, 16, 12);
 export const HANDLE = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x333333 });
 /** Height of a marker's middle above its port, mm, where picking aims. */
 export const MARKER_PICK_HEIGHT = 10;
-/** A flat bar across the middle of a joint, standing just above the road. */
-export const JOINT_GEOMETRY = new THREE.BoxGeometry(90, 12, 24).translate(0, 8, 0);
+/** The joint mark's bar, mm: as thick as 2D's line looks from above; its length goes by the track's width. */
+const JOINT_BAR = { height: 12, depth: 16 };
+/** Radius of the disc in the middle of the joint mark, mm (2D's dot over its line). */
+const JOINT_DISC = 22;
+/**
+ * How much of the selected size the disc takes on, so that it does not
+ * swell past the bar when selected (owner 2026-11-05, #146).
+ */
+const JOINT_DISC_GROWTH = 0.4;
+/** How far the dark edge stands out round a joint mark, mm (#146). */
+const JOINT_EDGE = 3;
+/** Gap between the road and the bottom of a joint mark's edge, mm, so that none of it sinks into the road (#146). */
+const JOINT_LIFT = 1;
+// A joint mark is see-through, but each pixel of it is blended once, as
+// if it were one flat sheet: first its shape writes depth only (after the
+// course, so the road under it is still drawn); then its colour goes only
+// where that depth is, once per pixel by the stencil, so the bar inside
+// the disc does not show; then the dark edge goes round it, outside the
+// mark and again once per pixel (#146). The renderer needs a stencil.
+const ONCE = {
+  stencilWrite: true,
+  stencilRef: 1,
+  stencilFunc: THREE.NotEqualStencilFunc,
+  stencilZPass: THREE.ReplaceStencilOp,
+} as const;
+const MARK_DEPTH = new THREE.MeshBasicMaterial({ colorWrite: false });
+export const MARK_EDGE = new THREE.MeshBasicMaterial({
+  color: MARK_OUTLINE,
+  side: THREE.BackSide,
+  transparent: true,
+  opacity: JOINT_OPACITY_3D,
+  depthWrite: false,
+  ...ONCE,
+});
+const DEPTH_ORDER = 1;
+const MARK_ORDER = 2;
+const EDGE_ORDER = 3;
+const seeThrough = new WeakMap<THREE.Material, THREE.Material>();
+
+/** `material` as a joint mark's see-through colour. */
+function markColour(material: THREE.Material): THREE.Material {
+  let m = seeThrough.get(material);
+  if (!m) {
+    m = material.clone();
+    Object.assign(m, { transparent: true, opacity: JOINT_OPACITY_3D, depthWrite: false, ...ONCE });
+    seeThrough.set(material, m);
+  }
+  return m;
+}
+const jointGeometries = new Map<string, THREE.BufferGeometry[]>();
+
+/**
+ * The geometries of a joint mark across `laneCount` lanes, as in 2D (#146):
+ * a bar across JOINT_REACH of the track and a disc in its middle, standing
+ * on the road with its edge just clear of it, thicker by `size`; then the
+ * same grown by the edge.
+ */
+function jointGeometry(laneCount: number, size: number): THREE.BufferGeometry[] {
+  const key = `${laneCount}:${size}`;
+  let g = jointGeometries.get(key);
+  if (!g) {
+    const length = 2 * halfWidth(laneCount) * JOINT_REACH;
+    const height = JOINT_BAR.height * size;
+    const radius = JOINT_DISC * (1 + (size - 1) * JOINT_DISC_GROWTH);
+    const y = height / 2 + JOINT_EDGE + JOINT_LIFT;
+    const parts = (grow: number) => [
+      new THREE.BoxGeometry(length + 2 * grow, height + 2 * grow, JOINT_BAR.depth * size + 2 * grow).translate(0, y, 0),
+      new THREE.CylinderGeometry(radius + grow, radius + grow, height + 2 * grow, 24).translate(0, y, 0),
+    ];
+    g = [...parts(0), ...parts(JOINT_EDGE)];
+    jointGeometries.set(key, g);
+  }
+  return g;
+}
+
+/** A joint's mark in `material`, see-through and edged dark; the first child is the one picking looks at. */
+export function jointMark(laneCount: number, material: THREE.Material, selected: boolean): THREE.Group {
+  const [bar, disc, barEdge, discEdge] = jointGeometry(laneCount, selected ? JOINT_SELECTED_SIZE : 1);
+  const g = new THREE.Group();
+  const mesh = (geometry: THREE.BufferGeometry, m: THREE.Material, order: number) => {
+    const x = new THREE.Mesh(geometry, m);
+    x.renderOrder = order;
+    return x;
+  };
+  const colour = markColour(material);
+  g.add(
+    mesh(bar, colour, MARK_ORDER),
+    mesh(disc, colour, MARK_ORDER),
+    mesh(bar, MARK_DEPTH, DEPTH_ORDER),
+    mesh(disc, MARK_DEPTH, DEPTH_ORDER),
+    mesh(barEdge, MARK_EDGE, EDGE_ORDER),
+    mesh(discEdge, MARK_EDGE, EDGE_ORDER),
+  );
+  return g;
+}
 
 /** Highlight level of the pieces a raise would move. */
 export const RUN_LEVEL = 3;

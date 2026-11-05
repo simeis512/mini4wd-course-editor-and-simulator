@@ -87,3 +87,25 @@ export function drawClashMark(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.textBaseline = 'middle';
   ctx.fillText('!', x, y + 1);
 }
+
+/**
+ * A small count by marks that lie on top of each other (#146): how many
+ * there are, or which of them is selected ("1/2"). Tapping there again
+ * goes to the next one. Both views draw it.
+ */
+export function drawStackMark(ctx: CanvasRenderingContext2D, x: number, y: number, text: string): void {
+  ctx.font = 'bold 12px system-ui, sans-serif';
+  const w = Math.max(20, ctx.measureText(text).width + 10);
+  const h = 18;
+  ctx.beginPath();
+  ctx.roundRect(x - w / 2, y - h / 2, w, h, h / 2);
+  ctx.fillStyle = '#f2f4f7';
+  ctx.fill();
+  ctx.strokeStyle = '#1b1d22';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = '#1b1d22';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y + 1);
+}
