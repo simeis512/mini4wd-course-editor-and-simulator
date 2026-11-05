@@ -7,6 +7,7 @@ import { moveStart, placeStart, placeTimer } from './timing';
 import { addPiece, deletePiece, flipPiece, markIntended, setLength, setShift, setVariant } from './edit';
 import { splitJoint } from './joining';
 import { basicOval } from './presets';
+import { setTape } from './tape';
 
 function sample(): Course {
   let c = basicOval();
@@ -26,6 +27,7 @@ function sample(): Course {
   c = addStopper(c, { ...(newStopper('hose', -500, 300) as Hose), color: 2 });
   c = addStopper(c, { kind: 'hose', points: [[0, 0], [-30, 700]], color: 0 });
   c = addStopper(c, { kind: 'box', size: 2, x: 1200, z: -40, yaw: -37.5, upright: true });
+  c = setTape(c, { floor: { kind: 'opp', width: 48, friction: 0.35 }, wall: { kind: 'cloth', width: 38, friction: 0.725, dividers: true } });
   return { ...c, name: 'テストコース', dir: -1 };
 }
 
@@ -38,8 +40,26 @@ describe('codec', () => {
   it('round-trips through the URL hash', async () => {
     const c = sample();
     const hash = await courseToHash(c);
-    expect(hash).toMatch(/^#c=7\.[A-Za-z0-9_-]+$/);
+    expect(hash).toMatch(/^#c=9\.[A-Za-z0-9_-]+$/);
     expect(await courseFromHash(hash)).toEqual(c);
+  });
+
+  it('keeps floor tape alone, and reads format 7 links as having no tape (#133)', async () => {
+    const c = setTape(basicOval(), { floor: { kind: 'curing', width: 50, friction: 0.5 } });
+    expect(courseFromBytes(courseToBytes(c))).toEqual(c);
+    const payload = (await encodeCourse(basicOval())).split('.')[1];
+    expect((await decodeCourse(`7.${payload}`)).tape).toBeUndefined();
+  });
+
+  it('keeps wall tape off the rollers from format 9 on, and reads format 8 wall tape as it was (#133)', async () => {
+    const wall = { kind: 'cloth', width: 50, friction: 0.6, dividers: true } as const;
+    const short = setTape(basicOval(), { wall: { ...wall, shortInside: true } });
+    expect(courseFromBytes(courseToBytes(short))).toEqual(short);
+    const plain = setTape(basicOval(), { wall });
+    const payload = (await encodeCourse(plain)).split('.')[1];
+    expect((await decodeCourse(`8.${payload}`)).tape).toEqual({ wall });
+    // Format 8 had no such flag.
+    await expect(decodeCourse(`8.${(await encodeCourse(short)).split('.')[1]}`)).rejects.toThrow();
   });
 
   it('still reads format 1 to 5 links', async () => {

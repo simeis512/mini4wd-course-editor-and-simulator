@@ -6,6 +6,7 @@ import type { LapCheck } from '../course/laps';
 import { floorExtent } from '../course/share-image';
 import { $ } from './dom';
 import { shoppingHtml } from './shopping';
+import { tapeHtml } from './tape';
 
 // The course box: what the course is made of and what the checks found (spec 7).
 
@@ -171,7 +172,8 @@ export function renderCourseInfo(course: Course, layout: Layout, checks: CourseC
   }
   info.push(...propLines(layout));
   if (checks.laps) info.push(...lapLines(layout, checks.laps));
-  info.push(...shoppingHtml(course));
+  info.push(...tapeHtml(course));
+  info.push(...shoppingHtml(course, layout));
   $('info').innerHTML = info.join('');
 
   // The folded course box still shows the gist (#45).
