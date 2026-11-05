@@ -12,3 +12,9 @@ export const JOINT_SELECTED_SIZE = 1.6;
 export const MARK_OUTLINE = '#0b1a12';
 /** Width of that edge on screen, px, each side. */
 export const MARK_OUTLINE_PX = 1.5;
+/**
+ * How opaque the joint marks are, so the road shows through a little
+ * (owner 2026-11-05, #146): less so in 3D, where they stand on the road.
+ */
+export const JOINT_OPACITY_2D = 0.9;
+export const JOINT_OPACITY_3D = 0.7;

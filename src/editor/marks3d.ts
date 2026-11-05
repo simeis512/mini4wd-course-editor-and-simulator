@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { halfWidth } from '../course/mesh';
-import { JOINT_REACH, JOINT_SELECTED_SIZE, MARK_OUTLINE } from './mark-style';
+import { JOINT_OPACITY_3D, JOINT_REACH, JOINT_SELECTED_SIZE, MARK_OUTLINE } from './mark-style';
 import type { Clash } from '../course/clash';
 import type { PlacedPiece } from '../course/course';
 import { GLOBAL_SPEC } from '../course/catalog';
@@ -95,12 +95,42 @@ const JOINT_DISC_GROWTH = 0.4;
 const JOINT_EDGE = 3;
 /** Gap between the road and the bottom of a joint mark's edge, mm, so that none of it sinks into the road (#146). */
 const JOINT_LIFT = 1;
-// The edge writes no depth and is drawn after the course but before the
-// mark, so the mark always covers it where they overlap: only the rim
-// round the mark shows, never the edge of the bar across the disc (#146).
-export const MARK_EDGE = new THREE.MeshBasicMaterial({ color: MARK_OUTLINE, side: THREE.BackSide, depthWrite: false });
-const EDGE_ORDER = 1;
+// A joint mark is see-through, but each pixel of it is blended once, as
+// if it were one flat sheet: first its shape writes depth only (after the
+// course, so the road under it is still drawn); then its colour goes only
+// where that depth is, once per pixel by the stencil, so the bar inside
+// the disc does not show; then the dark edge goes round it, outside the
+// mark and again once per pixel (#146). The renderer needs a stencil.
+const ONCE = {
+  stencilWrite: true,
+  stencilRef: 1,
+  stencilFunc: THREE.NotEqualStencilFunc,
+  stencilZPass: THREE.ReplaceStencilOp,
+} as const;
+const MARK_DEPTH = new THREE.MeshBasicMaterial({ colorWrite: false });
+export const MARK_EDGE = new THREE.MeshBasicMaterial({
+  color: MARK_OUTLINE,
+  side: THREE.BackSide,
+  transparent: true,
+  opacity: JOINT_OPACITY_3D,
+  depthWrite: false,
+  ...ONCE,
+});
+const DEPTH_ORDER = 1;
 const MARK_ORDER = 2;
+const EDGE_ORDER = 3;
+const seeThrough = new WeakMap<THREE.Material, THREE.Material>();
+
+/** `material` as a joint mark's see-through colour. */
+function markColour(material: THREE.Material): THREE.Material {
+  let m = seeThrough.get(material);
+  if (!m) {
+    m = material.clone();
+    Object.assign(m, { transparent: true, opacity: JOINT_OPACITY_3D, depthWrite: false, ...ONCE });
+    seeThrough.set(material, m);
+  }
+  return m;
+}
 const jointGeometries = new Map<string, THREE.BufferGeometry[]>();
 
 /**
@@ -127,7 +157,7 @@ function jointGeometry(laneCount: number, size: number): THREE.BufferGeometry[] 
   return g;
 }
 
-/** A joint's mark in `material`, edged dark; the first child is the one picking looks at. */
+/** A joint's mark in `material`, see-through and edged dark; the first child is the one picking looks at. */
 export function jointMark(laneCount: number, material: THREE.Material, selected: boolean): THREE.Group {
   const [bar, disc, barEdge, discEdge] = jointGeometry(laneCount, selected ? JOINT_SELECTED_SIZE : 1);
   const g = new THREE.Group();
@@ -136,7 +166,15 @@ export function jointMark(laneCount: number, material: THREE.Material, selected:
     x.renderOrder = order;
     return x;
   };
-  g.add(mesh(bar, material, MARK_ORDER), mesh(disc, material, MARK_ORDER), mesh(barEdge, MARK_EDGE, EDGE_ORDER), mesh(discEdge, MARK_EDGE, EDGE_ORDER));
+  const colour = markColour(material);
+  g.add(
+    mesh(bar, colour, MARK_ORDER),
+    mesh(disc, colour, MARK_ORDER),
+    mesh(bar, MARK_DEPTH, DEPTH_ORDER),
+    mesh(disc, MARK_DEPTH, DEPTH_ORDER),
+    mesh(barEdge, MARK_EDGE, EDGE_ORDER),
+    mesh(discEdge, MARK_EDGE, EDGE_ORDER),
+  );
   return g;
 }
 

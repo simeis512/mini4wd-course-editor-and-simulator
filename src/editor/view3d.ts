@@ -87,7 +87,7 @@ export class OrbitView implements EditorView {
     private container: HTMLElement,
     private handlers: PickHandlers & DragHandlers,
   ) {
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true }); // stencil: joint marks (marks3d)
     renderer.setPixelRatio(window.devicePixelRatio);
     // Clear to transparent so the camera feed shows through in AR.
     renderer.setClearColor(0x000000, 0);
