@@ -5,7 +5,7 @@ import type { Clash } from '../course/clash';
 import type { PlacedPiece } from '../course/course';
 import { GLOBAL_SPEC } from '../course/catalog';
 import { pieceTracks, roadOutline } from '../course/mesh';
-import { drawClashMark } from './view';
+import { drawClashMark, drawStackMark } from './view';
 
 const OUTLINE_SOLID = new THREE.LineBasicMaterial({ color: 0x3fd0ff });
 const OUTLINE_DASHED = new THREE.LineDashedMaterial({ color: 0x3fd0ff, dashSize: 50, gapSize: 30 });
@@ -48,6 +48,30 @@ function clashMaterial(kind: Clash['kind']): () => THREE.SpriteMaterial {
     return new THREE.SpriteMaterial({ map, depthTest: false, sizeAttenuation: false });
   };
 }
+/** Height of a stack's count on screen, as a share of the view's height (#146). */
+export const STACK_MARK_SIZE = 0.035;
+const stackMaps = new Map<string, THREE.CanvasTexture>();
+
+/** A sprite showing a stack's count (#146), its lower left corner at the mark so it stands up and to the right. */
+export function stackSprite(text: string): THREE.Sprite {
+  let map = stackMaps.get(text);
+  if (!map) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 96;
+    canvas.height = 48;
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(2, 2);
+    drawStackMark(ctx, 24, 12, text);
+    map = new THREE.CanvasTexture(canvas);
+    map.colorSpace = THREE.SRGBColorSpace;
+    stackMaps.set(text, map);
+  }
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, depthTest: false, sizeAttenuation: false }));
+  sprite.center.set(0.1, 0);
+  sprite.renderOrder = 10;
+  return sprite;
+}
+
 export const CLASH_MATERIALS: Record<Clash['kind'], () => THREE.SpriteMaterial> = {
   interference: clashMaterial('interference'),
   clearance: clashMaterial('clearance'),

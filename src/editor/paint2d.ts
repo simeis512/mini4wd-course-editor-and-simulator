@@ -13,7 +13,11 @@ import { xz, type Outline } from './outline2d';
 import type { TopCamera } from './top-camera';
 import { drawPropSelection, drawStart, drawStoppers, drawTimer, type Painter } from './props2d';
 import type { Selection } from './selection';
-import { blink, drawClashMark, drawShortMark, type RunMarks } from './view';
+import { blink, drawClashMark, drawShortMark, drawStackMark, type RunMarks } from './view';
+import { markStacks, stackLabel } from './mark-pick';
+
+/** How far up and to the right of the marks their count stands, px (#146). */
+const STACK_MARK_OFFSET = 18;
 import { JOINT_REACH, JOINT_SELECTED_SIZE, MARK_OUTLINE, MARK_OUTLINE_PX } from './mark-style';
 
 /** The current top view, read only while painting (#93). */
@@ -202,6 +206,11 @@ export function paint2d(state: PaintState, target?: { ctx: CanvasRenderingContex
     // Ports left open on purpose are grey (#13).
     const color = selected ? '#3fd0ff' : split.has(key) ? '#ff5a5a' : intended.has(key) ? '#8a9099' : '#ff9a2e';
     drawPort(ref, color, selected ? 1.3 : 1);
+  }
+  // Marks on top of each other: tapping again picks the next (#146).
+  for (const stack of markStacks(layout, shown)) {
+    const [sx, sy] = toScreen(stack.at.x, stack.at.z);
+    drawStackMark(ctx, sx + STACK_MARK_OFFSET, sy - STACK_MARK_OFFSET, stackLabel(stack, sel));
   }
   for (const c of clashes) {
     const [sx, sy] = toScreen(c.at.x, c.at.z);
