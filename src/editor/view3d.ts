@@ -24,7 +24,7 @@ import {
   CLASH_MATERIALS,
   HANDLE_GEOMETRY,
   HANDLE,
-  JOINT_GEOMETRY,
+  jointMark,
   RUN_LEVEL,
   highlighted,
   unhighlighted,
@@ -315,7 +315,8 @@ export class OrbitView implements EditorView {
     }
     for (const j of layout.joints) {
       const selected = selection?.kind === 'joint' && sameJoint(selection, j);
-      const m = new THREE.Mesh(JOINT_GEOMETRY, selected ? MARKER_SELECTED : MARKER_JOINT);
+      const lanes = layout.pieces[j.a.piece].part.ports[j.a.port].lanes.length;
+      const m = jointMark(lanes, selected ? MARKER_SELECTED : MARKER_JOINT, selected);
       m.applyMatrix4(layout.pieces[j.a.piece].ports[j.a.port]);
       m.userData.joint = { a: j.a, b: j.b };
       this.markers.add(m);

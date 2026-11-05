@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { halfWidth } from '../course/mesh';
+import { JOINT_REACH, JOINT_SELECTED_SIZE, MARK_OUTLINE } from './mark-style';
 import type { Clash } from '../course/clash';
 import type { PlacedPiece } from '../course/course';
 import { GLOBAL_SPEC } from '../course/catalog';
@@ -56,8 +58,42 @@ export const HANDLE_GEOMETRY = new THREE.SphereGeometry(18, 16, 12);
 export const HANDLE = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x333333 });
 /** Height of a marker's middle above its port, mm, where picking aims. */
 export const MARKER_PICK_HEIGHT = 10;
-/** A flat bar across the middle of a joint, standing just above the road. */
-export const JOINT_GEOMETRY = new THREE.BoxGeometry(90, 12, 24).translate(0, 8, 0);
+/** The joint mark's bar, mm: as thick as 2D's line looks from above; its length goes by the track's width. */
+const JOINT_BAR = { height: 12, depth: 16 };
+/** Radius of the disc in the middle of the joint mark, mm (2D's dot over its line). */
+const JOINT_DISC = 22;
+/** How far the dark edge stands out round a joint mark, mm (#146). */
+const JOINT_EDGE = 3;
+export const MARK_EDGE = new THREE.MeshBasicMaterial({ color: MARK_OUTLINE, side: THREE.BackSide });
+const jointGeometries = new Map<string, THREE.BufferGeometry[]>();
+
+/**
+ * The geometries of a joint mark across `laneCount` lanes, as in 2D (#146):
+ * a bar across JOINT_REACH of the track and a disc in its middle, standing
+ * just above the road, thicker by `size`; then the same grown by the edge.
+ */
+function jointGeometry(laneCount: number, size: number): THREE.BufferGeometry[] {
+  const key = `${laneCount}:${size}`;
+  let g = jointGeometries.get(key);
+  if (!g) {
+    const length = 2 * halfWidth(laneCount) * JOINT_REACH;
+    const parts = (grow: number) => [
+      new THREE.BoxGeometry(length + 2 * grow, JOINT_BAR.height * size + 2 * grow, JOINT_BAR.depth * size + 2 * grow).translate(0, 8, 0),
+      new THREE.CylinderGeometry(JOINT_DISC * size + grow, JOINT_DISC * size + grow, JOINT_BAR.height * size + 2 * grow, 24).translate(0, 8, 0),
+    ];
+    g = [...parts(0), ...parts(JOINT_EDGE)];
+    jointGeometries.set(key, g);
+  }
+  return g;
+}
+
+/** A joint's mark in `material`, edged dark; the first child is the one picking looks at. */
+export function jointMark(laneCount: number, material: THREE.Material, selected: boolean): THREE.Group {
+  const [bar, disc, barEdge, discEdge] = jointGeometry(laneCount, selected ? JOINT_SELECTED_SIZE : 1);
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(bar, material), new THREE.Mesh(disc, material), new THREE.Mesh(barEdge, MARK_EDGE), new THREE.Mesh(discEdge, MARK_EDGE));
+  return g;
+}
 
 /** Highlight level of the pieces a raise would move. */
 export const RUN_LEVEL = 3;
