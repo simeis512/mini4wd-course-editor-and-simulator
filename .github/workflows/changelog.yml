@@ -1,14 +1,20 @@
 # On merge to main, write the PRs' changes/<PR>.md into CHANGELOG.md, bump
-# the version in package.json and delete the fragments (#137).
+# the version in package.json and delete the fragments (#137). main takes
+# changes only through pull requests, so this opens a release PR and merges
+# it itself; the repository must allow GitHub Actions to create pull
+# requests (Settings → Actions → General).
 name: Changelog
 
 on:
   push:
     branches: [main]
     paths: ['changes/*.md']
+  # To compile fragments left over, e.g. after a failed run.
+  workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: write
 
 # One at a time, none dropped, so two merges close together both get in.
 concurrency:
@@ -28,11 +34,19 @@ jobs:
       - name: Compile the changelog
         id: compile
         run: echo "version=$(node scripts/changes.mjs compile)" >> "$GITHUB_OUTPUT"
-      - name: Commit and push
+      - name: Open and merge the release pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.compile.outputs.version }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A CHANGELOG.md package.json package-lock.json changes
           git diff --cached --quiet && exit 0
-          git commit -m "chore(release): ${{ steps.compile.outputs.version }}"
-          git push origin HEAD:main
+          branch="chore/137-release-${VERSION}"
+          git switch -c "$branch"
+          git commit -m "chore(release): ${VERSION}"
+          git push --force origin "$branch"
+          gh pr create --base main --head "$branch" --title "chore(release): ${VERSION}" \
+            --body "更新履歴の断片を CHANGELOG.md にまとめ、版を ${VERSION} にします（#137 の自動処理）。"
+          gh pr merge "$branch" --merge --delete-branch
