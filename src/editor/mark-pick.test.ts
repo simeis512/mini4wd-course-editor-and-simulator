@@ -43,7 +43,19 @@ describe('picking marks on top of each other (#146)', () => {
     expect(stackLabel(s, s.marks[1])).toBe('2/2');
     // Hidden by the level filter, the loop's pieces leave no stack.
     expect(markStacks(layout, (piece) => piece === 0)).toHaveLength(0);
+    // In 3D the open end stands above the joint, so they are not on top of each other (#158).
+    expect(markStacks(layout, undefined, true)).toHaveLength(0);
     // Nothing on top of anything on a plain chain.
     expect(markStacks(layoutCourse(chain(['straight', 'straight', 'straight'])))).toHaveLength(0);
+  });
+
+  it('in 3D still counts marks that meet in space (#158)', () => {
+    // A second straight on the same spot: its open ports meet the first's at the same height.
+    const course = chain(['straight']);
+    course.pieces.push({ ...course.pieces[0] });
+    const layout = layoutCourse(course);
+    const solid = markStacks(layout, undefined, true);
+    expect(solid.length).toBeGreaterThan(0);
+    expect(solid).toHaveLength(markStacks(layout).length);
   });
 });

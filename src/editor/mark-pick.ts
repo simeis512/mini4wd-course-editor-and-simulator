@@ -59,11 +59,12 @@ function markAt(layout: Layout, ref: PortRef): Vector3 {
 }
 
 /**
- * The places where marks lie on top of each other on the floor plan,
- * whatever their heights; `shown` leaves out pieces hidden by the level
- * filter. The highest mark of a stack is where its count goes.
+ * The places where marks lie on top of each other: on the floor plan,
+ * whatever their heights, or with `solid` in space, as the 3D view shows
+ * them (#158); `shown` leaves out pieces hidden by the level filter. The
+ * highest mark of a stack is where its count goes.
  */
-export function markStacks(layout: Layout, shown: (piece: number) => boolean = () => true): Stack[] {
+export function markStacks(layout: Layout, shown: (piece: number) => boolean = () => true, solid = false): Stack[] {
   const all: { mark: Mark; at: Vector3 }[] = [
     ...layout.open.filter((r) => shown(r.piece)).map((ref) => ({ mark: { kind: 'port', ref } as Mark, at: markAt(layout, ref) })),
     ...layout.joints
@@ -80,7 +81,8 @@ export function markStacks(layout: Layout, shown: (piece: number) => boolean = (
       all.forEach((o, j) => {
         if (taken.has(j) || group.includes(j)) return;
         const p = all[group[k]].at;
-        if (Math.hypot(o.at.x - p.x, o.at.z - p.z) <= STACK_MM) group.push(j);
+        const dy = solid ? o.at.y - p.y : 0;
+        if (Math.hypot(o.at.x - p.x, dy, o.at.z - p.z) <= STACK_MM) group.push(j);
       });
     }
     for (const j of group) taken.add(j);
