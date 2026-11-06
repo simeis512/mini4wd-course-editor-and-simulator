@@ -330,7 +330,8 @@ export class OrbitView implements EditorView {
       this.markers.add(m);
     }
     // Marks on top of each other: tapping again picks the next (#146).
-    for (const stack of markStacks(layout)) {
+    // Here they must meet in space: one above another stands apart (#158).
+    for (const stack of markStacks(layout, undefined, true)) {
       const sprite = stackSprite(stackLabel(stack, selection));
       // The course is scaled to metres, which would shrink the mark too.
       sprite.scale.set((2 * STACK_MARK_SIZE) / MM, STACK_MARK_SIZE / MM, 1);
