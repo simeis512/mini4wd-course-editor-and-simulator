@@ -26,6 +26,12 @@
       /* Buttons with an icon (#106): icon and words side by side; on narrow screens the icon only. */
       [data-icon] { display: inline-flex; align-items: center; gap: 6px; }
       [data-icon] > svg { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+      #screens { display: flex; }
+      #screens[hidden], .screens-sep[hidden] { display: none; }
+      #screens button { border-radius: 0; }
+      #screens button:first-child { border-radius: 6px 0 0 6px; }
+      #screens button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
+      #screens button[aria-selected='true'] { background: #1f5f75; border-color: var(--accent); }
       .menu-wrap { position: relative; }
       .menu-button::after { content: ''; border: 4px solid transparent; border-top-color: currentColor; border-bottom: 0; margin-left: -2px; opacity: 0.7; }
       .menu-button[aria-expanded='true'] { background: #3a3f4a; }
@@ -229,15 +235,18 @@
         #toolbar h1 { display: none; }
         #toolbar { gap: 4px; padding: 6px 8px; }
         #toolbar .sep, .menu-button::after { display: none; }
-        #toolbar > [data-icon], .menu-button { width: 32px; padding: 0; justify-content: center; }
+        #toolbar > [data-icon], .menu-button, #screens button { width: 32px; padding: 0; justify-content: center; }
         #mode-2d, #mode-3d { padding: 0 6px; }
+        /* No room for both tabs: only the way to the other screen shows, as one button. */
+        #screens button[aria-selected='true'] { display: none; }
+        #screens button { border-radius: 6px !important; border-left: 1px solid var(--line) !important; }
         /* Hidden from sight only, so the words still name the button. */
-        #toolbar > [data-icon] .label, .menu-button .label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+        #toolbar > [data-icon] .label, .menu-button .label, #screens .label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
       }
-      /* Small phones: one row down to 360px wide. */
-      @media (max-width: 380px) {
-        #toolbar { gap: 3px; padding: 6px 4px; }
-        #toolbar > [data-icon], .menu-button, #about { width: 30px; }
+      /* Phones: one row down to 360px wide. */
+      @media (max-width: 400px) {
+        #toolbar { gap: 2px; padding: 6px 4px; }
+        #toolbar > [data-icon], .menu-button, #about, #screens button { width: 30px; }
         #mode-2d, #mode-3d { padding: 0 5px; }
       }
     </style>
@@ -245,6 +254,12 @@
   <body>
     <header id="toolbar">
       <h1>ミニ四駆コースエディタ</h1>
+      <!-- Switching between the course and machine screens (#31): shown once the machine screen exists. -->
+      <div id="screens" role="tablist" aria-label="画面" hidden>
+        <button id="screen-course" role="tab" aria-selected="true" data-icon="track" title="コースを作る"><span class="label">コース</span></button>
+        <button id="screen-machine" role="tab" aria-selected="false" data-icon="car" title="マシンのセッティング"><span class="label">マシン</span></button>
+      </div>
+      <span class="sep screens-sep" hidden></span>
       <button id="mode-2d" aria-pressed="true">2D</button>
       <button id="mode-3d" aria-pressed="false">3D</button>
       <button id="run" data-icon="run" aria-pressed="false" title="3D ビューでマシンを走らせる（走行モード）"><span class="label">走らせる</span></button>

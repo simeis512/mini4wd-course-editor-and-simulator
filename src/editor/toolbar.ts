@@ -5,6 +5,8 @@ import { $ } from './dom';
 /** Line drawings on a 24 × 24 grid, stroked in the text colour. */
 const ICONS: Record<string, string> = {
   run: 'M7 4.5v15l12-7.5z',
+  track: 'M8 4h8a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4zm1 4h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z',
+  car: 'M5 15V11l2-4h10l2 4v4zM3 15h18M7.5 18a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3M16.5 18a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3',
   undo: 'M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3',
   redo: 'm15 14 5-5-5-5m5 5H9a5 5 0 0 0 0 10h3',
   save: 'M5 3h11l4 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM8 3v5h7V3M7 21v-7h10v7',
