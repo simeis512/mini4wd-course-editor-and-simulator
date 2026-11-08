@@ -22,6 +22,22 @@
       #toolbar { grid-area: bar; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
       #toolbar h1 { font-size: 15px; margin: 0 8px 0 0; white-space: nowrap; }
       #toolbar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+      #toolbar { position: relative; z-index: 10; }
+      /* Buttons with an icon (#106): icon and words side by side; on narrow screens the icon only. */
+      [data-icon] { display: inline-flex; align-items: center; gap: 6px; }
+      [data-icon] > svg { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+      .menu-wrap { position: relative; }
+      .menu-button::after { content: ''; border: 4px solid transparent; border-top-color: currentColor; border-bottom: 0; margin-left: -2px; opacity: 0.7; }
+      .menu-button[aria-expanded='true'] { background: #3a3f4a; }
+      .menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; min-width: 200px; display: flex; flex-direction: column; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px #0008; }
+      .menu[hidden] { display: none; }
+      .menu.align-right { left: auto; right: 0; }
+      .menu button { justify-content: flex-start; border: 0; background: none; white-space: nowrap; text-align: left; }
+      .menu button:hover:not(:disabled), .menu button:focus-visible { background: #3a3f4a; }
+      .menu button[aria-pressed='true'] { background: #1f5f75; }
+      .menu kbd { margin-left: auto; padding-left: 16px; font: 12px system-ui, sans-serif; color: var(--muted); }
+      @media (pointer: coarse) { .menu kbd { display: none; } }
+      .menu hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
       button, select { font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; min-height: 34px; cursor: pointer; }
       button:hover:not(:disabled) { background: #3a3f4a; }
       button:disabled { opacity: 0.4; cursor: default; }
@@ -211,6 +227,18 @@
         #course-info, #fit { bottom: 34px; }
         body.panel-folded #panel-fold .arrow { transform: rotate(-90deg); }
         #toolbar h1 { display: none; }
+        #toolbar { gap: 4px; padding: 6px 8px; }
+        #toolbar .sep, .menu-button::after { display: none; }
+        #toolbar > [data-icon], .menu-button { width: 32px; padding: 0; justify-content: center; }
+        #mode-2d, #mode-3d { padding: 0 6px; }
+        /* Hidden from sight only, so the words still name the button. */
+        #toolbar > [data-icon] .label, .menu-button .label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+      }
+      /* Small phones: one row down to 360px wide. */
+      @media (max-width: 380px) {
+        #toolbar { gap: 3px; padding: 6px 4px; }
+        #toolbar > [data-icon], .menu-button, #about { width: 30px; }
+        #mode-2d, #mode-3d { padding: 0 5px; }
       }
     </style>
   </head>
@@ -219,22 +247,35 @@
       <h1>ミニ四駆コースエディタ</h1>
       <button id="mode-2d" aria-pressed="true">2D</button>
       <button id="mode-3d" aria-pressed="false">3D</button>
-      <button id="run" aria-pressed="false" title="3D ビューでマシンを走らせる（走行モード）">走らせる</button>
+      <button id="run" data-icon="run" aria-pressed="false" title="3D ビューでマシンを走らせる（走行モード）"><span class="label">走らせる</span></button>
       <span class="sep"></span>
-      <button id="undo" title="元に戻す (Ctrl+Z)">元に戻す</button>
-      <button id="redo" title="やり直し (Ctrl+Y)">やり直し</button>
+      <button id="undo" data-icon="undo" title="元に戻す (Ctrl+Z)"><span class="label">元に戻す</span></button>
+      <button id="redo" data-icon="redo" title="やり直し (Ctrl+Y)"><span class="label">やり直し</span></button>
       <span class="sep"></span>
-      <button id="new">新規</button>
-      <button id="save" title="このブラウザに保存 (Ctrl+S)">保存</button>
-      <button id="saves" title="このブラウザに保存したコースの一覧">保存一覧</button>
-      <button id="copy-url">URLをコピー</button>
-      <button id="share" title="SNSで共有する画像（16:9／9:16）を作る" aria-pressed="false">画像で共有</button>
-      <button id="qr" title="コースのQRコードを表示・保存／QRコードからコースを開く">QRコード</button>
-      <button id="model" title="コースを3Dモデルとして保存（VRChat などの GLB／3D プリント用の STL・3MF）">3Dモデル</button>
-      <button id="export">書き出し</button>
-      <button id="import">読み込み</button>
+      <button id="save" data-icon="save" title="このブラウザに保存 (Ctrl+S)"><span class="label">保存</span></button>
+      <!-- Menus (#106): what is used now and then, grouped by what it is for. -->
+      <div class="menu-wrap">
+        <button id="file-menu-button" class="menu-button" data-icon="folder" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu" title="ファイル（新規・保存一覧・読み込み・書き出し）"><span class="label">ファイル</span></button>
+        <div id="file-menu" class="menu" role="menu" aria-labelledby="file-menu-button" hidden>
+          <button id="new" role="menuitem" data-icon="new">新規</button>
+          <button role="menuitem" data-icon="save" data-click="save" title="このブラウザに保存">保存<kbd>Ctrl+S</kbd></button>
+          <button id="saves" role="menuitem" data-icon="list" title="このブラウザに保存したコースの一覧">保存一覧</button>
+          <hr />
+          <button id="import" role="menuitem" data-icon="import" title="書き出した JSON ファイルからコースを開く">ファイルを読み込み</button>
+          <button id="export" role="menuitem" data-icon="export" title="コースを JSON ファイルに書き出す">ファイルに書き出し</button>
+        </div>
+      </div>
+      <div class="menu-wrap">
+        <button id="share-menu-button" class="menu-button" data-icon="share" aria-haspopup="menu" aria-expanded="false" aria-controls="share-menu" title="共有（URL・画像・QRコード・3Dモデル）"><span class="label">共有</span></button>
+        <div id="share-menu" class="menu" role="menu" aria-labelledby="share-menu-button" hidden>
+          <button id="copy-url" role="menuitem" data-icon="link" title="コースを開ける URL をコピーする">URLをコピー</button>
+          <button id="share" role="menuitem" data-icon="image" title="SNSで共有する画像（16:9／9:16）を作る" aria-pressed="false">画像で共有</button>
+          <button id="qr" role="menuitem" data-icon="qr" title="コースのQRコードを表示・保存／QRコードからコースを開く">QRコード</button>
+          <button id="model" role="menuitem" data-icon="cube" title="コースを3Dモデルとして保存（VRChat などの GLB／3D プリント用の STL・3MF）">3Dモデル</button>
+        </div>
+      </div>
       <input id="import-file" type="file" accept=".json,application/json" hidden />
-      <button id="fullscreen" title="画面いっぱいに表示する（Esc で戻る）" aria-pressed="false" hidden>全画面</button>
+      <button id="fullscreen" data-icon="expand" title="画面いっぱいに表示する (Esc で戻る)" aria-pressed="false" hidden><span class="label">全画面</span></button>
       <button id="about" title="このアプリについて（権利表示・ライセンス・リンク）" aria-label="このアプリについて">i</button>
     </header>
     <main id="stage">

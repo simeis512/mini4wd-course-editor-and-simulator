@@ -8,6 +8,7 @@ import { bindLevelTools, type HeightView } from './levels';
 import { POSE_FIELDS } from './panels';
 import { bindAbout } from './notice';
 import { bindFullscreen } from './fullscreen';
+import { bindToolbar } from './toolbar';
 import { bindShopping } from './shopping';
 import { bindAmazon } from './amazon-link';
 import { bindTape } from './tape';
@@ -57,6 +58,7 @@ export function readRaiseFields() {
 
 export function bindAppUi(host: AppUiHost): ShareImage {
   bindAbout();
+  bindToolbar();
   bindFullscreen();
   bindSidePanel();
   bindLevelTools((view) => host.setHeightView(view));
