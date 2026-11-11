@@ -32,6 +32,9 @@
       #screens button:first-child { border-radius: 6px 0 0 6px; }
       #screens button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
       #screens button[aria-selected='true'] { background: #1f5f75; border-color: var(--accent); }
+      /* Icon only even on wide screens: the arrows say it all (owner 2026-11-11). The words stay for screen readers. */
+      .icon-only { width: 34px; padding: 0; justify-content: center; }
+      .icon-only .label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
       .menu-wrap { position: relative; }
       .menu-button::after { content: ''; border: 4px solid transparent; border-top-color: currentColor; border-bottom: 0; margin-left: -2px; opacity: 0.7; }
       .menu-button[aria-expanded='true'] { background: #3a3f4a; }
@@ -264,8 +267,8 @@
       <button id="mode-3d" aria-pressed="false">3D</button>
       <button id="run" data-icon="run" aria-pressed="false" title="3D ビューでマシンを走らせる（走行モード）"><span class="label">走らせる</span></button>
       <span class="sep"></span>
-      <button id="undo" data-icon="undo" title="元に戻す (Ctrl+Z)"><span class="label">元に戻す</span></button>
-      <button id="redo" data-icon="redo" title="やり直し (Ctrl+Y)"><span class="label">やり直し</span></button>
+      <button id="undo" class="icon-only" data-icon="undo" title="元に戻す (Ctrl+Z)"><span class="label">元に戻す</span></button>
+      <button id="redo" class="icon-only" data-icon="redo" title="やり直し (Ctrl+Y)"><span class="label">やり直し</span></button>
       <span class="sep"></span>
       <button id="save" data-icon="save" title="このブラウザに保存 (Ctrl+S)"><span class="label">保存</span></button>
       <!-- Menus (#106): what is used now and then, grouped by what it is for. -->
