@@ -237,7 +237,9 @@
         body.panel-folded #panel-fold .arrow { transform: rotate(-90deg); }
         #toolbar h1 { display: none; }
         #toolbar { gap: 4px; padding: 6px 8px; }
-        #toolbar .sep, .menu-button::after { display: none; }
+        .menu-button::after { display: none; }
+        /* Dividers stay on phones too, so a slip of the finger lands on a gap, not the next group (owner 2026-11-12). */
+        #toolbar .sep { margin: 0 3px; }
         #toolbar > [data-icon], .menu-button, #screens button { width: 32px; padding: 0; justify-content: center; }
         /* No room for both tabs: only the way to the other screen shows, as one button. */
         #screens button[aria-selected='true'] { display: none; }
@@ -248,6 +250,7 @@
       /* Phones: one row down to 360px wide. */
       @media (max-width: 400px) {
         #toolbar { gap: 2px; padding: 6px 4px; }
+        #toolbar .sep { margin: 0 1px; }
         #toolbar > [data-icon], .menu-button, #about, #screens button { width: 30px; }
       }
     </style>
