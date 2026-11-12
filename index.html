@@ -239,7 +239,6 @@
         #toolbar { gap: 4px; padding: 6px 8px; }
         #toolbar .sep, .menu-button::after { display: none; }
         #toolbar > [data-icon], .menu-button, #screens button { width: 32px; padding: 0; justify-content: center; }
-        #mode-2d, #mode-3d { padding: 0 6px; }
         /* No room for both tabs: only the way to the other screen shows, as one button. */
         #screens button[aria-selected='true'] { display: none; }
         #screens button { border-radius: 6px !important; border-left: 1px solid var(--line) !important; }
@@ -250,7 +249,6 @@
       @media (max-width: 400px) {
         #toolbar { gap: 2px; padding: 6px 4px; }
         #toolbar > [data-icon], .menu-button, #about, #screens button { width: 30px; }
-        #mode-2d, #mode-3d { padding: 0 5px; }
       }
     </style>
   </head>
@@ -263,8 +261,8 @@
         <button id="screen-machine" role="tab" aria-selected="false" data-icon="car" title="マシンのセッティング"><span class="label">マシン</span></button>
       </div>
       <span class="sep screens-sep" hidden></span>
-      <button id="mode-2d" aria-pressed="true">2D</button>
-      <button id="mode-3d" aria-pressed="false">3D</button>
+      <button id="mode-2d" data-icon="plan" aria-pressed="true" title="上から見た図 (2D)"><span class="label">2D</span></button>
+      <button id="mode-3d" data-icon="perspective" aria-pressed="false" title="立体で見る (3D)"><span class="label">3D</span></button>
       <button id="run" data-icon="run" aria-pressed="false" title="3D ビューでマシンを走らせる（走行モード）"><span class="label">走らせる</span></button>
       <span class="sep"></span>
       <button id="undo" class="icon-only" data-icon="undo" title="元に戻す (Ctrl+Z)"><span class="label">元に戻す</span></button>
