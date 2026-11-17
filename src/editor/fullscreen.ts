@@ -14,6 +14,6 @@ export function bindFullscreen(): void {
   document.addEventListener('fullscreenchange', () => {
     const on = !!document.fullscreenElement;
     button.setAttribute('aria-pressed', String(on));
-    button.textContent = on ? '全画面を終わる' : '全画面';
+    button.querySelector('.label')!.textContent = on ? '全画面を終わる' : '全画面';
   });
 }
