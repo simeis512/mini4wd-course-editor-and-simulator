@@ -7,6 +7,8 @@ export function bindFullscreen(): void {
   // iPhone Safari only lets videos fill the screen, so the button would do nothing there.
   if (!document.fullscreenEnabled) return;
   button.hidden = false;
+  // Its stand-in in the ファイル menu on the narrowest phones (#31).
+  for (const e of document.querySelectorAll<HTMLElement>('.fullscreen-item')) e.hidden = false;
   button.addEventListener('click', () => {
     if (document.fullscreenElement) void document.exitFullscreen();
     else void document.documentElement.requestFullscreen().catch(() => undefined);
@@ -15,5 +17,6 @@ export function bindFullscreen(): void {
     const on = !!document.fullscreenElement;
     button.setAttribute('aria-pressed', String(on));
     button.querySelector('.label')!.textContent = on ? '全画面を終わる' : '全画面';
+    $('fullscreen-item-label').textContent = on ? '全画面を終わる' : '全画面';
   });
 }
