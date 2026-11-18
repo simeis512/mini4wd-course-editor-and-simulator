@@ -22,13 +22,19 @@ import {
 // Positions are mm from the middle of the chassis, on the road: x to the
 // left, y up from the road, z forward (the parts' axes, spec "単位と座標").
 
-/** A pair of rollers, one each side, mirrored (owner 2026-11-18: entered as numbers for now). */
+/**
+ * A pair of rollers, one each side, mirrored (owner 2026-11-18: entered as
+ * numbers for now), or one on one side only, for rollers set unevenly
+ * (owner 2026-11-19).
+ */
 export interface RollerPair {
+  /** Only the left or the right one; both when not given. */
+  side?: 'left' | 'right';
   /** Forward of the chassis middle (negative: behind). */
   z: number;
   /** Middle of the rollers above the road. */
   y: number;
-  /** Across both rollers' outer edges. */
+  /** Across both rollers' outer edges; for one side only, twice its outer edge's distance from the middle. */
   width: number;
   /** Diameter, one of `ROLLER_SIZES`. */
   diameter: number;
@@ -81,6 +87,9 @@ export interface MachineSetup {
   battery: string;
   tyre: string;
   tyreKind: string;
+  /** The rear tyres, when they differ from the front ones (owner 2026-11-19). */
+  rearTyre?: string;
+  rearTyreKind?: string;
   rollers: RollerPair[];
   dampers: DamperSetup[];
   brakes: BrakeSetup[];
@@ -179,7 +188,7 @@ const GUIDE_ROLLER_MASS = 4 * rollerMass(ROLLER_KINDS[0], 13);
 export function massOf(setup: MachineSetup): MassBreakdown {
   const chassis = byId(CHASSIS, setup.chassis);
   const base = chassis.mass - byId(BATTERIES, GUIDE_BATTERY).mass + byId(BATTERIES, setup.battery).mass - GUIDE_ROLLER_MASS;
-  const rollers = setup.rollers.reduce((m, r) => m + 2 * rollerMass(byId(ROLLER_KINDS, r.kind), r.diameter), 0);
+  const rollers = setup.rollers.reduce((m, r) => m + (r.side ? 1 : 2) * rollerMass(byId(ROLLER_KINDS, r.kind), r.diameter), 0);
   const dampers = setup.dampers.reduce((m, d) => m + byId(DAMPER_WEIGHTS, d.weight).mass, 0);
   const weights = setup.weights.reduce((m, w) => m + w.mass, 0);
   const estimated = base + rollers + dampers + weights;
@@ -207,7 +216,7 @@ export function setupWarnings(setup: MachineSetup): string[] {
   if (front + back > REGULATION.length) out.push(`全長が ${Math.round(front + back)}mm で、規定の ${REGULATION.length}mm を超えています`);
   for (const b of setup.brakes) if (b.gap < REGULATION.clearance) out.push(`ブレーキの地上高が ${b.gap}mm で、規定の ${REGULATION.clearance}mm より低くなっています`);
   for (const r of setup.rollers) {
-    if (r.width < r.diameter * 2) out.push(`幅 ${r.width}mm のローラーは左右が重なります`);
+    if (!r.side && r.width < r.diameter * 2) out.push(`幅 ${r.width}mm のローラーは左右が重なります`);
     if (r.y < r.diameter / 2) out.push(`高さ ${r.y}mm の ${r.diameter}mm ローラーは路面にめり込みます`);
   }
   const mass = massOf(setup);
@@ -222,6 +231,8 @@ export function validateSetup(setup: MachineSetup): void {
   byId(BATTERIES, setup.battery);
   byId(TYRES, setup.tyre);
   byId(TYRE_KINDS, setup.tyreKind);
+  if (setup.rearTyre !== undefined) byId(TYRES, setup.rearTyre);
+  if (setup.rearTyreKind !== undefined) byId(TYRE_KINDS, setup.rearTyreKind);
   if (!GEARS.some((g) => g.ratio === setup.gearRatio)) throw new Error(`不明なギヤ比: ${setup.gearRatio}`);
   for (const r of setup.rollers) {
     byId(ROLLER_KINDS, r.kind);

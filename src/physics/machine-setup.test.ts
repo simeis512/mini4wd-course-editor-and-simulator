@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { layoutCourse } from '../course/course';
 import { basicOval, chain } from '../course/presets';
 import { standardSetup, type MachineSetup } from '../machine/setup';
-import { freeSpeed } from './machine-spec';
+import { freeSpeed, wheelTyres } from './machine-spec';
 import { specFromSetup } from './machine-setup';
 import { Run } from './run';
 
@@ -36,6 +36,26 @@ describe('specFromSetup (#32)', () => {
     expect(spec.rollers).toHaveLength(4);
     expect(spec.rollers[0].at[0]).toBeCloseTo(0.105 / 2 - 0.0065, 9);
     expect(spec.rollers[1].at[0]).toBeCloseTo(-(0.105 / 2 - 0.0065), 9);
+  });
+
+  it('puts a one-sided roller on its own side only (left is + x)', () => {
+    const s = standardSetup();
+    const spec = specFromSetup({ ...s, rollers: [{ side: 'left', z: 70, y: 12, width: 105, diameter: 13, kind: 'alu-bearing' }, { side: 'right', z: 60, y: 12, width: 100, diameter: 13, kind: 'alu-bearing' }] });
+    expect(spec.rollers.map((r) => Math.sign(r.at[0]))).toEqual([1, -1]);
+    expect(spec.rollers[1].at[0]).toBeCloseTo(-(0.05 - 0.0065), 9);
+  });
+
+  it('gives the rear wheels their own tyres when set', () => {
+    const spec = specFromSetup({ ...standardSetup(), rearTyre: 'large', rearTyreKind: 'low-friction' });
+    wheelTyres(spec).forEach((t, i) => expect(t.radius).toBeCloseTo([0.013, 0.013, 0.0155, 0.0155][i], 9));
+    expect(wheelTyres(spec)[3].grip).toBe(0.5);
+    expect(specFromSetup(standardSetup()).rearTyre).toBeUndefined();
+  });
+
+  it('draws mass damper weights in their own shapes', () => {
+    const spec = specFromSetup({ ...standardSetup(), dampers: [{ weight: 'slim-long', x: 0, y: 15, z: 0, stroke: 0 }, { weight: 'square-8', x: 0, y: 15, z: 0, stroke: 0 }] });
+    expect(spec.dampers![0].shape).toEqual({ kind: 'cylinder', radius: 0.0035, height: 0.0115 });
+    expect(spec.dampers![1].shape).toEqual({ kind: 'bar', size: [0.008, 0.008, 0.032] });
   });
 
   it('sits lower on smaller tyres', () => {
@@ -92,6 +112,12 @@ describe('a setup on the course (#32)', () => {
     run.advance(0.5);
     expect(run.damperLifts()[0]).toBeLessThan(0.1);
     run.free();
+  });
+
+  it('runs on with bigger tyres at the rear', async () => {
+    const s = await runFor({ ...standardSetup(), rearTyre: 'large' }, 1);
+    expect(s.out).toBeNull();
+    expect(s.distance).toBeGreaterThan(1500);
   });
 
   it('laps the basic oval in every lane as the standard setup', async () => {

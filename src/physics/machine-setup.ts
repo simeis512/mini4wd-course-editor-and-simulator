@@ -18,26 +18,31 @@ const BOX_HEIGHT = 0.02;
 const EFFICIENCY = 0.7;
 /** Lowest the chassis may sit with small tyres, m: it rides on the tyres, not the box. */
 const MIN_CLEARANCE = 0.0005;
-/** Mass damper weights are brass, about this dense, kg/m³: for their size when drawn (cosmetic). */
-const BRASS = 8500;
 
 const xyz = (x: number, y: number, z: number): [number, number, number] => [x * MM, y * MM, z * MM];
 
 export function specFromSetup(setup: MachineSetup): MachineSpec {
   const chassis = byId(CHASSIS, setup.chassis);
   const tyre = byId(TYRES, setup.tyre);
+  const rear = byId(TYRES, setup.rearTyre ?? setup.tyre);
+  const rearKind = byId(TYRE_KINDS, setup.rearTyreKind ?? setup.tyreKind);
   const battery = byId(BATTERIES, setup.battery);
   const mass = massOf(setup);
   const dampers = setup.dampers.map((d) => {
-    const kg = byId(DAMPER_WEIGHTS, d.weight).mass * G;
-    const side = Math.cbrt(kg / BRASS);
-    return { mass: kg, at: xyz(d.x, d.y, d.z), stroke: d.stroke * MM, size: [side, side, side] as [number, number, number] };
+    const w = byId(DAMPER_WEIGHTS, d.weight);
+    const s = w.shape;
+    const shape =
+      s.kind === 'cylinder'
+        ? { kind: 'cylinder' as const, radius: (s.diameter / 2) * MM, height: s.height * MM }
+        : { kind: 'bar' as const, size: xyz(s.width, s.height, s.length) };
+    return { mass: w.mass * G, at: xyz(d.x, d.y, d.z), stroke: d.stroke * MM, shape };
   });
   return {
     // What is left for the chassis box once the dampers and weights have their share.
     mass: Math.max(mass.total - mass.dampers - mass.weights, 1) * G,
     size: [chassis.width * BOX_WIDTH_SHARE * MM, BOX_HEIGHT, chassis.length * MM],
-    clearance: Math.max(MIN_CLEARANCE, (chassis.clearance + (tyre.diameter - chassis.tyre) / 2) * MM),
+    // With other tyres at each end, the chassis sits as on their average (it does not tip in this model).
+    clearance: Math.max(MIN_CLEARANCE, (chassis.clearance + ((tyre.diameter + rear.diameter) / 2 - chassis.tyre) / 2) * MM),
     tyreRadius: (tyre.diameter / 2) * MM,
     tyreWidth: tyre.width * MM,
     wheelbase: chassis.wheelbase * MM,
@@ -50,12 +55,13 @@ export function specFromSetup(setup: MachineSetup): MachineSpec {
       const kind = byId(ROLLER_KINDS, r.kind);
       const x = r.width / 2 - r.diameter / 2;
       const roller = { radius: (r.diameter / 2) * MM, height: kind.thickness * MM, friction: kind.friction, restitution: kind.restitution };
-      return [
-        { at: xyz(x, r.y, r.z), ...roller },
-        { at: xyz(-x, r.y, r.z), ...roller },
-      ];
+      const sides = r.side === 'left' ? [x] : r.side === 'right' ? [-x] : [x, -x];
+      return sides.map((sx) => ({ at: xyz(sx, r.y, r.z), ...roller }));
     }),
     grip: byId(TYRE_KINDS, setup.tyreKind).grip,
+    ...(setup.rearTyre !== undefined || setup.rearTyreKind !== undefined
+      ? { rearTyre: { radius: (rear.diameter / 2) * MM, width: rear.width * MM, grip: rearKind.grip } }
+      : {}),
     rollerFriction: ROLLER_KINDS[0].friction,
     rollerRestitution: ROLLER_KINDS[0].restitution,
     dampers,

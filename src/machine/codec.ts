@@ -1,6 +1,8 @@
 import { fromBase64Url, pipe, Reader, toBase64Url, Writer } from '../course/packing';
 import { BATTERIES, BRAKE_SPONGES, CHASSIS, DAMPER_WEIGHTS, GEARS, MOTORS, ROLLER_KINDS, ROLLER_SIZES, TYRE_KINDS, TYRES } from './parts';
-import { validateSetup, type MachineSetup } from './setup';
+import { validateSetup, type MachineSetup, type RollerPair } from './setup';
+
+const SIDES = [undefined, 'left', 'right'] as const;
 
 /**
  * Machine setup ⇄ URL hash (#31): `#m=<format>.<payload>`, apart from the
@@ -10,11 +12,12 @@ import { validateSetup, type MachineSetup } from './setup';
  *
  * Format 1, integers as LEB128 varints, signed ones zigzag encoded; parts
  * as their place in the lists in parts.ts (which only grow at the end):
- *   flags: bit0 has name, bit1 has measured mass
+ *   flags: bit0 has name, bit1 has measured mass, bit2 has rear tyres of their own
  *   [name: byte length, UTF-8]
  *   chassis, motor, gear, battery, tyre, tyre kind
  *   [measured mass (0.1 g)]
- *   roller pair count, then for each: z, y, width (0.1 mm), size, kind
+ *   [rear tyre, rear tyre kind]
+ *   roller pair count, then for each: side (0 both, 1 left, 2 right), z, y, width (0.1 mm), size, kind
  *   damper count, then for each: weight, x, y, z, stroke (0.1 mm)
  *   brake count, then for each: sponge, z, width, length, gap (0.1 mm)
  *   weight count, then for each: mass (0.1 g), x, y, z (0.1 mm)
@@ -41,7 +44,8 @@ function at<T>(list: readonly T[], i: number): T {
 export function setupToBytes(setup: MachineSetup): Uint8Array {
   const w = new Writer();
   const name = setup.name ? new TextEncoder().encode(setup.name) : null;
-  w.uint((name ? 1 : 0) | (setup.measuredMass !== undefined ? 2 : 0));
+  const rear = setup.rearTyre !== undefined || setup.rearTyreKind !== undefined;
+  w.uint((name ? 1 : 0) | (setup.measuredMass !== undefined ? 2 : 0) | (rear ? 4 : 0));
   if (name) {
     w.uint(name.length);
     w.bytes.push(...name);
@@ -53,8 +57,13 @@ export function setupToBytes(setup: MachineSetup): Uint8Array {
   w.uint(index(TYRES, (t) => t.id === setup.tyre, 'tyre'));
   w.uint(index(TYRE_KINDS, (t) => t.id === setup.tyreKind, 'tyre kind'));
   if (setup.measuredMass !== undefined) w.uint(Math.round(setup.measuredMass * 10));
+  if (rear) {
+    w.uint(index(TYRES, (t) => t.id === (setup.rearTyre ?? setup.tyre), 'tyre'));
+    w.uint(index(TYRE_KINDS, (t) => t.id === (setup.rearTyreKind ?? setup.tyreKind), 'tyre kind'));
+  }
   w.uint(setup.rollers.length);
   for (const r of setup.rollers) {
+    w.uint(SIDES.indexOf(r.side));
     for (const v of [r.z, r.y, r.width]) w.tenths(v);
     w.uint(index(ROLLER_SIZES, (d) => d === r.diameter, 'roller size'));
     w.uint(index(ROLLER_KINDS, (k) => k.id === r.kind, 'roller'));
@@ -94,9 +103,17 @@ export function setupFromBytes(bytes: Uint8Array): MachineSetup {
     weights: [],
   };
   if (flags & 2) setup.measuredMass = r.uint() / 10;
+  if (flags & 4) {
+    setup.rearTyre = at(TYRES, r.uint()).id;
+    setup.rearTyreKind = at(TYRE_KINDS, r.uint()).id;
+  }
   for (let n = r.uint(); n > 0; n--) {
+    const sideCode = r.uint();
+    if (sideCode >= SIDES.length) throw new Error('ローラーの左右が正しくありません');
+    const side = SIDES[sideCode];
     const [z, y, width] = [r.tenths(), r.tenths(), r.tenths()];
-    setup.rollers.push({ z, y, width, diameter: at(ROLLER_SIZES, r.uint()), kind: at(ROLLER_KINDS, r.uint()).id });
+    const pair: RollerPair = { z, y, width, diameter: at(ROLLER_SIZES, r.uint()), kind: at(ROLLER_KINDS, r.uint()).id };
+    setup.rollers.push(side ? { side, ...pair } : pair);
   }
   for (let n = r.uint(); n > 0; n--) {
     const weight = at(DAMPER_WEIGHTS, r.uint()).id;

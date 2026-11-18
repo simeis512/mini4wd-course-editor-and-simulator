@@ -131,27 +131,37 @@ export interface RollerKind {
   restitution: number;
   /** Mass of one 13mm roller, g; others scale with the diameter squared (provisional: 15437 is 1.7 g a pair, #30). */
   mass13: number;
-  /** Thickness, mm (provisional). */
+  /** Thickness, mm (provisional: owner 2026-11-19, about 2 mm on real rollers). */
   thickness: number;
 }
 
 export const ROLLER_KINDS: readonly RollerKind[] = [
-  { id: 'alu-bearing', name: 'アルミ（ベアリング）', friction: 0.01, restitution: 0.2, mass13: 0.85, thickness: 6 },
-  { id: 'plastic-bearing', name: 'プラ（ベアリング）', friction: 0.015, restitution: 0.25, mass13: 0.5, thickness: 6 },
-  { id: 'plastic', name: 'プラ（軸受けなし）', friction: 0.05, restitution: 0.25, mass13: 0.4, thickness: 6 },
-  { id: 'rubber-ring', name: 'ゴムリング付き', friction: 0.3, restitution: 0.1, mass13: 0.9, thickness: 6 },
+  { id: 'alu-bearing', name: 'アルミ（ベアリング）', friction: 0.01, restitution: 0.2, mass13: 0.85, thickness: 2 },
+  { id: 'plastic-bearing', name: 'プラ（ベアリング）', friction: 0.015, restitution: 0.25, mass13: 0.5, thickness: 2.5 },
+  { id: 'plastic', name: 'プラ（軸受けなし）', friction: 0.05, restitution: 0.25, mass13: 0.4, thickness: 2.5 },
+  { id: 'rubber-ring', name: 'ゴムリング付き', friction: 0.3, restitution: 0.1, mass13: 0.9, thickness: 3 },
 ];
 
-/** The weights of mass dampers (#30). */
-export const DAMPER_WEIGHTS: readonly { id: string; name: string; mass: number }[] = [
-  { id: 'round', name: 'マスダンパー（丸）', mass: 4.7 },
-  { id: 'heavy', name: 'マスダンパー ヘビー', mass: 8.8 },
-  { id: 'square-8', name: 'スクエア 8mm', mass: 14.9 },
-  { id: 'square-6', name: 'スクエア 6mm', mass: 8.3 },
-  { id: 'square-short-8', name: 'スクエアショート 8mm', mass: 6.6 },
-  { id: 'square-short-6', name: 'スクエアショート 6mm', mass: 3.6 },
-  { id: 'slim-long', name: 'スリム ロング', mass: 3 },
-  { id: 'slim-short', name: 'スリム ショート', mass: 1.5 },
+/**
+ * A mass damper weight's shape, mm: a cylinder standing on its shaft, or a
+ * square bar lying along the machine (length front to back).
+ */
+export type DamperShape = { kind: 'cylinder'; diameter: number; height: number } | { kind: 'bar'; width: number; height: number; length: number };
+
+/**
+ * The weights of mass dampers (#30). Masses and the square and slim ones'
+ * sizes are Tamiya's; the round ones' sizes are guesses from their mass
+ * as brass (provisional).
+ */
+export const DAMPER_WEIGHTS: readonly { id: string; name: string; mass: number; shape: DamperShape }[] = [
+  { id: 'round', name: 'マスダンパー（丸）', mass: 4.7, shape: { kind: 'cylinder', diameter: 10, height: 7 } },
+  { id: 'heavy', name: 'マスダンパー ヘビー', mass: 8.8, shape: { kind: 'cylinder', diameter: 12, height: 9 } },
+  { id: 'square-8', name: 'スクエア 8mm', mass: 14.9, shape: { kind: 'bar', width: 8, height: 8, length: 32 } },
+  { id: 'square-6', name: 'スクエア 6mm', mass: 8.3, shape: { kind: 'bar', width: 6, height: 6, length: 32 } },
+  { id: 'square-short-8', name: 'スクエアショート 8mm', mass: 6.6, shape: { kind: 'bar', width: 8, height: 8, length: 14 } },
+  { id: 'square-short-6', name: 'スクエアショート 6mm', mass: 3.6, shape: { kind: 'bar', width: 6, height: 6, length: 14 } },
+  { id: 'slim-long', name: 'スリム ロング', mass: 3, shape: { kind: 'cylinder', diameter: 7, height: 11.5 } },
+  { id: 'slim-short', name: 'スリム ショート', mass: 1.5, shape: { kind: 'cylinder', diameter: 7, height: 5.5 } },
 ];
 
 /** Brake sponges, and how hard they grip the road (provisional: unmeasured, #30). */

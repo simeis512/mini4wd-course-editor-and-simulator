@@ -29,8 +29,15 @@ export interface DamperSpec {
   /** Middle of the weight at the bottom of its travel, as for rollers, m. */
   at: [number, number, number];
   stroke: number;
-  /** Width, height, length, m (for drawing; it touches nothing). */
-  size: [number, number, number];
+  /** Its shape, m (for drawing; it touches nothing): a cylinder on its shaft, or a bar lying front to back. */
+  shape: { kind: 'cylinder'; radius: number; height: number } | { kind: 'bar'; size: [number, number, number] };
+}
+
+/** The rear tyres, when they differ from the front ones (#32, owner 2026-11-19). */
+export interface TyreSpec {
+  radius: number;
+  width: number;
+  grip: number;
 }
 
 /** A brake pad under the chassis (#32): `at` is the middle of its underside, as for rollers; width and length, m. */
@@ -77,6 +84,7 @@ export interface MachineSpec {
    */
   rollerFriction: number;
   rollerRestitution: number;
+  rearTyre?: TyreSpec;
   dampers?: DamperSpec[];
   brakes?: BrakeSpec[];
   weights?: WeightSpec[];
@@ -88,10 +96,21 @@ export function motorTorque(motor: MotorSpec, rpm: number): number {
   return Math.max(0, Math.min(motor.stallTorque, t));
 }
 
-/** The push of all four tyres on the road at a forward speed, N (4WD: one motor turns them all). */
-export function driveForce(spec: MachineSpec, speed: number): number {
-  const wheelRpm = (Math.abs(speed) / spec.tyreRadius) * (60 / (2 * Math.PI));
-  return (motorTorque(spec.motor, wheelRpm * spec.gearRatio) * spec.gearRatio * spec.efficiency) / spec.tyreRadius;
+/**
+ * The push of all four tyres on the road at a forward speed, N (4WD: one
+ * motor turns them all), as if all had this radius (the front's unless
+ * given): with smaller tyres at one end, those turn faster at the speed.
+ */
+export function driveForce(spec: MachineSpec, speed: number, radius = spec.tyreRadius): number {
+  const wheelRpm = (Math.abs(speed) / radius) * (60 / (2 * Math.PI));
+  return (motorTorque(spec.motor, wheelRpm * spec.gearRatio) * spec.gearRatio * spec.efficiency) / radius;
+}
+
+/** The tyre of each wheel in `wheelPoints`' order: the front ones, then the rear ones. */
+export function wheelTyres(spec: MachineSpec): TyreSpec[] {
+  const front = { radius: spec.tyreRadius, width: spec.tyreWidth, grip: spec.grip };
+  const rear = spec.rearTyre ?? front;
+  return [front, front, rear, rear];
 }
 
 /** Top speed on the level with nothing holding it back, m/s. */
@@ -101,7 +120,7 @@ export function freeSpeed(spec: MachineSpec): number {
 
 /** How far the front of the machine reaches ahead of the chassis middle: the chassis, a front roller or a front tyre, m. */
 export function frontReach(spec: MachineSpec): number {
-  return Math.max(spec.size[2] / 2, spec.wheelbase / 2 + spec.tyreRadius, ...spec.rollers.map((r) => r.at[2] + r.radius));
+  return Math.max(spec.size[2] / 2, spec.wheelbase / 2 + spec.tyreRadius, -spec.wheelbase / 2 + (spec.rearTyre?.radius ?? 0), ...spec.rollers.map((r) => r.at[2] + r.radius));
 }
 
 /**
@@ -121,11 +140,11 @@ export function wheelPoints(spec: MachineSpec): [number, number, number][] {
   const xr = (spec.rearTread ?? spec.tread) / 2;
   const z = spec.wheelbase / 2;
   // The ray starts above the axle by the give and reaches as far below the road.
-  const y = spec.tyreRadius + TYRE_GIVE - rideHeight(spec);
+  const [yf, , yr] = wheelTyres(spec).map((t) => t.radius + TYRE_GIVE - rideHeight(spec));
   return [
-    [x, y, z],
-    [-x, y, z],
-    [xr, y, -z],
-    [-xr, y, -z],
+    [x, yf, z],
+    [-x, yf, z],
+    [xr, yr, -z],
+    [-xr, yr, -z],
   ];
 }

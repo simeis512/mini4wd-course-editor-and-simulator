@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Matrix4, Quaternion, Vector3 } from 'three';
-import { driveForce, rideHeight, TYRE_GIVE, wheelPoints, type MachineSpec } from './machine-spec';
+import { driveForce, rideHeight, TYRE_GIVE, wheelPoints, wheelTyres, type MachineSpec } from './machine-spec';
 
 // A machine in the physics world (#27, spec simulator.md 2): the chassis
 // as one rigid body, the tyres as Rapier's ray-cast wheels driven by the
@@ -123,15 +123,16 @@ export function createMachine(world: RAPIER.World, spec: MachineSpec, position: 
   const vehicle = world.createVehicleController(body);
   vehicle.indexUpAxis = 1;
   vehicle.setIndexForwardAxis = 2;
-  for (const [px, py, pz] of wheelPoints(spec)) {
-    vehicle.addWheel({ x: px, y: py, z: pz }, { x: 0, y: -1, z: 0 }, { x: -1, y: 0, z: 0 }, 2 * TYRE_GIVE, spec.tyreRadius);
-  }
+  const tyres = wheelTyres(spec);
+  wheelPoints(spec).forEach(([px, py, pz], i) => {
+    vehicle.addWheel({ x: px, y: py, z: pz }, { x: 0, y: -1, z: 0 }, { x: -1, y: 0, z: 0 }, 2 * TYRE_GIVE, tyres[i].radius);
+  });
   for (let i = 0; i < vehicle.numWheels(); i++) {
     vehicle.setWheelSuspensionStiffness(i, TYRE_STIFFNESS);
     vehicle.setWheelSuspensionCompression(i, TYRE_DAMPING);
     vehicle.setWheelSuspensionRelaxation(i, TYRE_DAMPING);
     vehicle.setWheelMaxSuspensionTravel(i, 2 * TYRE_GIVE);
-    vehicle.setWheelFrictionSlip(i, spec.grip);
+    vehicle.setWheelFrictionSlip(i, tyres[i].grip);
     vehicle.setWheelSideFrictionStiffness(i, TYRE_SIDE_GRIP);
   }
   return { spec, body, vehicle, colliders, dampers, own };
@@ -140,8 +141,8 @@ export function createMachine(world: RAPIER.World, spec: MachineSpec, position: 
 /** Drive the tyres for one step (4WD: the motor turns all four), then let the wheels push the chassis. */
 export function driveMachine(m: Machine, dt: number, on = true): void {
   const speed = m.vehicle.currentVehicleSpeed();
-  const force = on ? driveForce(m.spec, speed) / m.vehicle.numWheels() : 0;
-  for (let i = 0; i < m.vehicle.numWheels(); i++) m.vehicle.setWheelEngineForce(i, force);
+  const n = m.vehicle.numWheels();
+  wheelTyres(m.spec).forEach((t, i) => m.vehicle.setWheelEngineForce(i, on ? driveForce(m.spec, speed, t.radius) / n : 0));
   m.vehicle.updateVehicle(dt, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, (c) => !m.own.has(c.handle));
 }
 

@@ -82,8 +82,26 @@ export function renderMachineForm(root: HTMLElement, setup: MachineSetup, change
     field('モーター', select(setup.motor, opts(motorsFor(setup.chassis), (m) => m.id, (m) => m.name), (v) => set({ motor: v }), chassis.shaft === 'dual' ? '両軸モーター' : '片軸モーター')),
     field('ギヤ比', select(String(setup.gearRatio), opts(GEARS, (g) => String(g.ratio), (g) => g.name), (v) => set({ gearRatio: Number(v) }))),
     field('電池', select(setup.battery, opts(BATTERIES, (b) => b.id, (b) => b.name), (v) => set({ battery: v }))),
-    field('タイヤ', select(setup.tyre, opts(TYRES, (t) => t.id, (t) => t.name), (v) => set({ tyre: v }))),
-    field('タイヤの種類', select(setup.tyreKind, opts(TYRE_KINDS, (t) => t.id, (t) => t.name), (v) => set({ tyreKind: v }))),
+  );
+
+  // Front and rear alike unless asked otherwise (owner 2026-11-19).
+  const split = setup.rearTyre !== undefined || setup.rearTyreKind !== undefined;
+  const splitBox = el('input', { type: 'checkbox' });
+  splitBox.checked = split;
+  splitBox.addEventListener('change', () =>
+    change(splitBox.checked ? { ...setup, rearTyre: setup.tyre, rearTyreKind: setup.tyreKind } : { ...setup, rearTyre: undefined, rearTyreKind: undefined }),
+  );
+  const tyreFields = (end: string, tyre: string, kind: string, setTyre: (v: string) => void, setKind: (v: string) => void) => [
+    field(`${end}タイヤ`, select(tyre, opts(TYRES, (t) => t.id, (t) => t.name), setTyre)),
+    field(`${end}種類`, select(kind, opts(TYRE_KINDS, (t) => t.id, (t) => t.name), setKind)),
+  ];
+  const tyres = section(
+    'タイヤ',
+    ...tyreFields(split ? '前の' : '', setup.tyre, setup.tyreKind, (v) => set({ tyre: v }), (v) => set({ tyreKind: v })),
+    ...(split
+      ? tyreFields('後ろの', setup.rearTyre ?? setup.tyre, setup.rearTyreKind ?? setup.tyreKind, (v) => set({ rearTyre: v }), (v) => set({ rearTyreKind: v }))
+      : []),
+    el('label', { className: 'mcheck' }, splitBox, '前後で変える'),
   );
 
   const weight = section(
@@ -103,12 +121,19 @@ export function renderMachineForm(root: HTMLElement, setup: MachineSetup, change
     (v) => v !== '' && set({ rollers: ROLLER_PRESETS[Number(v)].rollers(chassis.length) }),
   );
   const rollers = section(
-    'ローラー（左右 1 組ずつ）',
-    el('p', { className: 'hint' }, `前後はシャーシの真ん中から前が +。高さはローラーの真ん中の路面からの高さ。幅は左右のローラーの外側どうし（規定 ${REGULATION.width}mm まで）。`),
+    'ローラー',
+    el('p', { className: 'hint' }, `ふつうは左右 1 組で、「左だけ」「右だけ」にすると片側に 1 個だけ置けます。前後はシャーシの真ん中から前が +。高さはローラーの真ん中の路面からの高さ。幅は左右のローラーの外側どうし（片側だけなら、真ん中から外側までの 2 倍。規定 ${REGULATION.width}mm まで）。`),
     presets,
     ...list(
       setup.rollers,
       (r, setR) => [
+        field(
+          '左右',
+          select(r.side ?? 'both', [{ value: 'both', label: '左右とも' }, { value: 'left', label: '左だけ' }, { value: 'right', label: '右だけ' }], (v) => {
+            const { side: _, ...rest } = r;
+            setR(v === 'both' ? rest : { ...rest, side: v as 'left' | 'right' });
+          }),
+        ),
         field('径', select(String(r.diameter), opts([...ROLLER_SIZES].sort((a, b) => a - b), String, (d) => `${d}mm`), (v) => setR({ ...r, diameter: Number(v) }))),
         field('種類', select(r.kind, opts(ROLLER_KINDS, (k) => k.id, (k) => k.name), (v) => setR({ ...r, kind: v }))),
         field('前後', number(r.z, 0.5, (v) => setR({ ...r, z: v! })), 'mm'),
@@ -173,5 +198,5 @@ export function renderMachineForm(root: HTMLElement, setup: MachineSetup, change
     ),
   );
 
-  root.replaceChildren(basics, weight, rollers, dampers, brakes, weights);
+  root.replaceChildren(basics, tyres, weight, rollers, dampers, brakes, weights);
 }

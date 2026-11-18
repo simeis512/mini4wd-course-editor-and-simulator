@@ -11,10 +11,13 @@ const full: MachineSetup = {
   battery: 'neo-champ',
   tyre: 'small-narrow',
   tyreKind: 'low-friction',
+  rearTyre: 'large-low',
+  rearTyreKind: 'hard',
   measuredMass: 142.3,
   rollers: [
     { z: 72.5, y: 8, width: 104.5, diameter: 19, kind: 'plastic-bearing' },
     { z: -70, y: 23.5, width: 105, diameter: 13, kind: 'rubber-ring' },
+    { side: 'right', z: -60, y: 12, width: 100, diameter: 17, kind: 'alu-bearing' },
   ],
   dampers: [
     { weight: 'heavy', x: 30, y: 12.5, z: -40, stroke: 4 },
