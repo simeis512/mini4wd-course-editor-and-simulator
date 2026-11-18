@@ -2,7 +2,8 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { createMachine, driveMachine } from './machine';
-import { freeSpeed, STANDARD_MACHINE, type MachineSpec } from './machine-spec';
+import { freeSpeed, type MachineSpec } from './machine-spec';
+import { STANDARD_MACHINE } from './machine-setup';
 import { STEP } from './run';
 import { createPhysicsWorld, SPEED_CAP } from './world';
 

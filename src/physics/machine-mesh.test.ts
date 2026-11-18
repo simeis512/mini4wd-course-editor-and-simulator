@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { rideHeight } from './machine';
+import { rideHeight } from './machine-spec';
 import { buildShadow, placeShadow, shadowStrength } from './machine-mesh';
-import { STANDARD_MACHINE } from './machine-spec';
+import { STANDARD_MACHINE } from './machine-setup';
 
 const spec = STANDARD_MACHINE;
 const resting = rideHeight(spec) * 1000;

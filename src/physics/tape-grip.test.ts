@@ -10,7 +10,7 @@ import { setTape, type JointTape } from '../course/tape';
 import { ROAD_FRICTION, tapeZones, WALL_FRICTION } from '../course/tape-zones';
 import { addCourseColliders } from './course-colliders';
 import { createMachine, driveMachine, type Machine } from './machine';
-import { STANDARD_MACHINE } from './machine-spec';
+import { STANDARD_MACHINE } from './machine-setup';
 import { Run, STEP } from './run';
 import { touchTape } from './tape-grip';
 import { createPhysicsWorld } from './world';

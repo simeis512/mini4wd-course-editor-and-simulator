@@ -36,6 +36,9 @@ import type { EditorView } from './view';
 import { TopView } from './view2d';
 import { OrbitView } from './view3d';
 import { RunMode } from './run-mode';
+import { MachineScreen } from './machine-screen';
+import type { QrHost } from './qr';
+import { machineValueOf } from '../machine/codec';
 import { perfReport, perfSpan } from './perf';
 import { bindAppUi, readRaiseFields } from './app-ui';
 import { editSelection, raiseSides, type SelectedAction } from './selected-edits';
@@ -65,6 +68,8 @@ export class EditorApp {
   private library: Library;
   /** Handles on the selected piece, over either view (#62). */
   private handles: HandleTool;
+  /** The machine screen (#31). */
+  private machine: MachineScreen;
 
   constructor() {
     const app = this;
@@ -145,7 +150,13 @@ export class EditorApp {
     this.top = new TopView($('view2d'), handlers);
     this.orbit = new OrbitView($('view3d'), handlers);
     this.handles = new HandleTool($('stage'), host);
+    let showQr: ((other: QrHost) => void) | null = null;
+    this.machine = new MachineScreen({
+      writeCourseUrl: () => this.hashSync.write(this.course),
+      showQr: (other) => showQr?.(other),
+    });
     new RunMode({
+      machines: () => this.machine.runChoices(),
       get layout() { return app.layout; },
       get dir() { return app.course.dir ?? 1; },
       enter: () => {
@@ -168,7 +179,7 @@ export class EditorApp {
       up: (e, cancelled) => this.paletteDrag.up(e, cancelled),
       holding: () => this.paletteDrag.holding,
     });
-    this.share = bindAppUi({
+    const ui = bindAppUi({
       get selection() { return app.selection; },
       get course() { return app.course; },
       setTape: (tape) => this.commit(setTape(this.course, tape), this.selection),
@@ -206,12 +217,17 @@ export class EditorApp {
       edit: (action) => this.edit(action),
       renderPanel: () => this.renderPanel(),
     });
+    this.share = ui.share;
+    showQr = ui.showQr;
   }
 
   async start(): Promise<void> {
-    const course = await readHash();
-    this.load(course ?? basicOval(), !course);
+    // A machine's URL opens the machine screen, over the course left last time (#31).
+    const machineUrl = machineValueOf(location.hash) !== null;
+    const course = machineUrl ? null : await readHash();
+    this.load(course ?? basicOval(), !course && !machineUrl);
     window.addEventListener('hashchange', () => void this.onHashChange());
+    await this.machine.start();
     await showNoticeOnStart();
     const resumed = await this.library.resume(!!course, basicOval());
     if (resumed) this.load(resumed, true);
@@ -318,6 +334,8 @@ export class EditorApp {
 
   private async onHashChange(): Promise<void> {
     if (this.hashSync.isOwn(location.hash)) return;
+    const machine = machineValueOf(location.hash);
+    if (machine !== null) return this.machine.onHash(machine);
     const course = await readHash();
     if (course === undefined) return;
     // Staying: put the course being edited back in the URL.

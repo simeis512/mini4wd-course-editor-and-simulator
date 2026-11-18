@@ -14,9 +14,47 @@ export interface RollerSpec {
   at: [number, number, number];
   radius: number;
   height: number;
+  /** Its own friction and bounce on the fences, else the machine's (#32). */
+  friction?: number;
+  restitution?: number;
+}
+
+/**
+ * A mass damper (#32): a weight that rides up its shaft from `at` by as
+ * much as `stroke`, or with no stroke stays put. Its mass is on top of the
+ * chassis box's.
+ */
+export interface DamperSpec {
+  mass: number;
+  /** Middle of the weight at the bottom of its travel, as for rollers, m. */
+  at: [number, number, number];
+  stroke: number;
+  /** Its shape, m (for drawing; it touches nothing): a cylinder on its shaft, or a bar lying front to back. */
+  shape: { kind: 'cylinder'; radius: number; height: number } | { kind: 'bar'; size: [number, number, number] };
+}
+
+/** The rear tyres, when they differ from the front ones (#32, owner 2026-11-19). */
+export interface TyreSpec {
+  radius: number;
+  width: number;
+  grip: number;
+}
+
+/** A brake pad under the chassis (#32): `at` is the middle of its underside, as for rollers; width and length, m. */
+export interface BrakeSpec {
+  at: [number, number, number];
+  size: [number, number];
+  friction: number;
+}
+
+/** A weight fixed to the chassis, on top of the chassis box's mass (#32). */
+export interface WeightSpec {
+  mass: number;
+  at: [number, number, number];
 }
 
 export interface MachineSpec {
+  /** The chassis box's mass: the whole machine less its dampers and weights, kg. */
   mass: number;
   /** Chassis box (the body's collider): width, height, length, m. */
   size: [number, number, number];
@@ -29,6 +67,8 @@ export interface MachineSpec {
   wheelbase: number;
   /** Centre of the left tyres to the right ones, m. */
   tread: number;
+  /** Rear tyres' tread when it differs from the front's, m. */
+  rearTread?: number;
   /** Motor turns per tyre turn. */
   gearRatio: number;
   /** Share of the motor's torque that reaches the tyres. */
@@ -44,42 +84,11 @@ export interface MachineSpec {
    */
   rollerFriction: number;
   rollerRestitution: number;
+  rearTyre?: TyreSpec;
+  dampers?: DamperSpec[];
+  brakes?: BrakeSpec[];
+  weights?: WeightSpec[];
 }
-
-/** 13mm rollers, 105mm across over them (the regulation width), 12mm up: as on the kits (#30, provisional). */
-const ROLLER = { radius: 0.0065, height: 0.006 };
-const ROLLER_X = 0.105 / 2 - ROLLER.radius;
-const ROLLER_Y = 0.012;
-
-/**
- * A Super-II–like kit with the normal motor on two AA cells (#30, all
- * provisional): Tamiya's catalogue gives the normal motor about 12,000 rpm
- * and 0.6–0.8 mN·m at 3 V, the torque where it runs best; the stall torque
- * is taken as about five times that, as for small DC motors; 4.2:1
- * gears, 26mm tyres.
- */
-export const STANDARD_MACHINE: MachineSpec = {
-  mass: 0.13,
-  size: [0.08, 0.02, 0.15],
-  clearance: 0.003,
-  tyreRadius: 0.013,
-  tyreWidth: 0.011,
-  wheelbase: 0.08,
-  tread: 0.072,
-  gearRatio: 4.2,
-  efficiency: 0.7,
-  motor: { freeRpm: 12000, stallTorque: 0.0035 },
-  rollers: [
-    { at: [ROLLER_X, ROLLER_Y, 0.075], ...ROLLER },
-    { at: [-ROLLER_X, ROLLER_Y, 0.075], ...ROLLER },
-    { at: [ROLLER_X, ROLLER_Y, -0.07], ...ROLLER },
-    { at: [-ROLLER_X, ROLLER_Y, -0.07], ...ROLLER },
-  ],
-  grip: 1,
-  // Near nothing, as for rollers that turn freely (#29, provisional).
-  rollerFriction: 0.01,
-  rollerRestitution: 0.2,
-};
 
 /** Motor torque at a speed (spec simulator.md 3): straight from the stall torque down to nothing at the free speed, N·m. */
 export function motorTorque(motor: MotorSpec, rpm: number): number {
@@ -87,10 +96,21 @@ export function motorTorque(motor: MotorSpec, rpm: number): number {
   return Math.max(0, Math.min(motor.stallTorque, t));
 }
 
-/** The push of all four tyres on the road at a forward speed, N (4WD: one motor turns them all). */
-export function driveForce(spec: MachineSpec, speed: number): number {
-  const wheelRpm = (Math.abs(speed) / spec.tyreRadius) * (60 / (2 * Math.PI));
-  return (motorTorque(spec.motor, wheelRpm * spec.gearRatio) * spec.gearRatio * spec.efficiency) / spec.tyreRadius;
+/**
+ * The push of all four tyres on the road at a forward speed, N (4WD: one
+ * motor turns them all), as if all had this radius (the front's unless
+ * given): with smaller tyres at one end, those turn faster at the speed.
+ */
+export function driveForce(spec: MachineSpec, speed: number, radius = spec.tyreRadius): number {
+  const wheelRpm = (Math.abs(speed) / radius) * (60 / (2 * Math.PI));
+  return (motorTorque(spec.motor, wheelRpm * spec.gearRatio) * spec.gearRatio * spec.efficiency) / radius;
+}
+
+/** The tyre of each wheel in `wheelPoints`' order: the front ones, then the rear ones. */
+export function wheelTyres(spec: MachineSpec): TyreSpec[] {
+  const front = { radius: spec.tyreRadius, width: spec.tyreWidth, grip: spec.grip };
+  const rear = spec.rearTyre ?? front;
+  return [front, front, rear, rear];
 }
 
 /** Top speed on the level with nothing holding it back, m/s. */
@@ -100,5 +120,31 @@ export function freeSpeed(spec: MachineSpec): number {
 
 /** How far the front of the machine reaches ahead of the chassis middle: the chassis, a front roller or a front tyre, m. */
 export function frontReach(spec: MachineSpec): number {
-  return Math.max(spec.size[2] / 2, spec.wheelbase / 2 + spec.tyreRadius, ...spec.rollers.map((r) => r.at[2] + r.radius));
+  return Math.max(spec.size[2] / 2, spec.wheelbase / 2 + spec.tyreRadius, -spec.wheelbase / 2 + (spec.rearTyre?.radius ?? 0), ...spec.rollers.map((r) => r.at[2] + r.radius));
+}
+
+/**
+ * How far a tyre gives, m: Mini 4WD tyres have no springs, only a little
+ * give. The wheels' rays reach this far below the road at rest, so the
+ * tyres hold the road (spec simulator.md 2, provisional).
+ */
+export const TYRE_GIVE = 0.001;
+/** Height of the chassis box's middle above the road at rest, m. */
+export function rideHeight(spec: MachineSpec): number {
+  return spec.clearance + spec.size[1] / 2;
+}
+
+/** Wheel positions on the chassis: front left, front right, rear left, rear right, at the axles' rest, m. */
+export function wheelPoints(spec: MachineSpec): [number, number, number][] {
+  const x = spec.tread / 2;
+  const xr = (spec.rearTread ?? spec.tread) / 2;
+  const z = spec.wheelbase / 2;
+  // The ray starts above the axle by the give and reaches as far below the road.
+  const [yf, , yr] = wheelTyres(spec).map((t) => t.radius + TYRE_GIVE - rideHeight(spec));
+  return [
+    [x, yf, z],
+    [-x, yf, z],
+    [xr, yr, -z],
+    [-xr, yr, -z],
+  ];
 }

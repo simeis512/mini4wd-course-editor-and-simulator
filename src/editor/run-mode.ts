@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import type { Layout } from '../course/course';
 import { timedLane } from '../course/lap-marks';
 import type { OutReason, Run } from '../physics/run';
+import type { MachineSetup } from '../machine/setup';
+import { buildMachineMesh, buildShadow, liftDampers, placeShadow, spinTyres } from '../physics/machine-mesh';
+import { specFromSetup } from '../physics/machine-setup';
 import { $, toast } from './dom';
 import { RunCamera, seeThroughPoints, type CameraMode, type CameraView } from './run-camera';
 
@@ -11,6 +14,8 @@ import { RunCamera, seeThroughPoints, type CameraMode, type CameraView } from '.
 // its own controls in the AR overlay.
 
 export interface RunModeHost {
+  /** The machines to pick from: the one being set up, the saved ones and the standard one (#31). */
+  machines(): Promise<{ label: string; setup: MachineSetup }[]>;
   /** The course as it is now, and the way it runs. */
   readonly layout: Layout;
   readonly dir: 1 | -1;
@@ -50,7 +55,8 @@ const CHUNK = 0.005;
 /** The same control in the run bar and in the AR overlay (#99). */
 const both = (id: string) => [$(id), $(`ar-${id}`)];
 
-type Physics = typeof import('../physics/run') & typeof import('../physics/machine-mesh');
+// The machine's look and spec need no Rapier and come with the machine screen (#31); only the run is loaded later.
+type Physics = typeof import('../physics/run');
 
 export class RunMode {
   private physics: Physics | null = null;
@@ -63,6 +69,8 @@ export class RunMode {
   private camera = new RunCamera();
   /** The physics could not keep up in the last frame. */
   private behind = false;
+  /** The machines in the run bar's list, in its order (#31). */
+  private machines: { label: string; setup: MachineSetup }[] = [];
 
   constructor(private host: RunModeHost) {
     $('run').addEventListener('click', () => void (this.on ? this.exit() : this.enter()));
@@ -76,6 +84,7 @@ export class RunMode {
       lane.selectedIndex = (lane.selectedIndex + 1) % lane.options.length;
       void this.reset();
     });
+    $('run-machine').addEventListener('change', () => void this.reset());
     const speed = $<HTMLSelectElement>('run-speed');
     $('ar-run-speed').addEventListener('click', () => {
       speed.selectedIndex = (speed.selectedIndex + 1) % speed.options.length;
@@ -108,7 +117,8 @@ export class RunMode {
     const timed = timedLane(this.host.layout, this.host.dir);
     if (timed !== null) $<HTMLSelectElement>('run-lane').value = String(timed);
     this.show('読み込み中…');
-    this.physics ??= { ...(await import('../physics/run')), ...(await import('../physics/machine-mesh')) };
+    await this.listMachines();
+    this.physics ??= await import('../physics/run');
     if (this.on) await this.reset();
   }
 
@@ -135,7 +145,9 @@ export class RunMode {
     const physics = this.physics;
     if (!physics || !this.on) return;
     const lane = Number($<HTMLSelectElement>('run-lane').value) || 0;
-    const run = await physics.Run.create(this.host.layout, this.host.dir, lane);
+    const machine = this.machines[$<HTMLSelectElement>('run-machine').selectedIndex];
+    const spec = machine ? specFromSetup(machine.setup) : undefined;
+    const run = await physics.Run.create(this.host.layout, this.host.dir, lane, spec);
     if (!this.on) return run?.free();
     if (!run) {
       this.show('走らせるレーンがありません');
@@ -143,14 +155,24 @@ export class RunMode {
       return;
     }
     this.run = run;
-    this.mesh = physics.buildMachineMesh(run.spec);
-    this.shadow = physics.buildShadow(run.spec);
+    this.mesh = buildMachineMesh(run.spec);
+    this.shadow = buildShadow(run.spec);
     const group = new THREE.Group();
     group.add(this.mesh, this.shadow);
     this.host.setMachine(group);
     this.setPlaying(false);
     this.camera.snap();
     this.draw(0);
+  }
+
+  /** Fill the run bar's machine list afresh, keeping the pick by its name where it still is there. */
+  private async listMachines(): Promise<void> {
+    const select = $<HTMLSelectElement>('run-machine');
+    const picked = select.selectedOptions[0]?.text;
+    this.machines = await this.host.machines();
+    select.replaceChildren(...this.machines.map((m) => new Option(m.label)));
+    const again = this.machines.findIndex((m) => m.label === picked);
+    if (again >= 0) select.selectedIndex = again;
   }
 
   private free(): void {
@@ -208,8 +230,9 @@ export class RunMode {
     const s = run.state();
     mesh.position.copy(s.position);
     mesh.quaternion.copy(s.quaternion);
-    physics.spinTyres(mesh, run.spec, s.distance);
-    physics.placeShadow(shadow, run.spec, s.position, s.quaternion, run.ground());
+    spinTyres(mesh, run.spec, s.distance);
+    liftDampers(mesh, run.damperLifts());
+    placeShadow(shadow, run.spec, s.position, s.quaternion, run.ground());
     this.host.aim(this.camera.next(s.position, s.quaternion, dt));
     const facing = this.camera.facing;
     if (this.camera.mode === 'side' && facing) this.host.seeThrough(seeThroughPoints(s.position, facing));

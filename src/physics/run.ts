@@ -7,8 +7,9 @@ import { laneStart, lapMarks } from '../course/lap-marks';
 import { laneSpot, simCourse, type SimCourse } from '../course/sim-course';
 import { tapeZones, type TapeZone } from '../course/tape-zones';
 import { addCourseColliders, type CourseColliders } from './course-colliders';
-import { createMachine, driveMachine, type Machine } from './machine';
-import { frontReach, STANDARD_MACHINE, type MachineSpec } from './machine-spec';
+import { createMachine, damperLifts, driveMachine, type Machine } from './machine';
+import { frontReach, type MachineSpec } from './machine-spec';
+import { STANDARD_MACHINE } from './machine-setup';
 import { touchTape } from './tape-grip';
 import { createPhysicsWorld } from './world';
 
@@ -300,7 +301,7 @@ export class Run {
   ground(): Ground | null {
     const t = this.machine.body.translation();
     const ray = new RAPIER.Ray(t, { x: 0, y: -1, z: 0 });
-    const hit = this.world.castRayAndGetNormal(ray, GROUND_REACH, true, undefined, undefined, undefined, this.machine.body);
+    const hit = this.world.castRayAndGetNormal(ray, GROUND_REACH, true, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, undefined, this.machine.body);
     if (!hit) return null;
     const n = hit.normal;
     return {
@@ -321,6 +322,11 @@ export class Run {
       lapTimes: [...this.lapTimes],
       out: this.out,
     };
+  }
+
+  /** How far each riding mass damper is up its shaft, mm (for drawing, #32). */
+  damperLifts(): number[] {
+    return damperLifts(this.machine).map((m) => m / MM);
   }
 
   free(): void {

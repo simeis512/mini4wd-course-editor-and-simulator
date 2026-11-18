@@ -252,6 +252,43 @@
         #toolbar { gap: 2px; padding: 6px 4px; }
         #toolbar .sep { margin: 0 1px; }
         #toolbar > [data-icon], .menu-button, #about, #screens button { width: 30px; }
+        #fullscreen { display: none; }
+        #about { margin-left: auto; }
+      }
+      @media (min-width: 401px) {
+        .fullscreen-item { display: none; }
+      }
+      /* The machine screen (#31): its own 3D look and settings in place of the course's. */
+      #machine-stage { grid-area: stage; position: relative; min-height: 0; }
+      #machine-stage[hidden], #machine-side[hidden] { display: none; }
+      #machine-preview { position: absolute; inset: 0; }
+      #machine-preview canvas { display: block; touch-action: none; }
+      #machine-summary { position: absolute; left: 10px; top: 10px; right: 10px; pointer-events: none; padding: 6px 10px; background: rgba(36, 39, 46, 0.85); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+      #machine-summary:empty { display: none; }
+      #machine-side { grid-area: panel; min-height: 0; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); padding: 10px 12px; }
+      body.machine-screen #stage, body.machine-screen #side { display: none; }
+      body.machine-screen #toolbar > :not(h1, #screens, .screens-sep, #about) { display: none; }
+      body.machine-screen #about { margin-left: auto; }
+      #machine-side h2 { font-size: 15px; margin: 0 0 6px; }
+      #machine-side .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+      #machine-side input[type='text'], #machine-side input[type='number'] { font: inherit; color: var(--text); background: #30343d; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; min-width: 0; }
+      #machine-name { flex: 1; }
+      .msection { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 6px; }
+      .msection h3 { font-size: 13px; margin: 0 0 4px; color: var(--muted); }
+      .msection > select, .msection > button { margin-top: 6px; }
+      .mfield { display: grid; grid-template-columns: 6.5em 1fr auto; gap: 6px; align-items: center; margin-top: 4px; }
+      .mfield select, .mfield input { width: 100%; }
+      .mcheck { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+      .mitem { margin-top: 6px; padding: 4px 8px 6px; border: 1px solid var(--line); border-radius: 6px; }
+      .mitem-head { display: flex; justify-content: space-between; align-items: center; }
+      .mitem .mfield { grid-template-columns: 4.5em 1fr 2em; }
+      #machine-side .small { min-height: 0; padding: 2px 8px; font-size: 12px; }
+      #machine-saves { list-style: none; padding: 0; margin: 4px 0 0; }
+      #machine-saves li { display: flex; gap: 4px; align-items: center; margin-top: 4px; }
+      #machine-saves li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #machine-saves li.current span { color: var(--accent); }
+      @media (max-width: 720px) {
+        #machine-side { border-left: 0; border-top: 1px solid var(--line); }
       }
     </style>
   </head>
@@ -282,6 +319,9 @@
           <hr />
           <button id="import" role="menuitem" data-icon="import" title="書き出した JSON ファイルからコースを開く">ファイルを読み込み</button>
           <button id="export" role="menuitem" data-icon="export" title="コースを JSON ファイルに書き出す">ファイルに書き出し</button>
+          <!-- On the narrowest phones 全画面 moves here, so the header keeps to one row with the screen tabs (#31). -->
+          <hr class="fullscreen-item" hidden />
+          <button id="fullscreen-item" class="fullscreen-item" role="menuitem" data-icon="expand" data-click="fullscreen" hidden><span id="fullscreen-item-label">全画面</span></button>
         </div>
       </div>
       <div class="menu-wrap">
@@ -330,6 +370,9 @@
             <option value="16">1/16</option>
           </select>
         </label>
+        <label title="走らせるマシン。マシンの画面で作って保存したものから選べます">マシン
+          <select id="run-machine" autocomplete="off"></select>
+        </label>
         <span id="run-status"></span>
         <button id="run-exit">編集に戻る</button>
       </div>
@@ -353,6 +396,29 @@
         <div id="info"></div>
       </details>
     </main>
+    <main id="machine-stage" hidden>
+      <div id="machine-preview" aria-label="マシンの立体表示（ドラッグで回せます）"></div>
+      <div id="machine-summary"></div>
+    </main>
+    <aside id="machine-side" hidden>
+      <h2>マシンのセッティング</h2>
+      <div class="row">
+        <input id="machine-name" type="text" maxlength="60" placeholder="マシンの名前" aria-label="マシンの名前" />
+      </div>
+      <div class="row">
+        <button id="machine-save" title="このブラウザに保存 (Ctrl+S)">保存</button>
+        <button id="machine-save-as" title="別のマシンとして保存">別名で保存</button>
+        <button id="machine-new" title="標準のマシンから作り直す">新規</button>
+        <button id="machine-copy-url" title="このマシンを開ける URL をコピーする（コースの URL とは別）">URLをコピー</button>
+        <button id="machine-qr" title="このマシンの URL の QR コード">QRコード</button>
+      </div>
+      <p class="hint">パーツの寸法・重さ・摩擦などは実測前の仮の値です。走らせるときは、走行モードの「マシン」でここで保存したマシンを選べます。</p>
+      <details>
+        <summary>保存したマシン</summary>
+        <ul id="machine-saves"></ul>
+      </details>
+      <div id="machine-form"></div>
+    </aside>
     <div id="side">
       <button id="panel-fold" aria-controls="panel" aria-expanded="true" aria-label="パーツ一覧を畳む・開く"><span class="arrow">›</span></button>
       <aside id="panel">

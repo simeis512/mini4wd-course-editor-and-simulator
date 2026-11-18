@@ -1,3 +1,4 @@
+import { fromBase64Url, pipe, Reader, toBase64Url, Writer } from './packing';
 import { ATTACHMENT_CODES, CATALOG_VERSION, hasPart, PART_CODES } from './catalog';
 import { validateCourse, type Attachment, type Course, type PieceRec, type Stopper } from './course';
 import { isZeroBend } from './flex';
@@ -55,60 +56,6 @@ const SHORT_INSIDE = 9;
 /** The first format with bends and twists in 0.01° steps (#86). */
 const FINE_ANGLES = 7;
 export const HASH_KEY = 'c';
-
-class Writer {
-  bytes: number[] = [];
-  uint(n: number): void {
-    if (!Number.isInteger(n) || n < 0) throw new RangeError(`not a uint: ${n}`);
-    while (n >= 0x80) {
-      this.bytes.push((n % 0x80) | 0x80);
-      n = Math.floor(n / 0x80);
-    }
-    this.bytes.push(n);
-  }
-  int(n: number): void {
-    this.uint(n >= 0 ? n * 2 : -n * 2 - 1);
-  }
-  tenths(x: number): void {
-    this.int(Math.round(x * 10));
-  }
-  hundredths(x: number): void {
-    this.int(Math.round(x * 100));
-  }
-}
-
-class Reader {
-  pos = 0;
-  constructor(private bytes: Uint8Array) {}
-  uint(): number {
-    let n = 0;
-    let scale = 1;
-    for (;;) {
-      if (this.pos >= this.bytes.length) throw new Error('truncated course data');
-      const b = this.bytes[this.pos++];
-      n += (b & 0x7f) * scale;
-      if (b < 0x80) return n;
-      scale *= 0x80;
-      if (scale > 2 ** 49) throw new Error('varint too long');
-    }
-  }
-  int(): number {
-    const u = this.uint();
-    return u % 2 === 0 ? u / 2 : -(u + 1) / 2;
-  }
-  tenths(): number {
-    return this.int() / 10;
-  }
-  hundredths(): number {
-    return this.int() / 100;
-  }
-  take(n: number): Uint8Array {
-    if (this.pos + n > this.bytes.length) throw new Error('truncated course data');
-    const out = this.bytes.subarray(this.pos, this.pos + n);
-    this.pos += n;
-    return out;
-  }
-}
 
 export function courseToBytes(course: Course): Uint8Array {
   const w = new Writer();
@@ -325,23 +272,6 @@ export function courseFromBytes(bytes: Uint8Array, version = FORMAT_VERSION): Co
   if (r.pos !== bytes.length) throw new Error('unexpected data after course');
   validateCourse(course);
   return course;
-}
-
-async function pipe(bytes: Uint8Array, stream: CompressionStream | DecompressionStream): Promise<Uint8Array> {
-  const out = new Blob([bytes as BlobPart]).stream().pipeThrough(stream);
-  return new Uint8Array(await new Response(out).arrayBuffer());
-}
-
-function toBase64Url(bytes: Uint8Array): string {
-  let bin = '';
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function fromBase64Url(text: string): Uint8Array {
-  const b64 = text.replace(/-/g, '+').replace(/_/g, '/');
-  const bin = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
-  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
 
 /** Encode a course as the value of the `c` hash parameter. */

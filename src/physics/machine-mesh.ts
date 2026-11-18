@@ -1,13 +1,12 @@
 import * as THREE from 'three';
-import { rideHeight, wheelPoints } from './machine';
-import type { MachineSpec } from './machine-spec';
+import { rideHeight, wheelPoints, wheelTyres, type MachineSpec } from './machine-spec';
 
 // How the machine looks in the 3D view (#27): its chassis box, tyres and
 // rollers, in millimetres like the course, with its origin at the chassis
 // box's middle as in the physics.
 
 /** Orange, to stand out on white, red and blue roads. */
-const COLORS = { chassis: '#ff8a1f', tyre: '#1b1d22', roller: '#e8e8e8' };
+const COLORS = { chassis: '#ff8a1f', tyre: '#1b1d22', roller: '#e8e8e8', damper: '#d4b040', brake: '#f4f4f4', weight: '#8a8f99' };
 
 /** Millimetres in a metre: the spec is in metres. */
 const M = 1000;
@@ -22,20 +21,52 @@ export function buildMachineMesh(spec: MachineSpec): THREE.Group {
   g.name = 'machine';
   const [w, h, l] = spec.size;
   g.add(mesh(new THREE.BoxGeometry(w * M, h * M, l * M), COLORS.chassis));
-  const tyre = new THREE.CylinderGeometry(spec.tyreRadius * M, spec.tyreRadius * M, spec.tyreWidth * M, 24).rotateZ(Math.PI / 2);
-  for (const [x, , z] of wheelPoints(spec)) {
-    const t = mesh(tyre, COLORS.tyre);
+  const tyres = wheelTyres(spec);
+  wheelPoints(spec).forEach(([x, , z], i) => {
+    const { radius, width } = tyres[i];
+    const t = mesh(new THREE.CylinderGeometry(radius * M, radius * M, width * M, 24).rotateZ(Math.PI / 2), COLORS.tyre);
     t.name = 'tyre';
+    t.userData.radius = radius;
     // Axles a tyre's radius above the road.
-    t.position.set(x * M, (spec.tyreRadius - rideHeight(spec)) * M, z * M);
+    t.position.set(x * M, (radius - rideHeight(spec)) * M, z * M);
     g.add(t);
-  }
+  });
   for (const r of spec.rollers) {
     const roller = mesh(new THREE.CylinderGeometry(r.radius * M, r.radius * M, r.height * M, 20), COLORS.roller);
     roller.position.set(r.at[0] * M, (r.at[1] - rideHeight(spec)) * M, r.at[2] * M);
     g.add(roller);
   }
+  // Mass dampers (#32): the ones that ride their shafts are named for `liftDampers`, in order.
+  for (const d of spec.dampers ?? []) {
+    const s = d.shape;
+    const shape = s.kind === 'cylinder' ? new THREE.CylinderGeometry(s.radius * M, s.radius * M, s.height * M, 20) : new THREE.BoxGeometry(...s.size.map((v) => v * M));
+    const damper = mesh(shape, COLORS.damper);
+    damper.name = d.stroke > 0 ? 'damper' : 'damper-fixed';
+    damper.position.set(d.at[0] * M, (d.at[1] - rideHeight(spec)) * M, d.at[2] * M);
+    damper.userData.rest = damper.position.y;
+    g.add(damper);
+  }
+  for (const b of spec.brakes ?? []) {
+    const pad = mesh(new THREE.BoxGeometry(b.size[0] * M, BRAKE_DRAWN, b.size[1] * M), COLORS.brake);
+    pad.position.set(b.at[0] * M, b.at[1] * M + BRAKE_DRAWN / 2 - rideHeight(spec) * M, b.at[2] * M);
+    g.add(pad);
+  }
+  for (const w of spec.weights ?? []) {
+    const weight = mesh(new THREE.SphereGeometry(WEIGHT_DRAWN, 12, 8), COLORS.weight);
+    weight.position.set(w.at[0] * M, (w.at[1] - rideHeight(spec)) * M, w.at[2] * M);
+    g.add(weight);
+  }
   return g;
+}
+
+/** Drawn thickness of a brake pad, and radius of a fixed weight, mm (cosmetic). */
+const BRAKE_DRAWN = 2;
+const WEIGHT_DRAWN = 3;
+
+/** Put the riding mass dampers this far up their shafts, mm (`Run.damperLifts`). */
+export function liftDampers(g: THREE.Group, lifts: readonly number[]): void {
+  let i = 0;
+  for (const c of g.children) if (c.name === 'damper') c.position.y = (c.userData.rest as number) + (lifts[i++] ?? 0);
 }
 
 /** Shadow: how much wider and longer than the chassis, how dark right under it, and how high above the road it has faded away, mm (cosmetic, #99). */
@@ -104,6 +135,5 @@ export function placeShadow(
 
 /** Turn the tyres to how far the machine has run, mm. */
 export function spinTyres(g: THREE.Group, spec: MachineSpec, distance: number): void {
-  const angle = distance / (spec.tyreRadius * M);
-  for (const c of g.children) if (c.name === 'tyre') c.rotation.x = angle;
+  for (const c of g.children) if (c.name === 'tyre') c.rotation.x = distance / (((c.userData.radius as number | undefined) ?? spec.tyreRadius) * M);
 }

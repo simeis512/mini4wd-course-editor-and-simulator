@@ -38,7 +38,8 @@ function draw(canvas: HTMLCanvasElement, card: Card, qr: Qr, scale: number): voi
   }
 }
 
-export function bindQr(host: QrHost): void {
+/** Bind the QR dialog to the course's `host`; gives back a way to open it for another URL (the machine's, #31). */
+export function bindQr(host: QrHost): (other: QrHost) => void {
   const dialog = $<HTMLDialogElement>('qr-dialog');
   const size = $<HTMLSelectElement>('qr-size');
   const caption = $<HTMLInputElement>('qr-caption');
@@ -58,7 +59,8 @@ export function bindQr(host: QrHost): void {
   let qr: Qr | null = null;
   const scanner = new QrScanner(dialog);
   /** Saved files are named after the caption, or the course. */
-  const file = (ext: string) => `${caption.value.trim() || host.fileName}-qr.${ext}`;
+  let shown = host;
+  const file = (ext: string) => `${caption.value.trim() || shown.fileName}-qr.${ext}`;
 
   /** Say how the code prints at the chosen size, warning past what reads. */
   const describe = () => {
@@ -102,9 +104,10 @@ export function bindQr(host: QrHost): void {
   $('qr-tab-make').addEventListener('click', () => showTab(false));
   $('qr-tab-read').addEventListener('click', () => showTab(true));
 
-  $('qr').addEventListener('click', async () => {
+  const open = async (from: QrHost) => {
+    shown = from;
     showTab(false);
-    const url = await host.url();
+    const url = await from.url();
     try {
       qr = makeQr(url);
     } catch {
@@ -114,12 +117,13 @@ export function bindQr(host: QrHost): void {
     $('qr-too-long').hidden = !!qr;
     if (qr) {
       $('qr-info').textContent = `URL ${url.length} 文字・QRバージョン ${qr.version}（${qr.size}×${qr.size} マス）`;
-      caption.value = await host.name();
+      caption.value = await from.name();
       preview();
       describe();
     }
     dialog.showModal();
-  });
+  };
+  $('qr').addEventListener('click', () => void open(host));
 
   $('qr-png').addEventListener('click', () => {
     if (!qr) return;
@@ -135,4 +139,5 @@ export function bindQr(host: QrHost): void {
     download(new Blob([svg], { type: 'image/svg+xml' }), file('svg'));
   });
   dialog.addEventListener('close', () => scanner.stop());
+  return (other) => void open(other);
 }
