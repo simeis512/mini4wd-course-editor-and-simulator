@@ -102,3 +102,28 @@ export function freeSpeed(spec: MachineSpec): number {
 export function frontReach(spec: MachineSpec): number {
   return Math.max(spec.size[2] / 2, spec.wheelbase / 2 + spec.tyreRadius, ...spec.rollers.map((r) => r.at[2] + r.radius));
 }
+
+/**
+ * How far a tyre gives, m: Mini 4WD tyres have no springs, only a little
+ * give. The wheels' rays reach this far below the road at rest, so the
+ * tyres hold the road (spec simulator.md 2, provisional).
+ */
+export const TYRE_GIVE = 0.001;
+/** Height of the chassis box's middle above the road at rest, m. */
+export function rideHeight(spec: MachineSpec): number {
+  return spec.clearance + spec.size[1] / 2;
+}
+
+/** Wheel positions on the chassis: front left, front right, rear left, rear right, at the axles' rest, m. */
+export function wheelPoints(spec: MachineSpec): [number, number, number][] {
+  const x = spec.tread / 2;
+  const z = spec.wheelbase / 2;
+  // The ray starts above the axle by the give and reaches as far below the road.
+  const y = spec.tyreRadius + TYRE_GIVE - rideHeight(spec);
+  return [
+    [x, y, z],
+    [-x, y, z],
+    [x, y, -z],
+    [-x, y, -z],
+  ];
+}

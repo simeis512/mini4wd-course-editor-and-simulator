@@ -1,18 +1,12 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Matrix4, Quaternion, Vector3 } from 'three';
-import { driveForce, type MachineSpec } from './machine-spec';
+import { driveForce, rideHeight, TYRE_GIVE, wheelPoints, type MachineSpec } from './machine-spec';
 
 // A machine in the physics world (#27, spec simulator.md 2): the chassis
 // as one rigid body, the tyres as Rapier's ray-cast wheels driven by the
 // motor, and the rollers as balls on the chassis. Machine axes are the
 // parts' axes: + X left, + Y up, + Z forward.
 
-/**
- * How far a tyre gives, m: Mini 4WD tyres have no springs, only a little
- * give. The wheels' rays reach this far below the road at rest, so the
- * tyres hold the road (spec simulator.md 2, provisional).
- */
-const TYRE_GIVE = 0.001;
 /**
  * Spring and damping of that give, per kg of machine (Rapier scales them by
  * the chassis mass): stiff enough to hold the machine within half a
@@ -37,25 +31,6 @@ export interface Machine {
   vehicle: RAPIER.DynamicRayCastVehicleController;
   /** The chassis and roller colliders. */
   colliders: RAPIER.Collider[];
-}
-
-/** Height of the chassis box's middle above the road at rest, m. */
-export function rideHeight(spec: MachineSpec): number {
-  return spec.clearance + spec.size[1] / 2;
-}
-
-/** Wheel positions on the chassis: front left, front right, rear left, rear right, at the axles' rest, m. */
-export function wheelPoints(spec: MachineSpec): [number, number, number][] {
-  const x = spec.tread / 2;
-  const z = spec.wheelbase / 2;
-  // The ray starts above the axle by the give and reaches as far below the road.
-  const y = spec.tyreRadius + TYRE_GIVE - rideHeight(spec);
-  return [
-    [x, y, z],
-    [-x, y, z],
-    [x, y, -z],
-    [-x, y, -z],
-  ];
 }
 
 /**

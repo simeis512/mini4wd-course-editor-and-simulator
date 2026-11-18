@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { rideHeight, wheelPoints } from './machine';
-import type { MachineSpec } from './machine-spec';
+import { rideHeight, wheelPoints, type MachineSpec } from './machine-spec';
 
 // How the machine looks in the 3D view (#27): its chassis box, tyres and
 // rollers, in millimetres like the course, with its origin at the chassis

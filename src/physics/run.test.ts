@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { layoutCourse } from '../course/course';
 import { basicOval, chain, rampJumpOval } from '../course/presets';
 import { addStopper } from '../course/stoppers';
-import { rideHeight } from './machine';
+import { rideHeight } from './machine-spec';
 import { freeSpeed, STANDARD_MACHINE } from './machine-spec';
 import { placeStart, placeTimer, removeTimer } from '../course/timing';
 import { REVERSE_DISTANCE, Run, STALL_TIME } from './run';
