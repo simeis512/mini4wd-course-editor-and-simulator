@@ -14,6 +14,7 @@
 src/
   course/   コースのデータと計算（パーツ定義、配置、連結、URL 形式、3D 形状）
   editor/   エディタ画面（状態と操作、パネル、2D/3D ビュー）
+  machine/  マシンのセッティング（パーツの仮データ、セッティング、URL 形式）
   physics/  シミュレーター（物理演算）
 ```
 
@@ -22,6 +23,8 @@ src/
 - `course` は `editor` と `physics` を import しない。DOM（`document`、`window`、イベント）にも触れない。
   使ってよいのは three の数学（`Matrix4` など）と、`mesh.ts` での three のジオメトリ／マテリアルまで。
 - `editor` は `course` を使ってよい。`physics` は `course` を使ってよいが `editor` は使わない。
+- `machine` は `course` の小さな道具（`packing.ts` など）だけを使い、`editor` と `physics` は import しない。DOM にも触れない。
+  `editor` と `physics` は `machine` を使ってよい。セッティングを物理のマシンにするのは `physics/machine-setup.ts`。
 
 **計算は `course`、画面は `editor`。** パーツの置き方、つながり、ドロップ先の選び方のような「コースについての判断」は、
 `src/course` に純粋関数として書き、テストを付けます。`editor` は入力を受けて `course` の関数を呼び、結果を表示するだけにします。
@@ -53,6 +56,7 @@ DOM にもビューにも触らない処理が `editor` に 10 行以上あれ�
 | `marks3d.ts` / `pick3d.ts` | 3D のマーカー・ハイライトと、レイキャストによる選択 |
 | `meshes3d.ts` | 3D のピース・支柱・置き物メッシュの保持、変更時の差し替えと geometry 解放 |
 | `ar.ts` / `ar-pose.ts` / `ar-scan.ts` / `ar-depth.ts` / `ar-gesture.ts` | 3D ビューの AR（床への設置・大きさ・向き）、その置き方の計算、見つけた床の点、奥行きの表示とオクルージョン、指での移動・回転 |
+| `machine-screen.ts` / `machine-form.ts` / `machine-preview.ts` | マシンの画面（#31）：切り替え・保存・URL、セッティングの入力欄、マシンの立体表示 |
 | `history.ts`、`dom.ts`、`icons.ts` など | 小さな部品 |
 
 2D と 3D の両方に要る機能は `EditorView` に足し、`app.ts` で「2D なら…3D なら…」と分岐しないようにします。
