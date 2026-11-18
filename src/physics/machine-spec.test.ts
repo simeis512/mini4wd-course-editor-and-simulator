@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { driveForce, freeSpeed, frontReach, motorTorque, STANDARD_MACHINE } from './machine-spec';
+import { driveForce, freeSpeed, frontReach, motorTorque } from './machine-spec';
+import { STANDARD_MACHINE } from './machine-setup';
 
 describe('motor (spec simulator.md 3)', () => {
   const m = STANDARD_MACHINE.motor;
@@ -11,8 +12,8 @@ describe('motor (spec simulator.md 3)', () => {
     expect(motorTorque(m, 2 * m.freeRpm)).toBe(0);
   });
 
-  it('pushes the standard machine hardest from a standstill, and not at all at about 3.9 m/s', () => {
-    expect(freeSpeed(STANDARD_MACHINE)).toBeCloseTo(3.89, 2);
+  it('pushes the standard machine hardest from a standstill, and not at all at its free speed (15,000 rpm on 4.2:1 and 26mm tyres, about 4.9 m/s)', () => {
+    expect(freeSpeed(STANDARD_MACHINE)).toBeCloseTo(4.86, 2);
     expect(driveForce(STANDARD_MACHINE, 0)).toBeCloseTo((0.0035 * 4.2 * 0.7) / 0.013, 9);
     expect(driveForce(STANDARD_MACHINE, freeSpeed(STANDARD_MACHINE))).toBeCloseTo(0, 9);
   });
@@ -20,6 +21,6 @@ describe('motor (spec simulator.md 3)', () => {
 
 describe('frontReach', () => {
   it('reaches to the front of the front rollers on the standard machine', () => {
-    expect(frontReach(STANDARD_MACHINE)).toBeCloseTo(0.075 + 0.0065, 9);
+    expect(frontReach(STANDARD_MACHINE)).toBeCloseTo(0.07 + 0.0065, 9);
   });
 });

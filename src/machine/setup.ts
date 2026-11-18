@@ -100,7 +100,11 @@ export function kitRollers(length: number): RollerPair[] {
   ];
 }
 
-/** The machine a new setup starts as: a Super-II kit, normal motor, alkaline cells. */
+/**
+ * The machine a new setup starts as: a Super-II kit, normal motor, alkaline
+ * cells, on 26mm tyres (provisional: with the kit's 31mm ones the run is
+ * too fast to lap the basic oval's lane change in every lane yet).
+ */
 export function standardSetup(): MachineSetup {
   const chassis = CHASSIS[0];
   return {
@@ -108,7 +112,7 @@ export function standardSetup(): MachineSetup {
     motor: 'normal',
     gearRatio: chassis.gearRatio,
     battery: 'alkaline',
-    tyre: 'large',
+    tyre: 'small',
     tyreKind: 'rubber',
     rollers: kitRollers(chassis.length),
     dampers: [],

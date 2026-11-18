@@ -6,7 +6,7 @@ import { rideHeight, wheelPoints, type MachineSpec } from './machine-spec';
 // box's middle as in the physics.
 
 /** Orange, to stand out on white, red and blue roads. */
-const COLORS = { chassis: '#ff8a1f', tyre: '#1b1d22', roller: '#e8e8e8' };
+const COLORS = { chassis: '#ff8a1f', tyre: '#1b1d22', roller: '#e8e8e8', damper: '#d4b040', brake: '#f4f4f4', weight: '#8a8f99' };
 
 /** Millimetres in a metre: the spec is in metres. */
 const M = 1000;
@@ -34,7 +34,35 @@ export function buildMachineMesh(spec: MachineSpec): THREE.Group {
     roller.position.set(r.at[0] * M, (r.at[1] - rideHeight(spec)) * M, r.at[2] * M);
     g.add(roller);
   }
+  // Mass dampers (#32): the ones that ride their shafts are named for `liftDampers`, in order.
+  for (const d of spec.dampers ?? []) {
+    const damper = mesh(new THREE.BoxGeometry(...d.size.map((v) => v * M)), COLORS.damper);
+    damper.name = d.stroke > 0 ? 'damper' : 'damper-fixed';
+    damper.position.set(d.at[0] * M, (d.at[1] - rideHeight(spec)) * M, d.at[2] * M);
+    damper.userData.rest = damper.position.y;
+    g.add(damper);
+  }
+  for (const b of spec.brakes ?? []) {
+    const pad = mesh(new THREE.BoxGeometry(b.size[0] * M, BRAKE_DRAWN, b.size[1] * M), COLORS.brake);
+    pad.position.set(b.at[0] * M, b.at[1] * M + BRAKE_DRAWN / 2 - rideHeight(spec) * M, b.at[2] * M);
+    g.add(pad);
+  }
+  for (const w of spec.weights ?? []) {
+    const weight = mesh(new THREE.SphereGeometry(WEIGHT_DRAWN, 12, 8), COLORS.weight);
+    weight.position.set(w.at[0] * M, (w.at[1] - rideHeight(spec)) * M, w.at[2] * M);
+    g.add(weight);
+  }
   return g;
+}
+
+/** Drawn thickness of a brake pad, and radius of a fixed weight, mm (cosmetic). */
+const BRAKE_DRAWN = 2;
+const WEIGHT_DRAWN = 3;
+
+/** Put the riding mass dampers this far up their shafts, mm (`Run.damperLifts`). */
+export function liftDampers(g: THREE.Group, lifts: readonly number[]): void {
+  let i = 0;
+  for (const c of g.children) if (c.name === 'damper') c.position.y = (c.userData.rest as number) + (lifts[i++] ?? 0);
 }
 
 /** Shadow: how much wider and longer than the chassis, how dark right under it, and how high above the road it has faded away, mm (cosmetic, #99). */

@@ -63,9 +63,9 @@ describe('freeSpeedKmh', () => {
   it('is faster with a higher gear and bigger tyres', () => {
     const s = standardSetup();
     expect(freeSpeedKmh({ ...s, gearRatio: 3.5 })).toBeGreaterThan(freeSpeedKmh(s));
-    expect(freeSpeedKmh({ ...s, tyre: 'small' })).toBeLessThan(freeSpeedKmh(s));
-    // 15,000 rpm / 4.2 × π × 31 mm
-    expect(freeSpeedKmh(s)).toBeCloseTo(20.9, 1);
+    expect(freeSpeedKmh({ ...s, tyre: 'large' })).toBeGreaterThan(freeSpeedKmh(s));
+    // 15,000 rpm / 4.2 × π × 26 mm
+    expect(freeSpeedKmh(s)).toBeCloseTo(17.5, 1);
   });
 });
 

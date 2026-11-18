@@ -209,6 +209,7 @@ export class RunMode {
     mesh.position.copy(s.position);
     mesh.quaternion.copy(s.quaternion);
     physics.spinTyres(mesh, run.spec, s.distance);
+    physics.liftDampers(mesh, run.damperLifts());
     physics.placeShadow(shadow, run.spec, s.position, s.quaternion, run.ground());
     this.host.aim(this.camera.next(s.position, s.quaternion, dt));
     const facing = this.camera.facing;

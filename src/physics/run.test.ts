@@ -3,7 +3,9 @@ import { layoutCourse } from '../course/course';
 import { basicOval, chain, rampJumpOval } from '../course/presets';
 import { addStopper } from '../course/stoppers';
 import { rideHeight } from './machine-spec';
-import { freeSpeed, STANDARD_MACHINE } from './machine-spec';
+import { freeSpeed } from './machine-spec';
+import { STANDARD_MACHINE } from './machine-setup';
+import { TEST_MACHINE } from './test-machine';
 import { placeStart, placeTimer, removeTimer } from '../course/timing';
 import { REVERSE_DISTANCE, Run, STALL_TIME } from './run';
 import { decodeCourse } from '../course/codec';
@@ -176,7 +178,7 @@ describe('Run (#27, spec simulator.md)', () => {
     const course = await decodeCourse(
       '6.JY0xSgNhEIW_b_ZfF6IsRgyrkMIyx_EIdl4iQTsDkZAyZUoVGwtbvUFASCUWiuQSVmFi8zHz3rw3Xl3Uwe-YlwlwIGiwHTPfSC6EhvePwdtDTNuULIkaw8-NrD6qu3-9oUglwfOty_73zWKYHfREDrN4fb3sb39iNgCD1xHvf5HhIi0lfMrcYv865DjDjcqJxTyS08Qgsa8-yuksT9rEubVhhQzT7dLt0V3SfekO',
     );
-    const run = (await Run.create(layoutCourse(course), 1, 2))!;
+    const run = (await Run.create(layoutCourse(course), 1, 2, TEST_MACHINE))!;
     let s = run.advance(0);
     let most = 0;
     while (!s.out && s.time < 4) {
@@ -215,7 +217,7 @@ describe('Run (#27, spec simulator.md)', () => {
   it('calls a machine that runs on in another lane out (owner, 2026-10-29)', async () => {
     // The owner's short course: from the middle lane it is thrown into the next lane in a few seconds.
     const course = await decodeCourse('7.FcyLCoJQFETR2XktNbNSy3zQ_3-mbDgsBmY45J8EjyAXqaRILVcgN2kopDV1cpdeHu4GecoL4C2jvyeZLT7ylYUCPydrgE12OXIC');
-    const run = (await Run.create(layoutCourse(course), 1, 1))!;
+    const run = (await Run.create(layoutCourse(course), 1, 1, TEST_MACHINE))!;
     let s = run.advance(0);
     while (!s.out && s.time < 10) s = run.advance(0.01);
     expect(s.out).toBe('lane');
