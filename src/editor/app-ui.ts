@@ -15,7 +15,7 @@ import { bindTape } from './tape';
 import type { Course } from '../course/course';
 import type { JointTape } from '../course/tape';
 import { bindModelExport } from './model-export';
-import { bindQr } from './qr';
+import { bindQr, type QrHost } from './qr';
 import { ShareImage, type ShareHost } from './share-image';
 import { bindSidePanel } from './side-panel';
 import { bindTurnTools } from './turn-tools';
@@ -56,7 +56,7 @@ export function readRaiseFields() {
   };
 }
 
-export function bindAppUi(host: AppUiHost): ShareImage {
+export function bindAppUi(host: AppUiHost): { share: ShareImage; showQr: (other: QrHost) => void } {
   bindAbout();
   bindToolbar();
   bindFullscreen();
@@ -76,7 +76,7 @@ export function bindAppUi(host: AppUiHost): ShareImage {
   $('redo').addEventListener('click', () => host.redo());
   $('new').addEventListener('click', () => void host.newCourse());
   $('copy-url').addEventListener('click', () => void host.copyUrl());
-  bindQr(host.sharing);
+  const showQr = bindQr(host.sharing);
   bindModelExport(host.sharing);
   const share = new ShareImage(host.sharing);
   $('export').addEventListener('click', () => void host.exportJson());
@@ -163,5 +163,5 @@ export function bindAppUi(host: AppUiHost): ShareImage {
       host.select(null);
     }
   });
-  return share;
+  return { share, showQr };
 }
